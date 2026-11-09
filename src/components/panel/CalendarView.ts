@@ -168,7 +168,7 @@ export class CalendarView {
     private dayBtn: HTMLButtonElement;
     private yearBtn: HTMLButtonElement;
     private multiDaysBtn: HTMLButtonElement;
-    private viewPeriodSelect: HTMLSelectElement | null = null;
+    private viewPeriodButton: HTMLButtonElement | null = null;
     private viewTypeButton: HTMLButtonElement;
     private isDockMode: boolean = false; // 是否在 Dock 面板中显示
 
@@ -631,8 +631,10 @@ export class CalendarView {
         this.container.appendChild(style);
 
         // 创建工具栏
+        const isMobileClient = getFrontend().endsWith('mobile') || this.plugin?.isInMobileApp === true;
         const toolbar = document.createElement('div');
         toolbar.className = 'reminder-calendar-toolbar';
+        toolbar.classList.toggle('reminder-calendar-toolbar--mobile', isMobileClient && !this.isDockMode);
         this.container.appendChild(toolbar);
 
         // Dock 模式：声明“在标签页打开”按钮
@@ -658,7 +660,6 @@ export class CalendarView {
 
 
         // 视图切换按钮
-        const isMobileClient = getFrontend().endsWith('mobile') || this.plugin?.isInMobileApp === true;
         let viewGroup: HTMLDivElement | null = null;
         if (!this.isDockMode) {
             viewGroup = document.createElement('div');
@@ -716,9 +717,14 @@ export class CalendarView {
         }
 
         if (isMobileClient && viewGroup) {
-            const periodSelect = document.createElement('select');
-            periodSelect.className = 'b3-select';
-            periodSelect.setAttribute('aria-label', i18n("currentView"));
+            const periodContainer = document.createElement('div');
+            periodContainer.className = 'filter-dropdown-container';
+            const periodButton = document.createElement('button');
+            periodButton.type = 'button';
+            periodButton.className = 'b3-button b3-button--outline';
+            periodButton.setAttribute('aria-label', i18n("currentView"));
+            periodButton.setAttribute('aria-haspopup', 'menu');
+            periodButton.innerHTML = '<span class="filter-button-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;"></span><span style="margin-left: 4px; flex-shrink: 0;">▼</span>';
             const periods: Array<{ value: CalendarViewPeriod, label: string }> = [
                 { value: 'year', label: i18n("year") },
                 { value: 'month', label: i18n("month") },
@@ -726,12 +732,22 @@ export class CalendarView {
                 { value: 'day', label: i18n("day") },
                 { value: 'multiDays', label: i18n("multiDays") }
             ];
-            periods.forEach(period => periodSelect.add(new Option(period.label, period.value)));
-            periodSelect.addEventListener('change', async () => {
-                await this.changeViewPeriod(periodSelect.value as CalendarViewPeriod);
+            periodButton.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.container.querySelectorAll<HTMLElement>('.filter-dropdown-menu').forEach(menu => menu.style.display = 'none');
+                if (this.displaySettingsDropdown) this.displaySettingsDropdown.style.display = 'none';
+                const menu = new Menu('calendar-period-menu');
+                periods.forEach(period => menu.addItem({
+                    label: period.label,
+                    icon: periodButton.dataset.period === period.value ? 'iconSelect' : undefined,
+                    click: () => this.changeViewPeriod(period.value)
+                }));
+                const rect = periodButton.getBoundingClientRect();
+                menu.open({ x: rect.left, y: rect.bottom + 4 });
             });
-            this.viewPeriodSelect = periodSelect;
-            viewGroup.appendChild(periodSelect);
+            this.viewPeriodButton = periodButton;
+            periodContainer.appendChild(periodButton);
+            viewGroup.appendChild(periodContainer);
         }
 
         // 添加视图类型下拉框（按钮样式）
@@ -892,12 +908,13 @@ export class CalendarView {
         filterGroup.style.flexWrap = 'wrap';
         filterGroup.style.gap = '8px';
         toolbarFilterParent.appendChild(filterGroup);
+        const actionGroup = isMobileClient && viewGroup && !this.openedFromHabitPanel ? viewGroup : filterGroup;
         if (this.openedFromHabitPanel) {
             filterGroup.style.display = 'none';
         }
 
         // 筛选图标
-        if (!this.isDockMode) {
+        if (!this.isDockMode && !isMobileClient) {
             const filterIcon = document.createElement('span');
             filterIcon.innerHTML = '<svg style="width: 14px; height: 14px; margin-right: 4px; vertical-align: middle;"><use xlink:href="#iconFilter"></use></svg>';
             filterIcon.style.color = 'var(--b3-theme-on-surface-light)';
@@ -999,6 +1016,7 @@ export class CalendarView {
         // 添加显示设置按钮
         const displaySettingsContainer = document.createElement('div');
         displaySettingsContainer.className = 'filter-dropdown-container';
+        displaySettingsContainer.classList.toggle('mobile-calendar-toolbar-action', actionGroup === viewGroup);
         displaySettingsContainer.style.position = 'relative';
         displaySettingsContainer.style.display = 'inline-block';
 
@@ -1538,7 +1556,7 @@ export class CalendarView {
                 this.displaySettingsDropdown = null;
             }
         });
-        filterGroup.appendChild(displaySettingsContainer);
+        actionGroup.appendChild(displaySettingsContainer);
 
         displaySettingsButton.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1657,7 +1675,7 @@ export class CalendarView {
             });
             habitToolbarActions.appendChild(openTaskCalendarBtn);
         } else {
-            filterGroup.appendChild(refreshBtn);
+            actionGroup.appendChild(refreshBtn);
         }
 
 
@@ -1672,7 +1690,7 @@ export class CalendarView {
             summaryBtn.addEventListener('click', () => {
                 showStatsDialog(this.plugin, 'summary', this.calendar);
             });
-            filterGroup.appendChild(summaryBtn);
+            actionGroup.appendChild(summaryBtn);
             // 更多按钮（包含管理分类、项目颜色、插件设置）
             const moreBtn = document.createElement('button');
             moreBtn.className = 'b3-button b3-button--outline';
@@ -1719,7 +1737,7 @@ export class CalendarView {
                 }
             });
 
-            filterGroup.appendChild(moreBtn);
+            actionGroup.appendChild(moreBtn);
         }
 
         if (openTabBtn) {
@@ -11946,11 +11964,15 @@ export class CalendarView {
     private updateViewButtonStates() {
         const currentViewMode = this._getViewMode();
 
-        if (this.viewPeriodSelect) {
-            this.viewPeriodSelect.value = currentViewMode.endsWith('MultiDays') ? 'multiDays'
+        if (this.viewPeriodButton) {
+            const period: CalendarViewPeriod = currentViewMode.endsWith('MultiDays') ? 'multiDays'
                 : currentViewMode.endsWith('Year') ? 'year'
                 : currentViewMode.endsWith('Month') ? 'month'
                 : currentViewMode.endsWith('Week') ? 'week' : 'day';
+            const labels = { year: i18n("year"), month: i18n("month"), week: i18n("week"), day: i18n("day"), multiDays: i18n("multiDays") };
+            this.viewPeriodButton.dataset.period = period;
+            const text = this.viewPeriodButton.querySelector('.filter-button-text');
+            if (text) text.textContent = labels[period];
         }
 
         // 重置所有按钮样式

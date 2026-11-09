@@ -1979,12 +1979,26 @@
 }
 
 .mobile-task-shortcut-dialog {
+    .b3-dialog__container {
+        position: absolute;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        border-radius: 0;
+        box-sizing: border-box;
+    }
+
+    .b3-dialog__body,
     .b3-dialog__content {
         padding: 0;
         overflow: hidden;
         display: flex;
         flex-direction: column;
-        height: 100%;
+        flex: 1;
+        min-height: 0;
     }
 
     #mobileTaskShortcutPanelContainer,
@@ -2021,7 +2035,9 @@
         font-size: 11px;
         line-height: 1.2;
         cursor: pointer;
-        touch-action: manipulation;
+        touch-action: none;
+        user-select: none;
+        -webkit-touch-callout: none;
         -webkit-tap-highlight-color: transparent;
         transition: background 0.15s ease, color 0.15s ease;
 
@@ -2044,6 +2060,11 @@
         &:active {
             background: color-mix(in srgb, var(--b3-theme-primary) 16%, transparent);
             color: var(--b3-theme-primary);
+        }
+
+        &--dragging {
+            outline: 2px solid var(--b3-theme-primary);
+            opacity: 0.65;
         }
     }
 

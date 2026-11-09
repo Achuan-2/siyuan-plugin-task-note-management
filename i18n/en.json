@@ -1269,7 +1269,7 @@
     "enableCalendarTopBarDesc": "Show a button in the top toolbar to open the calendar view",
     "calendarDockTitle": "Calendar View",
     "enableMobileTaskShortcut": "Show Task Shortcut on Phones",
-    "enableMobileTaskShortcutDesc": "Show a task shortcut button on phones after startup (not on tablets); tapping it opens the task sidebar in a dialog",
+    "enableMobileTaskShortcutDesc": "Show the task shortcut on phones (not tablets). VIP members can open full-screen panels and long-press tabs to reorder them.",
     "mobileTaskShortcut": "Task Shortcut",
     "mobileTaskShortcutBadgeMode": "Shortcut Count Display",
     "mobileTaskShortcutBadgeModeDesc": "Choose how the phone shortcut displays today's pending task and habit counts",

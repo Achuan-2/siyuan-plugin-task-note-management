@@ -18,6 +18,61 @@
             gap: 4px;
             margin-bottom: 4px;
         }
+
+        &--mobile {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 4px;
+            padding: 0;
+            margin-bottom: 6px;
+
+            .TN-reminder-calendar-view-group {
+                width: 100%;
+                min-width: 0;
+                flex-wrap: nowrap;
+
+                > .filter-dropdown-container {
+                    flex: 1;
+                    min-width: 0;
+                    margin-left: 0 !important;
+
+                    > .b3-button {
+                        display: flex;
+                        align-items: center;
+                        width: 100% !important;
+                        min-width: 0;
+                        height: 30px;
+                        padding: 4px 6px;
+                    }
+
+                    &.mobile-calendar-toolbar-action {
+                        flex: 0 0 30px;
+                    }
+                }
+
+                > .b3-button,
+                > .mobile-calendar-toolbar-action > .b3-button {
+                    flex: 0 0 30px;
+                    width: 30px;
+                    height: 30px;
+                    padding: 4px !important;
+
+                    .b3-button__icon {
+                        margin-right: 0;
+                    }
+                }
+            }
+
+            .reminder-calendar-filter-group {
+                flex-wrap: nowrap !important;
+                gap: 4px !important;
+
+                > .filter-dropdown-container > .b3-button {
+                    height: 30px;
+                    padding: 4px 6px;
+                }
+            }
+        }
     }
 
     .reminder-calendar-toolbar-collapsible {

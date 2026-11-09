@@ -1269,7 +1269,7 @@
     "enableCalendarTopBarDesc": "在顶部工具栏显示打开日历视图的按钮",
     "calendarDockTitle": "日历视图侧栏",
     "enableMobileTaskShortcut": "手机端显示任务快捷按钮",
-    "enableMobileTaskShortcutDesc": "启动后仅在手机端显示任务快捷按钮（平板端不显示），点击后以弹窗打开任务管理侧栏",
+    "enableMobileTaskShortcutDesc": "仅在手机端显示任务快捷按钮（平板端不显示）；VIP 可全屏打开面板，长按页签拖动排序",
     "mobileTaskShortcut": "任务快捷按钮",
     "mobileTaskShortcutBadgeMode": "快捷按钮计数显示方式",
     "mobileTaskShortcutBadgeModeDesc": "设置手机端快捷按钮如何显示今日待办任务数与待打卡习惯数",

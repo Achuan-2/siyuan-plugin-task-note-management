@@ -1,12 +1,15 @@
-import { Dialog, getFrontend } from "siyuan";
+import { Dialog, getFrontend, showMessage } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { ReminderPanel } from "../panel/ReminderPanel";
 import { ProjectPanel } from "../panel/ProjectPanel";
 import { HabitPanel } from "../panel/HabitPanel";
 import { CalendarView } from "../panel/CalendarView";
 import type ReminderPlugin from "../../index";
+import { VipManager } from "../vip/vip";
+import { ViewLifecycle } from "../../utils/viewLifecycle";
 
 const POSITION_STORAGE_KEY = "siyuan-task-shortcut-pos";
+const TAB_ORDER_STORAGE_KEY = "siyuan-task-shortcut-tab-order";
 
 type TabId = "task" | "project" | "habit" | "calendar";
 type DockState = "left" | "right" | null;
@@ -43,6 +46,9 @@ export class MobileTaskShortcut {
     private panels: Map<TabId, ReminderPanel | ProjectPanel | HabitPanel | CalendarView> = new Map();
     private activeTab: TabId = "task";
     private tabButtons: Map<TabId, HTMLElement> = new Map();
+    private tabDragCleanup: (() => void) | null = null;
+    private openingDialog = false;
+    private disposed = false;
 
     constructor(plugin: ReminderPlugin) {
         this.plugin = plugin;
@@ -62,12 +68,22 @@ export class MobileTaskShortcut {
     }
 
     private getTabs(): TabConfig[] {
-        return [
+        const tabs: TabConfig[] = [
             { id: "task", label: i18n("reminderPanel") || "任务面板", icon: "#iconTNTodoList" },
             { id: "project", label: i18n("projectManagement") || "项目管理", icon: "#iconTNProject" },
             { id: "habit", label: i18n("habitPanelTitle") || "习惯打卡", icon: "#iconTNHabit" },
             { id: "calendar", label: i18n("calendarView") || "日历视图", icon: "#iconTNCalendar" },
         ];
+        try {
+            const saved: unknown = JSON.parse(localStorage.getItem(TAB_ORDER_STORAGE_KEY) || "[]");
+            if (Array.isArray(saved)) {
+                const order = [...new Set(saved)].filter((id): id is TabId => tabs.some(tab => tab.id === id));
+                return [...order.map(id => tabs.find(tab => tab.id === id)!), ...tabs.filter(tab => !order.includes(tab.id))];
+            }
+        } catch (error) {
+            console.warn("Failed to restore mobile shortcut tab order:", error);
+        }
+        return tabs;
     }
 
     private restorePosition(settings?: any) {
@@ -333,6 +349,8 @@ export class MobileTaskShortcut {
     }
 
     private destroyPanels() {
+        this.tabDragCleanup?.();
+        this.tabDragCleanup = null;
         this.panels.forEach((panel) => {
             try {
                 panel.destroy();
@@ -350,8 +368,7 @@ export class MobileTaskShortcut {
         if (this.dialog) {
             this.closeDialog();
         } else {
-            this.expandButton();
-            this.openDialog();
+            void this.openDialog();
         }
     }
 
@@ -368,18 +385,37 @@ export class MobileTaskShortcut {
         this.applyDock();
     }
 
-    private openDialog() {
-        if (!this.isPhoneFrontend()) return;
-        if (this.dialog) return;
+    private async openDialog() {
+        if (!this.isPhoneFrontend() || this.dialog || this.openingDialog || this.disposed) return;
+        const sourceButton = this.button;
+        if (!sourceButton?.isConnected) return;
+        this.openingDialog = true;
+        try {
+            const isVip = await VipManager.isVip(this.plugin);
+            if (this.disposed || this.button !== sourceButton || !sourceButton.isConnected || !this.isPhoneFrontend()) return;
+            if (!isVip) {
+                this.plugin.openVipDialog();
+                return;
+            }
+            this.expandButton();
+            this.createDialog();
+        } catch (error) {
+            console.error("Failed to open mobile task shortcut:", error);
+            showMessage(i18n("loadFailed"), 3000, "error");
+        } finally {
+            this.openingDialog = false;
+        }
+    }
 
+    private createDialog() {
         const dialog = new Dialog({
             title: i18n("mobileTaskShortcut") || "任务笔记管理",
             content: `
                 <div class="mobile-task-shortcut-tabs" id="mobileTaskShortcutTabs"></div>
                 <div class="mobile-task-shortcut-panels" id="mobileTaskShortcutPanels"></div>
             `,
-            width: "95%",
-            height: "90%",
+            width: "100vw",
+            height: "100dvh",
             destroyCallback: () => {
                 this.destroyPanels();
                 this.dialog = null;
@@ -390,6 +426,7 @@ export class MobileTaskShortcut {
         this.dialog = dialog;
 
         this.initTabs();
+        this.activeTab = this.getTabs()[0].id;
         this.switchTab(this.activeTab);
     }
 
@@ -432,6 +469,127 @@ export class MobileTaskShortcut {
             panelsContainer.appendChild(panelEl);
             this.tabContainers.set(tab.id, panelEl);
         });
+        this.setupTabReorder(tabsContainer, panelsContainer);
+    }
+
+    /** 长按后只调整已有节点的位置，保留当前面板和未保存的输入。 */
+    private setupTabReorder(tabsContainer: HTMLElement, panelsContainer: HTMLElement) {
+        this.tabDragCleanup?.();
+        const lifecycle = new ViewLifecycle();
+        let pointerId: number | null = null;
+        let timer: number | null = null;
+        let dragged: HTMLElement | null = null;
+        let dragging = false;
+        let suppressClick = false;
+        let startX = 0;
+        let startY = 0;
+        let startOrder: TabId[] = [];
+
+        const readOrder = () => Array.from(tabsContainer.children).map(node => (node as HTMLElement).dataset.tab as TabId);
+        const syncPanels = () => readOrder().forEach(id => {
+            const panel = this.tabContainers.get(id);
+            if (panel) panelsContainer.appendChild(panel);
+        });
+        const clearTimer = () => {
+            if (timer !== null) lifecycle.clearTimeout(timer);
+            timer = null;
+        };
+        const finish = (cancelled: boolean) => {
+            clearTimer();
+            const capturedPointer = pointerId;
+            pointerId = null;
+            if (dragging) {
+                suppressClick = true;
+                if (cancelled) {
+                    startOrder.forEach(id => {
+                        const button = this.tabButtons.get(id);
+                        if (button) tabsContainer.appendChild(button);
+                    });
+                    syncPanels();
+                } else {
+                    try {
+                        localStorage.setItem(TAB_ORDER_STORAGE_KEY, JSON.stringify(readOrder()));
+                    } catch (error) {
+                        console.warn("Failed to save mobile shortcut tab order:", error);
+                    }
+                }
+            }
+            dragged?.classList.remove("mobile-task-shortcut-tab--dragging");
+            dragged = null;
+            dragging = false;
+            if (capturedPointer !== null && tabsContainer.hasPointerCapture(capturedPointer)) {
+                tabsContainer.releasePointerCapture(capturedPointer);
+            }
+        };
+
+        lifecycle.listen(tabsContainer, "pointerdown", (event: PointerEvent) => {
+            if (pointerId !== null || !event.isPrimary) {
+                finish(true);
+                return;
+            }
+            if (event.button !== 0) return;
+            const button = (event.target as Element).closest<HTMLElement>(".mobile-task-shortcut-tab");
+            if (!button || !tabsContainer.contains(button)) return;
+            suppressClick = false;
+            pointerId = event.pointerId;
+            dragged = button;
+            startX = event.clientX;
+            startY = event.clientY;
+            startOrder = readOrder();
+            timer = lifecycle.timeout(() => {
+                timer = null;
+                dragging = true;
+                button.classList.add("mobile-task-shortcut-tab--dragging");
+                if (pointerId !== null) tabsContainer.setPointerCapture(pointerId);
+            }, 500);
+        });
+        lifecycle.listen(document, "pointermove", (event: PointerEvent) => {
+            if (event.pointerId !== pointerId) return;
+            if (!dragging) {
+                if (Math.hypot(event.clientX - startX, event.clientY - startY) > 8) {
+                    suppressClick = true;
+                    finish(true);
+                }
+                return;
+            }
+            event.preventDefault();
+            const rect = tabsContainer.getBoundingClientRect();
+            if (event.clientY < rect.top - 24 || event.clientY > rect.bottom + 24) return;
+            const next = Array.from(tabsContainer.children).find(node => {
+                if (node === dragged) return false;
+                const bounds = node.getBoundingClientRect();
+                return event.clientX < bounds.left + bounds.width / 2;
+            });
+            tabsContainer.insertBefore(dragged!, next || null);
+            syncPanels();
+        }, { passive: false });
+        lifecycle.listen(document, "pointerdown", (event: PointerEvent) => {
+            if (pointerId !== null && event.pointerId !== pointerId) finish(true);
+        });
+        lifecycle.listen(document, "pointerup", (event: PointerEvent) => {
+            if (event.pointerId === pointerId) finish(false);
+        });
+        lifecycle.listen(document, "pointercancel", (event: PointerEvent) => {
+            if (event.pointerId === pointerId) finish(true);
+        });
+        lifecycle.listen(tabsContainer, "lostpointercapture", (event: PointerEvent) => {
+            if (event.pointerId === pointerId) finish(true);
+        });
+        lifecycle.listen(tabsContainer, "click", (event: MouseEvent) => {
+            if (!suppressClick || event.detail === 0) return;
+            suppressClick = false;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }, true);
+        lifecycle.listen(tabsContainer, "contextmenu", (event: Event) => event.preventDefault());
+        lifecycle.listen(window, "blur", () => finish(true));
+        lifecycle.listen(document, "visibilitychange", () => {
+            if (document.hidden) finish(true);
+        });
+        this.tabDragCleanup = () => {
+            finish(true);
+            lifecycle.dispose();
+        };
     }
 
     private switchTab(tabId: TabId) {
@@ -504,6 +662,7 @@ export class MobileTaskShortcut {
     /** 同步按钮显示/隐藏状态 */
     async sync(settings?: any) {
         const resolvedSettings = settings || await (this.plugin as any).loadSettings();
+        if (this.disposed) return;
         if (!this.shouldShow(resolvedSettings)) {
             this.removeButton(true);
             return;
@@ -635,6 +794,7 @@ export class MobileTaskShortcut {
 
     /** 销毁组件 */
     destroy() {
+        this.disposed = true;
         this.removeButton(true);
     }
 }

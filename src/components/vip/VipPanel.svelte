@@ -477,6 +477,11 @@
                                 <td>✅</td>
                             </tr>
                             <tr>
+                                <td>{i18n('mobileTaskShortcut')}</td>
+                                <td>❌</td>
+                                <td>✅</td>
+                            </tr>
+                            <tr>
                                 <td>{i18n('vipWechatGroup')}</td>
                                 <td>❌</td>
                                 <td>✅</td>
