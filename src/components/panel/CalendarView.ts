@@ -1532,9 +1532,7 @@ export class CalendarView {
         }
 
         displaySettingsContainer.appendChild(displaySettingsDropdown);
-        if (!this.isDockMode) {
-            filterGroup.appendChild(displaySettingsContainer);
-        }
+        filterGroup.appendChild(displaySettingsContainer);
 
         displaySettingsButton.addEventListener('click', (e) => {
             e.stopPropagation();
