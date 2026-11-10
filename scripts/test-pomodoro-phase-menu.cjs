@@ -24,7 +24,7 @@ const rendererCode = source.slice(source.indexOf('        function toggleSwitchM
     .replaceAll('${actionChannel}', 'pomodoro-action-test');
 
 function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, failFocus = false,
-    isMiniMode = false, miniStyle = 'ring' } = {}) {
+    isMiniMode = false, miniStyle = 'ring', dark = false } = {}) {
     const menus = [];
     const actions = [];
     const mainWindowCalls = [];
@@ -60,6 +60,8 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
     };
     const remote = {
         getCurrentWindow: () => mainWindow,
+        nativeImage: {},
+        nativeTheme: { shouldUseDarkColors: dark },
         Menu: class {
             constructor() { this.items = []; menus.push(this); }
             append(item) { this.items.push(item); }
@@ -67,8 +69,9 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         },
         MenuItem: class { constructor(options) { Object.assign(this, options); } }
     };
-    const Timer = new Function('window', 'i18n', 'console', `${hostCode}; return PomodoroTimer;`)(
-        { require: () => remote, focus: () => mainWindowCalls.push('domFocus') }, key => key, { warn() {} }
+    const Timer = new Function('window', 'i18n', 'console', 'getNativePomodoroMenuIcon', `${hostCode}; return PomodoroTimer;`)(
+        { require: () => remote, focus: () => mainWindowCalls.push('domFocus') }, key => key, { warn() {} },
+        (name, nativeImage, color) => ({ name, color })
     );
     Timer.browserWindowInstance = owner;
     const timer = Object.assign(new Timer(), { isCountUp, isWorkPhase, isMiniMode, container: owner,
@@ -118,7 +121,7 @@ test('迷你模式将状态放在首层，低频操作放在更多子菜单', ()
     const mini = view.open();
     assert.equal(mini.items.length, 5);
     assert.deepEqual(mini.items.slice(0, 3).map(item => item.label), ['💪 pomodoroWork', '🍵 pomodoroBreak', '🧘 pomodoroLongBreak']);
-    assert.equal(mini.items[3].label, '⏱ switchToCountUp');
+    assert.equal(mini.items[3].label, 'switchToCountUp');
     assert.equal(mini.items[4].label, 'more');
     assert.equal(mini.items[4].submenu.length, 3);
     for (const item of mini.items[4].submenu) assert.equal(typeof item.click, 'function');
@@ -129,6 +132,10 @@ test('更多按钮保留模式、修改时长和设置操作', () => {
     const view = fixture();
     const menu = view.open('more');
     assert.equal(menu.items.length, 4);
+    assert.deepEqual(menu.items.map(item => item.icon.name), ['timer', 'pencil', 'settings', 'fullscreen']);
+    assert.ok(menu.items.every(item => item.icon.color === '#333333'));
+    assert.deepEqual(menu.items.map(item => item.label), ['switchToCountUp', 'pomodoroEditDuration', 'pomodoroSettings', 'fullscreenMode']);
+    assert.equal(menu.items[3].accelerator, 'F11');
     menu.items[0].click();
     menu.items[1].click();
     menu.items[2].click();
@@ -139,14 +146,20 @@ test('更多按钮保留模式、修改时长和设置操作', () => {
 test('每次展开使用当前计时模式和阶段更新标签与时长编辑权限', () => {
     const view = fixture();
     const countdown = view.open('more');
-    assert.equal(countdown.items[0].label, '⏱ switchToCountUp');
+    assert.equal(countdown.items[0].label, 'switchToCountUp');
     assert.equal(countdown.items[1].enabled, true);
     view.timer.isCountUp = true;
     const countUp = view.open('more');
-    assert.equal(countUp.items[0].label, '🍅 switchToCountdown');
+    assert.equal(countUp.items[0].label, 'switchToCountdown');
+    assert.equal(countUp.items[0].icon.name, 'hourglass');
     assert.equal(countUp.items[1].enabled, false);
     view.timer.isWorkPhase = false;
     assert.equal(view.open('more').items[1].enabled, true);
+});
+
+test('深色原生菜单的 SVG 图标使用浅色笔画', () => {
+    const view = fixture({ dark: true });
+    assert.ok(view.open('more').items.every(item => item.icon.color === '#e5e5e5'));
 });
 
 test('点击番茄钟设置时显示并聚焦思源窗口', () => {
@@ -174,14 +187,15 @@ test('普通和迷你菜单支持进入全屏，原生事件完成后菜单变�
     for (const isMiniMode of [false, true]) {
         const view = fixture({ isMiniMode });
         const item = isMiniMode ? view.open().items[4].submenu[2] : view.open('more').items[3];
-        assert.equal(item.label, '⛶ fullscreenMode');
+        assert.equal(item.label, 'fullscreenMode');
         item.click();
         assert.deepEqual(view.windowCalls, [['aspectRatio', 0], ['fullscreen', true]]);
         assert.equal(view.timer.isMiniMode, isMiniMode);
         view.owner.finishFullscreenTransition();
         assert.equal(view.timer.isFullscreen, true);
         const exitItem = isMiniMode ? view.open().items[4].submenu[2] : view.open('more').items[3];
-        assert.equal(exitItem.label, '⛶ exitFullscreen');
+        assert.equal(exitItem.label, 'exitFullscreen');
+        assert.equal(exitItem.icon.name, 'exitFullscreen');
     }
 });
 

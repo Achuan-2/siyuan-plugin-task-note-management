@@ -80,6 +80,49 @@ test('titlebar controls use monochrome Lucide-style SVG while phase icons remain
     assert.equal(icons.renderPomodoroIcons('🍅'), '🍅');
 });
 
+test('native menu images use the SVG paths at multiple DPI scales and cache by theme', () => {
+    const canvases = [];
+    const document = {
+        createElement(tag) {
+            assert.equal(tag, 'canvas');
+            const context = { paths: [], scale(x, y) { this.scaleFactors = [x, y]; }, stroke(path) { this.paths.push(path.data); } };
+            const canvas = { getContext: () => context, context, toDataURL: () => 'data:image/png;base64,test' };
+            canvases.push(canvas);
+            return canvas;
+        },
+    };
+    const module = { exports: {} };
+    new Function('module', 'exports', 'document', 'Path2D', compile(fs.readFileSync(
+        path.join(root, 'src/components/render/pomodoroIcons.ts'), 'utf8'
+    )))(module, module.exports, document, class Path2D { constructor(data) { this.data = data; } });
+    let createdImages = 0;
+    const nativeImage = {
+        createEmpty() {
+            createdImages++;
+            return { representations: [], addRepresentation(rep) { this.representations.push(rep); }, setTemplateImage(value) { this.template = value; } };
+        },
+    };
+    const api = module.exports;
+    for (const name of Object.keys(api.POMODORO_MENU_ICON_PATHS)) {
+        assert.match(api.renderPomodoroMenuIcon(name), /<svg/);
+        assert.match(api.renderPomodoroMenuIcon(name), /stroke="currentColor"/);
+        const image = api.getNativePomodoroMenuIcon(name, nativeImage, '#333333');
+        assert.deepEqual(image.representations.map(rep => rep.scaleFactor), [1, 1.25, 1.5, 2, 3]);
+        assert.equal(image.template, true);
+        assert.equal(api.getNativePomodoroMenuIcon(name, nativeImage, '#333333'), image);
+        for (const canvas of canvases.splice(0)) {
+            assert.equal(canvas.width, canvas.height);
+            assert.deepEqual(canvas.context.scaleFactors, [canvas.width / 24, canvas.height / 24]);
+            assert.deepEqual(canvas.context.paths, api.POMODORO_MENU_ICON_PATHS[name]);
+            assert.equal(canvas.context.strokeStyle, '#333333');
+        }
+    }
+    assert.equal(createdImages, Object.keys(api.POMODORO_MENU_ICON_PATHS).length);
+    api.getNativePomodoroMenuIcon('timer', nativeImage, '#e5e5e5');
+    assert.equal(createdImages, Object.keys(api.POMODORO_MENU_ICON_PATHS).length + 1);
+    assert.equal(api.getNativePomodoroMenuIcon('timer', null, '#333333'), undefined);
+});
+
 test('repeated timer ticks reuse the icon DOM; state changes replace the graphic', () => {
     const node = element();
     icons.setPomodoroIcon(node, '▶️');

@@ -6,7 +6,8 @@ import { resolveAudioPath } from "../../utils/audioUtils";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
 import {
     POMODORO_ICON_SVGS, POMODORO_TOOLBAR_ICON_SVGS, createPomodoroIconRenderer,
-    renderPomodoroIcons, setPomodoroIcon, renderPomodoroToolbarIcon, setPomodoroToolbarIcon
+    renderPomodoroIcons, setPomodoroIcon, renderPomodoroToolbarIcon, setPomodoroToolbarIcon,
+    getNativePomodoroMenuIcon
 } from "../render/pomodoroIcons";
 
 
@@ -5287,6 +5288,16 @@ export class PomodoroTimer {
 
         const { Menu, MenuItem } = remote;
         const menu = new Menu();
+        const nativeImage = electronReq('electron')?.nativeImage || remote.nativeImage;
+        const iconColor = remote.nativeTheme?.shouldUseDarkColors ? '#e5e5e5' : '#333333';
+        const menuIcon = (name: Parameters<typeof getNativePomodoroMenuIcon>[0]) => {
+            try {
+                return getNativePomodoroMenuIcon(name, nativeImage, iconColor);
+            } catch (error) {
+                console.warn('[PomodoroTimer] Failed to create native menu icon:', error);
+                return undefined;
+            }
+        };
 
         const workText = i18n('pomodoroWork') || '工作时间';
         const shortBreakText = i18n('pomodoroBreak') || '短时休息';
@@ -5304,19 +5315,23 @@ export class PomodoroTimer {
         }
 
         const modeItem = {
-            label: `${this.isCountUp ? '🍅' : '⏱'} ${this.isCountUp ? switchToCountdownText : switchToCountUpText}`,
+            label: this.isCountUp ? switchToCountdownText : switchToCountUpText,
+            icon: menuIcon(this.isCountUp ? 'hourglass' : 'timer'),
             click: () => this.toggleMode()
         };
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
         const moreItems = [{
-            label: `✏️ ${i18n('pomodoroEditDuration')}`,
+            label: i18n('pomodoroEditDuration'),
+            icon: menuIcon('pencil'),
             enabled: !(this.isCountUp && this.isWorkPhase),
             click: () => this.editTime()
         }, {
-            label: i18n('pomodoroSettings') || '番茄钟设置',
+            label: (i18n('pomodoroSettings') || '番茄钟设置').replace(/^🍅\s*/, ''),
+            icon: menuIcon('settings'),
             click: () => this.openPomodoroSettings()
         }, {
-            label: `⛶ ${pomodoroWindow?.isFullScreen?.() ? i18n('exitFullscreen') : i18n('fullscreenMode')}`,
+            label: pomodoroWindow?.isFullScreen?.() ? i18n('exitFullscreen') : i18n('fullscreenMode'),
+            icon: menuIcon(pomodoroWindow?.isFullScreen?.() ? 'exitFullscreen' : 'fullscreen'),
             accelerator: 'F11',
             enabled: !this.isDocked,
             click: () => this.toggleFullscreen()

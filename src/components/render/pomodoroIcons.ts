@@ -61,6 +61,57 @@ export const POMODORO_TOOLBAR_ICON_SVGS: Record<string, string> = {
     '⬇️': svg(line('<path d="M12 4v16m-7-7 7 7 7-7"/>', 'currentColor')),
 };
 
+/** 更多菜单共用的 Lucide 风格路径，可输出内联 SVG 或原生菜单图像。 */
+export const POMODORO_MENU_ICON_PATHS = {
+    timer: ['M9 2h6m-3 0v4m6 1 2-2M12 10v4l3 2', 'M20 14a8 8 0 1 1-16 0 8 8 0 0 1 16 0'],
+    hourglass: ['M5 2h14M5 22h14M6 2v5l6 5-6 5v5M18 2v5l-6 5 6 5v5'],
+    pencil: ['m16 3 5 5M3 21l6-1L21 8a2 2 0 0 0 0-3l-2-2a2 2 0 0 0-3 0L4 15Z', 'm4 15 5 5'],
+    settings: ['M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6'],
+    fullscreen: ['M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5'],
+    exitFullscreen: ['M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5'],
+} as const;
+
+export type PomodoroMenuIconName = keyof typeof POMODORO_MENU_ICON_PATHS;
+
+export function renderPomodoroMenuIcon(name: PomodoroMenuIconName): string {
+    return svg(line(POMODORO_MENU_ICON_PATHS[name].map(path => `<path d="${path}"/>`).join(''), 'currentColor'));
+}
+
+const nativeMenuIconCache = new WeakMap<object, Map<string, any>>();
+
+/**
+ * Electron 原生菜单不直接显示 SVG，使用同一组路径生成透明 PNG 的多倍率表示。
+ * Path2D 同步绘制，菜单无需等待图片加载；按图标、主题颜色和 Electron 模块缓存。
+ */
+export function getNativePomodoroMenuIcon(name: PomodoroMenuIconName, nativeImage: any, color: string): any {
+    if (!nativeImage?.createEmpty) return undefined;
+    let cache = nativeMenuIconCache.get(nativeImage);
+    if (!cache) {
+        cache = new Map();
+        nativeMenuIconCache.set(nativeImage, cache);
+    }
+    const key = `${name}:${color}`;
+    if (cache.has(key)) return cache.get(key);
+
+    const image = nativeImage.createEmpty();
+    for (const scaleFactor of [1, 1.25, 1.5, 2, 3]) {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 16 * scaleFactor;
+        const context = canvas.getContext('2d');
+        if (!context) return undefined;
+        context.scale(canvas.width / 24, canvas.height / 24);
+        context.strokeStyle = color;
+        context.lineWidth = 2;
+        context.lineCap = 'round';
+        context.lineJoin = 'round';
+        for (const path of POMODORO_MENU_ICON_PATHS[name]) context.stroke(new Path2D(path));
+        image.addRepresentation({ scaleFactor, dataURL: canvas.toDataURL('image/png') });
+    }
+    image.setTemplateImage(true);
+    cache.set(key, image);
+    return image;
+}
+
 /** 函数自包含，可将相同渲染逻辑注入独立窗口，无需读取宿主 DOM 或外部资源。 */
 export function createPomodoroIconRenderer(icons: Record<string, string>) {
     const keys = Object.keys(icons).sort((a, b) => b.length - a.length);
