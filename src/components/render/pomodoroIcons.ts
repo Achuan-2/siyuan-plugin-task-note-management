@@ -69,6 +69,7 @@ export const POMODORO_MENU_ICON_PATHS = {
     settings: ['M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6'],
     fullscreen: ['M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5'],
     exitFullscreen: ['M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5'],
+    volume: ['m11 5-6 4H2v6h3l6 4Z', 'M15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13'],
 } as const;
 
 export type PomodoroMenuIconName = keyof typeof POMODORO_MENU_ICON_PATHS;

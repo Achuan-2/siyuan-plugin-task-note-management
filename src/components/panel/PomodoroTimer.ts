@@ -3664,14 +3664,11 @@ export class PomodoroTimer {
         `;
         pomodoroCountLeft.appendChild(randomCountEl);
 
-        // 音量控制容器（右侧）
+        // 声音设置放在更多菜单中，保留静音和当前阶段音量控制。
         const volumeControlContainer = document.createElement('div');
-        volumeControlContainer.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            position: relative;
-        `;
+        volumeControlContainer.className = 'pomodoro-menu-item';
+        volumeControlContainer.dataset.menuGroup = 'more';
+        volumeControlContainer.style.cssText = this.getMenuItemStyle() + 'flex-direction: column; align-items: stretch; gap: 8px;';
 
         // 创建声音控制按钮
         this.soundControlBtn = document.createElement('button');
@@ -3698,13 +3695,18 @@ export class PomodoroTimer {
         // 创建音量控制容器
         this.createVolumeControl();
 
-        // 将音量容器添加到声音按钮的父容器中
-        volumeControlContainer.appendChild(this.soundControlBtn);
+        const volumeHeading = document.createElement('div');
+        volumeHeading.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 8px;';
+        const volumeLabel = document.createElement('span');
+        volumeLabel.textContent = i18n('backgroundVolume');
+        volumeHeading.appendChild(volumeLabel);
+        volumeHeading.appendChild(this.soundControlBtn);
+        volumeControlContainer.appendChild(volumeHeading);
         volumeControlContainer.appendChild(this.volumeContainer);
+        this.switchMenu.appendChild(volumeControlContainer);
 
         // 组装番茄数量容器
         pomodoroCountContainer.appendChild(pomodoroCountLeft);
-        pomodoroCountContainer.appendChild(volumeControlContainer);
 
         // 添加声音控制按钮事件
         this.soundControlBtn.addEventListener('click', (e) => {
@@ -3712,9 +3714,6 @@ export class PomodoroTimer {
             e.stopPropagation();
             this.toggleBackgroundAudio();
         });
-
-        // 添加音量控制悬浮事件
-        this.addVolumeControlEvents(volumeControlContainer);
 
         timeInfo.appendChild(this.statusDisplay);
         timeInfo.appendChild(this.timeDisplay);
@@ -4032,30 +4031,13 @@ export class PomodoroTimer {
         this.volumeContainer = document.createElement('div');
         this.volumeContainer.className = 'pomodoro-volume-container';
         this.volumeContainer.style.cssText = `
-            position: absolute;
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            background: var(--b3-theme-surface);
-            border: 1px solid var(--b3-theme-border);
-            border-radius: 20px;
-            padding: 8px 12px;
-            display: none;
+            display: flex;
             align-items: center;
             gap: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            z-index: 1000;
             white-space: nowrap;
-            min-width: 120px;
+            width: 100%;
+            min-width: 0;
         `;
-
-        // 音量图标
-        const volumeIcon = document.createElement('span');
-        volumeIcon.style.cssText = `
-            font-size: 14px;
-            opacity: 0.7;
-        `;
-        setPomodoroIcon(volumeIcon, '🔊');
 
         // 音量滑块
         this.volumeSlider = document.createElement('input') as HTMLInputElement;
@@ -4067,6 +4049,7 @@ export class PomodoroTimer {
         this.volumeSlider.value = currentVolume.toString();
         this.volumeSlider.style.cssText = `
             flex: 1;
+            min-width: 0;
             height: 4px;
             background: var(--b3-theme-surface-lighter);
             border-radius: 2px;
@@ -4127,70 +4110,8 @@ export class PomodoroTimer {
             this.updateAudioVolume();
         });
 
-        this.volumeContainer.appendChild(volumeIcon);
         this.volumeContainer.appendChild(this.volumeSlider);
         this.volumeContainer.appendChild(volumePercent);
-    }
-
-    private addVolumeControlEvents(container: HTMLElement) {
-        let hoverTimer: number = null;
-
-        // 鼠标进入事件
-        container.addEventListener('mouseenter', () => {
-            // 清除可能存在的隐藏定时器
-            if (hoverTimer) {
-                clearTimeout(hoverTimer);
-                hoverTimer = null;
-            }
-
-            // 只有在非静音状态下才显示音量控制
-            if (!this.isBackgroundAudioMuted) {
-                this.volumeContainer.style.display = 'flex';
-                // 添加动画效果
-                this.volumeContainer.style.opacity = '0';
-                this.volumeContainer.style.transform = 'translateY(-50%) scale(0.9)';
-
-                requestAnimationFrame(() => {
-                    this.volumeContainer.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
-                    this.volumeContainer.style.opacity = '1';
-                    this.volumeContainer.style.transform = 'translateY(-50%) scale(1)';
-                });
-            }
-        });
-
-        // 鼠标离开事件
-        container.addEventListener('mouseleave', () => {
-            // 延迟隐藏，给用户时间移动到音量控制上
-            hoverTimer = window.setTimeout(() => {
-                this.volumeContainer.style.opacity = '0';
-                this.volumeContainer.style.transform = 'translateY(-50%) scale(0.9)';
-
-                setTimeout(() => {
-                    this.volumeContainer.style.display = 'none';
-                    this.volumeContainer.style.transition = 'none';
-                }, 200);
-            }, 300);
-        });
-
-        // 音量容器本身的悬浮事件，防止鼠标移动到音量控制上时隐藏
-        this.volumeContainer.addEventListener('mouseenter', () => {
-            if (hoverTimer) {
-                clearTimeout(hoverTimer);
-                hoverTimer = null;
-            }
-        });
-
-        this.volumeContainer.addEventListener('mouseleave', () => {
-            hoverTimer = window.setTimeout(() => {
-                this.volumeContainer.style.opacity = '0';
-                this.volumeContainer.style.transform = 'translateY(-50%) scale(0.9)';
-
-                setTimeout(() => {
-                    this.volumeContainer.style.display = 'none';
-                    this.volumeContainer.style.transition = 'none';
-                }, 200);
-            }, 100);
-        });
     }
 
     private toggleBackgroundAudio() {
@@ -4234,7 +4155,7 @@ export class PomodoroTimer {
             }
         } catch (e) { }
 
-        // 如果取消静音，确保音量控制事件正常工作
+        // 取消静音后同步更多菜单中的音量滑块。
         if (!this.isBackgroundAudioMuted && !isBrowserWindow) {
             const curVol = this.isWorkPhase ? this.workVolume : (this.isLongBreak ? this.longBreakVolume : this.breakVolume);
             const volumePercent = this.volumeContainer?.querySelector('span:last-child');
@@ -4244,11 +4165,6 @@ export class PomodoroTimer {
             if (this.volumeSlider) {
                 this.volumeSlider.value = curVol.toString();
             }
-        }
-
-        // 立即隐藏音量控制（如果是静音）
-        if (this.isBackgroundAudioMuted && this.volumeContainer && !isBrowserWindow) {
-            this.volumeContainer.style.display = 'none';
         }
 
         const statusText = this.isBackgroundAudioMuted ? (i18n('backgroundAudioMuted') || '背景音已静音') : (i18n('backgroundAudioEnabled') || '背景音已开启');
@@ -5335,6 +5251,15 @@ export class PomodoroTimer {
             accelerator: 'F11',
             enabled: !this.isDocked,
             click: () => this.toggleFullscreen()
+        }, {
+            label: i18n('backgroundVolume'),
+            icon: menuIcon('volume'),
+            click: () => {
+                if (!pomodoroWindow || pomodoroWindow.isDestroyed()) return;
+                pomodoroWindow.webContents.executeJavaScript('toggleVolumeMenu()').catch(error => {
+                    console.warn('[PomodoroTimer] Failed to open volume settings:', error);
+                });
+            }
         }];
         if (kind === 'more') {
             menu.append(new MenuItem(modeItem));
@@ -5470,17 +5395,11 @@ export class PomodoroTimer {
                 }
             }
 
-            // 更新番茄计数和音量控制按钮的字体大小
+            // 更新番茄计数的字体大小。
             const pomodoroCount = this.container.querySelector('.pomodoro-count') as HTMLElement;
             if (pomodoroCount) {
                 const countSize = Math.max(12, Math.min(50, availableHeight * 0.035));
                 pomodoroCount.style.fontSize = `${countSize}px`;
-            }
-
-            const soundControlBtn = this.container.querySelector('.pomodoro-sound-control') as HTMLElement;
-            if (soundControlBtn) {
-                const soundControlSize = Math.max(12, Math.min(50, availableHeight * 0.035));
-                soundControlBtn.style.fontSize = `${soundControlSize}px`;
             }
 
             // 强制重新渲染进度
@@ -10037,9 +9956,6 @@ document.body.classList.remove('docked-mode');
             padding: 2px;
             font-size: clamp(11px, 2.5vmin, 2vh);
         }
-        body.normal-hide-titlebar-sound #soundBtn {
-            display: none;
-        }
         body.normal-hide-left-buttons .titlebar-left {
             display: none;
         }
@@ -10815,9 +10731,6 @@ document.body.classList.remove('docked-mode');
         </div>
         <div class="titlebar-buttons">
             <button class="titlebar-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="${i18n('more')}">${renderPomodoroToolbarIcon('⋯')}</button>
-            <button class="titlebar-btn" id="soundBtn" onclick="toggleVolumeMenu(event)" title="${i18n('backgroundVolume') || '背景音量'}">
-                ${renderPomodoroToolbarIcon(isBackgroundAudioMuted ? '🔇' : '🔊')}
-            </button>
             <button class="titlebar-btn pin-btn ${currentState.isPinned !== false ? 'active' : ''}" id="pinBtn" onclick="togglePin()" title="${currentState.isPinned !== false ? (i18n('cancelPin') || '取消置顶') : (i18n('pinWindow') || '置顶窗口')}">${renderPomodoroToolbarIcon('📌')}</button>
             <button class="titlebar-btn" onclick="minimizeWindow()" title="${i18n('minimize')}">${renderPomodoroToolbarIcon('─')}</button>
             <button class="titlebar-btn close-btn" onclick="closeWindow()" title="${i18n('close')}">${renderPomodoroToolbarIcon('×')}</button>
@@ -10937,7 +10850,7 @@ document.body.classList.remove('docked-mode');
         window.isPinned = isPinned;
         
         // Initialize local state from arguments
-        let localState = ${JSON.stringify({ ...currentState, workspaceDir: this.plugin?.getWorkspaceDir?.() || '' })};
+        let localState = ${JSON.stringify({ ...currentState, isBackgroundAudioMuted, workspaceDir: this.plugin?.getWorkspaceDir?.() || '' })};
         // Expose localState globally for recovery
         window.localState = localState;
         window.pomodoroWorkspaceDir = localState.workspaceDir || '';
@@ -10965,7 +10878,7 @@ document.body.classList.remove('docked-mode');
         }
 
         function toggleVolumeMenu(e) {
-            e.stopPropagation();
+            if (e) e.stopPropagation();
             const v = document.getElementById('volumeMenu');
             if (!v) return;
             const willShow = !v.classList.contains('show');
@@ -11007,7 +10920,6 @@ document.body.classList.remove('docked-mode');
             const slider = document.getElementById('volumeSlider');
             const percent = document.getElementById('volumePercent');
             const title = document.getElementById('volumeMenuTitle');
-            const soundBtn = document.getElementById('soundBtn');
             const muteBtn = document.getElementById('volumeMuteBtn');
             const isMuted = localState.isBackgroundAudioMuted;
             const isWork = localState.isWorkPhase;
@@ -11031,11 +10943,6 @@ document.body.classList.remove('docked-mode');
                 setPomodoroIcon(muteBtn, icon);
                 muteBtn.title = isSilent ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
                 muteBtn.setAttribute('aria-label', muteBtn.title);
-            }
-            // 拖动过程中不覆盖按钮状态，避免图标来回闪烁
-            if (soundBtn && !isVolumeSliderDragging) {
-                setPomodoroToolbarIcon(soundBtn, icon);
-                soundBtn.title = isSilent ? '${i18n('enableBackgroundAudio') || '开启背景音'}' : '${i18n('muteBackgroundAudio') || '静音背景音'}';
             }
         }
 
@@ -11061,10 +10968,7 @@ document.body.classList.remove('docked-mode');
             localState[getActiveVolumeKey()] = vol;
             localState.isBackgroundAudioMuted = vol === 0;
             const percent = document.getElementById('volumePercent');
-            const soundBtn = document.getElementById('soundBtn');
             if (percent) percent.textContent = Math.round(vol * 100) + '%';
-            const icon = vol === 0 ? '🔇' : '🔊';
-            setPomodoroToolbarIcon(soundBtn, icon);
             updateVolumeMenuUI();
             // 本地立即更新音频音量，避免 IPC 往返延迟导致的声音卡顿或滑块回弹
             setLocalAudioVolume(vol);
@@ -11104,7 +11008,7 @@ document.body.classList.remove('docked-mode');
         
         document.addEventListener('click', e => {
             if (!e.target.closest('#statusBtn') && !e.target.closest('.mini-layout')) closeSwitchMenu();
-            if (!e.target.closest('#soundBtn') && !e.target.closest('#volumeMenu')) closeVolumeMenu();
+            if (!e.target.closest('#volumeMenu')) closeVolumeMenu();
         });
 
         function toggleSwitchMenu(e) {
@@ -11158,7 +11062,6 @@ document.body.classList.remove('docked-mode');
                 'normal-hide-time',
                 'normal-hide-stats',
                 'normal-compact-titlebar',
-                'normal-hide-titlebar-sound',
                 'normal-hide-left-buttons'
             );
 
@@ -11185,7 +11088,6 @@ document.body.classList.remove('docked-mode');
             const minTimeInfoWidth = 86;
             const maxRingSize = Math.max(220, Math.min(420, Math.floor(Math.min(width * 0.54, height * 0.56))));
             let compactTitlebar = false;
-            let hideTitlebarSound = false;
             let hideLeftButtons = false;
 
             const titlebarNeedsCompression = () => {
@@ -11251,11 +11153,6 @@ document.body.classList.remove('docked-mode');
             }
 
             if (titlebarNeedsCompression()) {
-                hideTitlebarSound = true;
-                document.body.classList.add('normal-hide-titlebar-sound');
-            }
-
-            if (titlebarNeedsCompression()) {
                 hideLeftButtons = true;
                 closeSwitchMenu();
                 document.body.classList.add('normal-hide-left-buttons');
@@ -11263,10 +11160,6 @@ document.body.classList.remove('docked-mode');
 
             if (compactTitlebar) {
                 document.body.classList.add('normal-compact-titlebar');
-            }
-
-            if (hideTitlebarSound) {
-                document.body.classList.add('normal-hide-titlebar-sound');
             }
 
             if (hideLeftButtons) {
@@ -11516,10 +11409,7 @@ document.body.classList.remove('docked-mode');
                  if (diceIcon) diceIcon.style.display = 'none';
             }
 
-            const soundBtn = document.getElementById('soundBtn');
-            if (soundBtn) {
-                updateVolumeMenuUI();
-            }
+            updateVolumeMenuUI();
             
             const dockBtn = document.getElementById('dockBtn');
             if (dockBtn) {

@@ -41,8 +41,13 @@ function fixture(style = 'ring', state = {}) {
 function element() {
     let markup = '', writes = 0;
     const attributes = new Map();
+    const classes = new Set();
     return {
-        style: {}, classList: { toggle() {} }, textContent: '',
+        style: {}, textContent: '',
+        classList: {
+            add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name),
+            toggle(name, force) { const enabled = force ?? !classes.has(name); enabled ? classes.add(name) : classes.delete(name); return enabled; },
+        },
         getAttribute: key => attributes.get(key),
         setAttribute: (key, value) => attributes.set(key, value),
         get innerHTML() { return markup; },
@@ -155,12 +160,13 @@ test('normal and all mini layouts contain SVG controls and executable standalone
             const body = html.split('<body')[1].split('<script>')[0];
             assert.doesNotMatch(body, /⏹|▶️|🔊|📌/);
             assert.match(body, /id="diceIcon"[^>]*>🎲<\/span>/);
+            assert.doesNotMatch(body, /id="soundBtn"/);
             const phase = state.isWorkPhase === false ? (state.isLongBreak ? '🧘' : '🍵') : (state.isCountUp ? '⏱' : '🍅');
             for (const id of ['statusIcon', 'miniStatusTrigger']) {
                 assert.match(body, new RegExp(`id="${id}"[^>]*>${phase}</`));
             }
             for (const id of ['ringPlayPauseBtn', 'miniPlayPauseBtn',
-                'stopBtn', 'miniStopBtn', 'miniMinimalStopBtn', 'soundBtn', 'pinBtn', 'dockBtn']) {
+                'stopBtn', 'miniStopBtn', 'miniMinimalStopBtn', 'pinBtn', 'dockBtn']) {
                 assert.match(body, new RegExp(`id="${id}"[^>]*>[\\s\\S]*?<svg`), `${style}: ${id}`);
             }
             assert.match(body, /&lt;task &amp; title&gt;/);
@@ -172,7 +178,7 @@ test('standalone render preserves phase emoji and SVG controls during state upda
     const { script } = fixture();
     const runtime = ts.createSourceFile('renderer.js', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const functions = runtime.statements.filter(node => ts.isFunctionDeclaration(node) &&
-        ['render', 'formatTime', 'calculateProgress', 'updateVolumeMenuUI'].includes(node.name.text)).map(node => node.getText(runtime)).join('\n');
+        ['render', 'formatTime', 'calculateProgress', 'updateVolumeMenuUI', 'toggleVolumeMenu', 'closeVolumeMenu'].includes(node.name.text)).map(node => node.getText(runtime)).join('\n');
     const bootstrap = script.slice(0, script.indexOf("const { ipcRenderer }"));
     const nodes = new Map();
     const document = {
@@ -185,9 +191,12 @@ test('standalone render preserves phase emoji and SVG controls during state upda
         localState: { isRunning: true, isWorkPhase: true, timeLeft: 1500, totalTime: 1500,
             workVolume: 0.5, breakVolume: 0.5, longBreakVolume: 0.5 },
         isVolumeSliderDragging: false,
-        applyMiniStyleClass() {}, applyMiniResponsiveVars() {}, applyNormalResponsiveLayout() {},
+        applyMiniStyleClass() {}, applyMiniResponsiveVars() {}, applyNormalResponsiveLayout() {}, closeSwitchMenu() {},
     });
     vm.runInContext(bootstrap + functions, context);
+    vm.runInContext('toggleVolumeMenu()', context);
+    assert.ok(nodes.get('volumeMenu').classList.contains('show'));
+    assert.ok(document.body.classList.contains('volume-menu-open'));
     const steps = [
         [{}, '🍅', '⏸'],
         [{ isPaused: true }, '🍅', '▶️'],
@@ -201,16 +210,18 @@ test('standalone render preserves phase emoji and SVG controls during state upda
         for (const id of ['statusIcon', 'miniStatusTrigger']) assert.equal(nodes.get(id).innerHTML, status);
         for (const id of ['ringPlayPauseBtn', 'miniPlayPauseBtn', 'miniMinimalPlayPauseBtn']) assert.equal(nodes.get(id).innerHTML, icons.POMODORO_ICON_SVGS[play]);
         assert.equal(nodes.get('dockBtn').innerHTML, icons.POMODORO_TOOLBAR_ICON_SVGS['➡️']);
-        assert.equal(nodes.get('soundBtn').innerHTML, icons.POMODORO_TOOLBAR_ICON_SVGS['🔊']);
+        assert.equal(nodes.get('volumeMuteBtn').innerHTML, icons.POMODORO_ICON_SVGS['🔊']);
     }
     context.localState.isBackgroundAudioMuted = true;
     context.settings.pomodoroDockPosition = 'top';
     vm.runInContext('render()', context);
-    assert.equal(nodes.get('soundBtn').innerHTML, icons.POMODORO_TOOLBAR_ICON_SVGS['🔇']);
     assert.equal(nodes.get('volumeMuteBtn').innerHTML, icons.POMODORO_ICON_SVGS['🔇']);
     assert.equal(nodes.get('dockBtn').innerHTML, icons.POMODORO_TOOLBAR_ICON_SVGS['⬆️']);
     const node = nodes.get('statusIcon');
     const writes = node.writes;
     vm.runInContext('render()', context);
     assert.equal(node.writes, writes);
+    vm.runInContext('closeVolumeMenu()', context);
+    assert.equal(nodes.get('volumeMenu').classList.contains('show'), false);
+    assert.equal(document.body.classList.contains('volume-menu-open'), false);
 });

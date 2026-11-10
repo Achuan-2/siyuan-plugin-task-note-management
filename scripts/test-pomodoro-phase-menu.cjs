@@ -32,8 +32,9 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
     let fullscreen = false;
     let pendingFullscreen = false;
     const windowCalls = [];
+    const rendererScripts = [];
     const owner = Object.assign(new EventEmitter(), {
-        webContents: { executeJavaScript: async () => {} },
+        webContents: { executeJavaScript: async script => { rendererScripts.push(script); } },
         id: 1,
         isDestroyed: () => false,
         getBounds: () => fullscreen ? { x: 0, y: 0, width: 1920, height: 1080 } : { x: 120, y: 80, width: 150, height: 32 },
@@ -95,7 +96,7 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         // 子窗口无需 remote 或 HTML 菜单，普通和迷你模式均通过 IPC 打开完整原生菜单。
     });
     vm.runInContext(rendererCode, context);
-    return { menus, actions, owner, timer, mainWindowCalls, windowCalls, Timer,
+    return { menus, actions, owner, timer, mainWindowCalls, windowCalls, rendererScripts, Timer,
         get volumeClosed() { return volumeClosed; },
         open(kind = 'all') {
             const entry = { all: 'toggleMiniSwitchMenu', status: 'toggleStatusMenu', more: 'toggleMoreMenu' }[kind];
@@ -123,7 +124,7 @@ test('迷你模式将状态放在首层，低频操作放在更多子菜单', ()
     assert.deepEqual(mini.items.slice(0, 3).map(item => item.label), ['🍅 pomodoroWork', '🍵 pomodoroBreak', '🧘 pomodoroLongBreak']);
     assert.equal(mini.items[3].label, 'switchToCountUp');
     assert.equal(mini.items[4].label, 'more');
-    assert.equal(mini.items[4].submenu.length, 3);
+    assert.equal(mini.items[4].submenu.length, 4);
     for (const item of mini.items[4].submenu) assert.equal(typeof item.click, 'function');
     assert.equal(mini.options.window, view.owner);
 });
@@ -131,16 +132,27 @@ test('迷你模式将状态放在首层，低频操作放在更多子菜单', ()
 test('更多按钮保留模式、修改时长和设置操作', () => {
     const view = fixture();
     const menu = view.open('more');
-    assert.equal(menu.items.length, 4);
-    assert.deepEqual(menu.items.map(item => item.icon.name), ['timer', 'pencil', 'settings', 'fullscreen']);
+    assert.equal(menu.items.length, 5);
+    assert.deepEqual(menu.items.map(item => item.icon.name), ['timer', 'pencil', 'settings', 'fullscreen', 'volume']);
     assert.ok(menu.items.every(item => item.icon.color === '#333333'));
-    assert.deepEqual(menu.items.map(item => item.label), ['switchToCountUp', 'pomodoroEditDuration', 'pomodoroSettings', 'fullscreenMode']);
+    assert.deepEqual(menu.items.map(item => item.label), ['switchToCountUp', 'pomodoroEditDuration', 'pomodoroSettings', 'fullscreenMode', 'backgroundVolume']);
     assert.equal(menu.items[3].accelerator, 'F11');
     menu.items[0].click();
     menu.items[1].click();
     menu.items[2].click();
     assert.deepEqual(view.actions, ['toggleMode',
         'editTime', ['openSetting', 'pomodoroSettings']]);
+});
+
+test('普通和迷你菜单从更多打开原有音量面板', () => {
+    for (const isMiniMode of [false, true]) {
+        const view = fixture({ isMiniMode });
+        const item = isMiniMode ? view.open().items[4].submenu[3] : view.open('more').items[4];
+        assert.equal(item.label, 'backgroundVolume');
+        assert.equal(item.icon.name, 'volume');
+        item.click();
+        assert.deepEqual(view.rendererScripts, ['toggleVolumeMenu()']);
+    }
 });
 
 test('每次展开使用当前计时模式和阶段更新标签与时长编辑权限', () => {
