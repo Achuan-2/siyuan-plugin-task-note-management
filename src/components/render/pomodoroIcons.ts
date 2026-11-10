@@ -7,7 +7,6 @@ function line(content: string, color = '#528bd4'): string {
     return `<g fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${content}</g>`;
 }
 
-const dice = svg('<rect x="2" y="2" width="20" height="20" rx="5" fill="#b899df"/><path d="M7 2h10a5 5 0 0 1 5 5v10Z" fill="#d8c6ef"/><g fill="#65478d"><circle cx="7" cy="7" r="1.7"/><circle cx="17" cy="7" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="7" cy="17" r="1.7"/><circle cx="17" cy="17" r="1.7"/></g>');
 const speaker = '<path fill="#5e9ed1" d="M3 9h4l5-5v16l-5-5H3Z"/>';
 const sound = svg(speaker + line('<path d="M16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>', '#76b9d6'));
 const mute = svg(speaker + line('<path d="m16 9 5 6m0-6-5 6"/>', '#e56c73'));
@@ -30,9 +29,9 @@ function arrow(rotation: number): string {
     return svg(`<g transform="rotate(${rotation} 12 12)"><rect x="2" y="2" width="20" height="20" rx="4" fill="#78b6e6"/>${line('<path d="M6 12h12m-5-5 5 5-5 5"/>', '#fff')}</g>`);
 }
 
-/** 操作控件使用 SVG；番茄、计时及休息阶段保持原生 emoji，不做替换。 */
+/** 操作控件使用 SVG；番茄、计时、休息阶段及随机微休息保持原生 emoji。 */
 export const POMODORO_ICON_SVGS: Record<string, string> = {
-    '🎲': dice, '🔊': sound, '🔇': mute,
+    '🔊': sound, '🔇': mute,
     '📌': pin, '⭕': mini, '🔄': switchPhase, '▶️': play,
     '⏸': pause, '⏸️': pause, '⏹': stop, '⏹️': stop, '⋯': more,
     '⛶': fullscreen, '×': close, '─': minimize, '✏️': edit, '⚙️': settings,
@@ -41,14 +40,17 @@ export const POMODORO_ICON_SVGS: Record<string, string> = {
     '↗': arrow(315), '↗️': arrow(315),
 };
 
+// 钉住与 mini 按钮使用用户指定的 Lucide pin 路径。
+const toolbarPin = svg(line('<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>', 'currentColor'));
+
 /** 顶部工具栏采用 Lucide 风格的单色线性图标，颜色由主题决定。 */
 export const POMODORO_TOOLBAR_ICON_SVGS: Record<string, string> = {
-    '⭕': svg(line('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>', 'currentColor')),
+    '⭕': toolbarPin,
     '🔄': svg(line('<path d="M3 11a9 9 0 0 1 15-6l3 3M21 3v5h-5M21 13a9 9 0 0 1-15 6l-3-3M3 21v-5h5"/>', 'currentColor')),
     '⋯': svg(line('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>', 'currentColor')),
     '🔊': svg(line('<path d="m11 5-6 4H2v6h3l6 4ZM15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/>', 'currentColor')),
     '🔇': svg(line('<path d="m11 5-6 4H2v6h3l6 4Zm6 4 5 6m0-6-5 6"/>', 'currentColor')),
-    '📌': svg(line('<path d="m16 3 5 5-4 1-4 4v4l-2 2-6-6 2-2h4l4-4ZM8 16l-6 6"/>', 'currentColor')),
+    '📌': toolbarPin,
     '─': svg(line('<path d="M5 12h14"/>', 'currentColor')),
     '×': svg(line('<path d="m6 6 12 12M18 6 6 18"/>', 'currentColor')),
     '⛶': svg(line('<path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/>', 'currentColor')),

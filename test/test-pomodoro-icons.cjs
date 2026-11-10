@@ -58,11 +58,11 @@ test('all icon states use self-contained colored SVG and preserve label escaping
         assert.match(svg, /(?:fill|stroke)="#[0-9a-f]+"/i);
         assert.doesNotMatch(svg, /<image|<use|https?:\/\/(?!www\.w3\.org)/);
     }
-    const html = icons.renderPomodoroIcons('🎲 <task & "name">');
+    const html = icons.renderPomodoroIcons('▶️ <task & "name">');
     assert.match(html, /<svg/);
     assert.match(html, /&lt;task &amp; &quot;name&quot;&gt;/);
-    assert.doesNotMatch(html, /🎲|<task/);
-    for (const emoji of ['🍅', '🍵', '🧘', '🧘‍♀️', '💪', '⏱', '⏱️']) {
+    assert.doesNotMatch(html, /▶️|<task/);
+    for (const emoji of ['🍅', '🍵', '🧘', '🧘‍♀️', '💪', '⏱', '⏱️', '🎲']) {
         assert.equal(icons.renderPomodoroIcons(emoji), emoji);
     }
 });
@@ -101,7 +101,7 @@ test('production minification preserves the self-contained renderer injected int
     const factory = compiledModule.exports.createPomodoroIconRenderer;
     const context = vm.createContext({});
     vm.runInContext(`const renderer = (${factory.toString()})(${JSON.stringify(icons.POMODORO_ICON_SVGS)});`, context);
-    assert.equal(vm.runInContext("renderer.html('🎲')", context), icons.POMODORO_ICON_SVGS['🎲']);
+    assert.equal(vm.runInContext("renderer.html('▶️')", context), icons.POMODORO_ICON_SVGS['▶️']);
 });
 
 test('normal and all mini layouts contain SVG controls and executable standalone scripts', () => {
@@ -110,13 +110,14 @@ test('normal and all mini layouts contain SVG controls and executable standalone
             const { html, script } = fixture(style, state);
             new vm.Script(script);
             const body = html.split('<body')[1].split('<script>')[0];
-            assert.doesNotMatch(body, /🎲|⏹|▶️|🔊|📌/);
+            assert.doesNotMatch(body, /⏹|▶️|🔊|📌/);
+            assert.match(body, /id="diceIcon"[^>]*>🎲<\/span>/);
             const phase = state.isWorkPhase === false ? (state.isLongBreak ? '🧘' : '🍵') : (state.isCountUp ? '⏱' : '🍅');
             for (const id of ['statusIcon', 'miniStatusTrigger']) {
                 assert.match(body, new RegExp(`id="${id}"[^>]*>${phase}</`));
             }
             for (const id of ['ringPlayPauseBtn', 'miniPlayPauseBtn',
-                'stopBtn', 'miniStopBtn', 'miniMinimalStopBtn', 'soundBtn', 'pinBtn', 'dockBtn', 'diceIcon']) {
+                'stopBtn', 'miniStopBtn', 'miniMinimalStopBtn', 'soundBtn', 'pinBtn', 'dockBtn']) {
                 assert.match(body, new RegExp(`id="${id}"[^>]*>[\\s\\S]*?<svg`), `${style}: ${id}`);
             }
             assert.match(body, /&lt;task &amp; title&gt;/);
