@@ -3078,7 +3078,7 @@ export class PomodoroTimer {
         const workBtn = document.createElement('button');
         workBtn.className = 'pomodoro-menu-item';
         workBtn.style.cssText = this.getMenuItemStyle();
-        setPomodoroIcon(workBtn, `💪 ${i18n('pomodoroWork') || '工作时间'}`);
+        setPomodoroIcon(workBtn, `🍅 ${i18n('pomodoroWork') || '工作时间'}`);
         workBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -5306,7 +5306,7 @@ export class PomodoroTimer {
         const switchToCountUpText = i18n('switchToCountUp') || '切换到正计时';
 
         const phaseItems = [
-            { label: `💪 ${workText}`, click: () => this.startWorkTime() },
+            { label: `🍅 ${workText}`, click: () => this.startWorkTime() },
             { label: `🍵 ${shortBreakText}`, click: () => this.startShortBreak() },
             { label: `🧘 ${longBreakText}`, click: () => this.startLongBreak() }
         ];
@@ -6131,7 +6131,7 @@ export class PomodoroTimer {
 
         this.updateDisplay();
         this.updateMainSwitchButton(); // 更新主按钮显示
-        showMessage('💪 ' + (i18n('pomodoroWork') || '开始工作时间'));
+        showMessage('🍅 ' + (i18n('pomodoroWork') || '开始工作时间'));
     }
 
     private async startShortBreak() {
@@ -10892,7 +10892,7 @@ document.body.classList.remove('docked-mode');
                 <button class="mini-switch-item" id="miniSwitchModeMenuItem" onclick="callMethod('toggleMode')">
                     ${renderPomodoroIcons(`${currentState.isCountUp ? '🍅' : '⏱'} ${currentState.isCountUp ? switchToCountdownText : switchToCountUpText}`)}
                 </button>
-                <button class="mini-switch-item" onclick="callMethod('startWorkTime')">${renderPomodoroIcons(`💪 ${workText}`)}</button>
+                <button class="mini-switch-item" onclick="callMethod('startWorkTime')">${renderPomodoroIcons(`🍅 ${workText}`)}</button>
                 <button class="mini-switch-item" onclick="callMethod('startShortBreak')">${renderPomodoroIcons(`🍵 ${shortBreakText}`)}</button>
                 <button class="mini-switch-item" onclick="callMethod('startLongBreak')">${renderPomodoroIcons(`🧘 ${longBreakText}`)}</button>
             </div>

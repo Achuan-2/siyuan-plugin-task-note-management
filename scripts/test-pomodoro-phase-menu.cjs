@@ -109,7 +109,7 @@ test('状态按钮通过 IPC 直接打开三个状态选项', () => {
     const view = fixture();
     const menu = view.open('status');
     assert.equal(menu.options.window, view.owner);
-    assert.deepEqual(menu.items.map(item => item.label), ['💪 pomodoroWork', '🍵 pomodoroBreak', '🧘 pomodoroLongBreak']);
+    assert.deepEqual(menu.items.map(item => item.label), ['🍅 pomodoroWork', '🍵 pomodoroBreak', '🧘 pomodoroLongBreak']);
     assert.ok(menu.items.every(item => !item.submenu));
     for (const item of menu.items) item.click();
     assert.deepEqual(view.actions, ['startWorkTime', 'startShortBreak', 'startLongBreak']);
@@ -120,7 +120,7 @@ test('迷你模式将状态放在首层，低频操作放在更多子菜单', ()
     const view = fixture();
     const mini = view.open();
     assert.equal(mini.items.length, 5);
-    assert.deepEqual(mini.items.slice(0, 3).map(item => item.label), ['💪 pomodoroWork', '🍵 pomodoroBreak', '🧘 pomodoroLongBreak']);
+    assert.deepEqual(mini.items.slice(0, 3).map(item => item.label), ['🍅 pomodoroWork', '🍵 pomodoroBreak', '🧘 pomodoroLongBreak']);
     assert.equal(mini.items[3].label, 'switchToCountUp');
     assert.equal(mini.items[4].label, 'more');
     assert.equal(mini.items[4].submenu.length, 3);
