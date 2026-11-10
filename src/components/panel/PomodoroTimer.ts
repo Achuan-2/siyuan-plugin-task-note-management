@@ -3138,8 +3138,8 @@ export class PomodoroTimer {
         });
         this.initMenuItemHoverEffects(settingsBtn);
 
-        for (const item of [workBtn, shortBreakBtn, longBreakBtn]) item.dataset.menuGroup = 'status';
-        for (const item of [this.modeToggleBtn, editDurationBtn, settingsBtn]) item.dataset.menuGroup = 'more';
+        for (const item of [workBtn, shortBreakBtn, longBreakBtn, this.modeToggleBtn]) item.dataset.menuGroup = 'status';
+        for (const item of [editDurationBtn, settingsBtn]) item.dataset.menuGroup = 'more';
 
         // 将菜单项添加到菜单中
         this.switchMenu.appendChild(workBtn);
@@ -5235,6 +5235,7 @@ export class PomodoroTimer {
             icon: menuIcon(this.isCountUp ? 'hourglass' : 'timer'),
             click: () => this.toggleMode()
         };
+        if (kind !== 'more') menu.append(new MenuItem(modeItem));
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
         const moreItems = [{
             label: i18n('pomodoroEditDuration'),
@@ -5262,11 +5263,9 @@ export class PomodoroTimer {
             }
         }];
         if (kind === 'more') {
-            menu.append(new MenuItem(modeItem));
             for (const item of moreItems) menu.append(new MenuItem(item));
         } else if (kind === 'all') {
             // 迷你窗口只有一个菜单入口，状态直接显示在首层，其余操作收进更多。
-            menu.append(new MenuItem(modeItem));
             menu.append(new MenuItem({ label: i18n('more'), submenu: moreItems }));
         }
         if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
