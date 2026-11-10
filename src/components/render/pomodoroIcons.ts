@@ -40,12 +40,12 @@ export const POMODORO_ICON_SVGS: Record<string, string> = {
     '↗': arrow(315), '↗️': arrow(315),
 };
 
-// 钉住与 mini 按钮使用用户指定的 Lucide pin 路径。
+// 钉住按钮使用用户指定的 Lucide pin 路径。
 const toolbarPin = svg(line('<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>', 'currentColor'));
 
 /** 顶部工具栏采用 Lucide 风格的单色线性图标，颜色由主题决定。 */
 export const POMODORO_TOOLBAR_ICON_SVGS: Record<string, string> = {
-    '⭕': toolbarPin,
+    '⭕': svg(line('<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>', 'currentColor')),
     '🔄': svg(line('<path d="M3 11a9 9 0 0 1 15-6l3 3M21 3v5h-5M21 13a9 9 0 0 1-15 6l-3-3M3 21v-5h5"/>', 'currentColor')),
     '⋯': svg(line('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>', 'currentColor')),
     '🔊': svg(line('<path d="m11 5-6 4H2v6h3l6 4ZM15.5 8.5a5 5 0 0 1 0 7m3-10a9 9 0 0 1 0 13"/>', 'currentColor')),
