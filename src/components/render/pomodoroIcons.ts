@@ -61,8 +61,11 @@ export const POMODORO_TOOLBAR_ICON_SVGS: Record<string, string> = {
     '⬇️': svg(line('<path d="M12 4v16m-7-7 7 7 7-7"/>', 'currentColor')),
 };
 
-/** 更多菜单共用的 Lucide 风格路径，可输出内联 SVG 或原生菜单图像。 */
+/** 状态与更多菜单共用的 Lucide 风格路径，统一占用原生菜单图标列。 */
 export const POMODORO_MENU_ICON_PATHS = {
+    work: ['M8 7C5 6 2 8 2 12c0 5 4 10 10 10s10-5 10-10c0-4-3-6-6-5', 'M12 6V4c0-1 1-2 2-2', 'm12 6-5-2 2 4-3 2 5-1 1 3 1-3 5 1-3-2 2-4Z'],
+    shortBreak: ['M4 9h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5Z', 'M16 10h2a3 3 0 0 1 0 6h-2M7 3v3m6-3v3M3 23h16'],
+    longBreak: ['M5 10V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v4', 'M5 11a2 2 0 0 0-4 0v6a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2v-6a2 2 0 0 0-4 0v3H5Z', 'M5 19v3m14-3v3'],
     timer: ['M9 2h6m-3 0v4m6 1 2-2M12 10v4l3 2', 'M20 14a8 8 0 1 1-16 0 8 8 0 0 1 16 0'],
     hourglass: ['M5 2h14M5 22h14M6 2v5l6 5-6 5v5M18 2v5l-6 5 6 5v5'],
     pencil: ['m16 3 5 5M3 21l6-1L21 8a2 2 0 0 0 0-3l-2-2a2 2 0 0 0-3 0L4 15Z', 'm4 15 5 5'],

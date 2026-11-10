@@ -5222,9 +5222,9 @@ export class PomodoroTimer {
         const switchToCountUpText = i18n('switchToCountUp') || '切换到正计时';
 
         const phaseItems = [
-            { label: `🍅 ${workText}`, click: () => this.startWorkTime() },
-            { label: `🍵 ${shortBreakText}`, click: () => this.startShortBreak() },
-            { label: `🧘 ${longBreakText}`, click: () => this.startLongBreak() }
+            { label: workText, icon: menuIcon('work'), click: () => this.startWorkTime() },
+            { label: shortBreakText, icon: menuIcon('shortBreak'), click: () => this.startShortBreak() },
+            { label: longBreakText, icon: menuIcon('longBreak'), click: () => this.startLongBreak() }
         ];
         if (kind !== 'more') {
             for (const item of phaseItems) menu.append(new MenuItem(item));
