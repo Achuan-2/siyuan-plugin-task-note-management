@@ -9369,12 +9369,12 @@ export class ProjectKanbanView {
         const menu = new Menu("subscribedTaskContextMenu");
 
         menu.addItem({
-            iconHTML: "ℹ️",
+            icon: "iconInfo",
             label: i18n("subscribedTaskReadOnly") || "订阅任务（只读）",
             disabled: true
         });
         menu.addItem({
-            iconHTML: "👁️",
+            icon: "iconEye",
             label: i18n("viewTasks") || "查看任务",
             click: () => this.editTask(task)
         });
@@ -9384,12 +9384,12 @@ export class ProjectKanbanView {
         const targetId = task.blockId || task.docId;
         if (targetId) {
             menu.addItem({
-                iconHTML: "📖",
+                icon: "iconNotebook",
                 label: i18n("openNote") || "打开笔记",
                 click: () => this.openBlockTab(targetId)
             });
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconCopy",
                 label: i18n("copyBlockRef") || "复制块引用",
                 click: () => this.copyBlockRef(task)
             });
@@ -9400,19 +9400,19 @@ export class ProjectKanbanView {
         // 生产力工具
         const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n("startPomodoro") || "开始番茄钟",
             ...(pomodoroDirectStart
                 ? { click: () => this.startPomodoro(task) }
                 : { submenu: this.createPomodoroStartSubmenu(task) })
         });
         menu.addItem({
-            iconHTML: "⏱️",
+            icon: "iconTNStopwatch",
             label: i18n("startCountUp") || "开始正向计时",
             click: () => this.startPomodoroCountUp(task)
         });
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconTNStatistic",
             label: i18n("viewPomodoros") || "查看番茄钟",
             click: () => this.showPomodoroSessions(task)
         });
@@ -9430,21 +9430,21 @@ export class ProjectKanbanView {
         const menu = new Menu("kanbanBatchContextMenu");
         // 设置已完成
         menu.addItem({
-            iconHTML: "✅",
+            icon: "iconCheck",
             label: i18n('setCompleted') || '设置已完成',
             click: () => this.batchSetCompleted()
         });
 
         // 设置日期
         menu.addItem({
-            iconHTML: "🗓️",
+            icon: "iconCalendar",
             label: i18n('setDate') || '设置日期',
             click: () => this.batchSetDate()
         });
 
         // 设置状态
         menu.addItem({
-            iconHTML: "🔀",
+            icon: "iconTNStatus",
             label: i18n('setStatus') || '设置状态',
             click: () => this.batchSetStatus()
         });
@@ -9454,7 +9454,7 @@ export class ProjectKanbanView {
             const hasActiveGroups = this.project?.customGroups?.some((g: any) => !g.archived);
             if (hasActiveGroups) {
                 menu.addItem({
-                    iconHTML: "📂",
+                    icon: "iconTNProject",
                     label: i18n('setGroup'),
                     click: () => this.batchSetGroup()
                 });
@@ -9471,7 +9471,7 @@ export class ProjectKanbanView {
                 || projectGroups.some((g: any) => (g.milestones || []).some((m: any) => !m.archived));
             if (hasMilestones) {
                 menu.addItem({
-                    iconHTML: "🚩",
+                    icon: "iconTNMilestone",
                     label: i18n('setMilestone') || '设置里程碑',
                     click: () => this.batchSetMilestone()
                 });
@@ -9482,7 +9482,7 @@ export class ProjectKanbanView {
         try {
             if (this.project?.tags && this.project.tags.length > 0) {
                 menu.addItem({
-                    iconHTML: "🏷️",
+                    icon: "iconTags",
                     label: i18n('setTags') || '设置标签',
                     click: () => this.batchSetTags()
                 });
@@ -9491,7 +9491,7 @@ export class ProjectKanbanView {
 
         // 设置优先级
         menu.addItem({
-            iconHTML: "🎯",
+            icon: "iconTNPriority",
             label: i18n('setPriority') || '设置优先级',
             click: () => this.batchSetPriority()
         });
@@ -9500,7 +9500,7 @@ export class ProjectKanbanView {
 
         // 删除
         menu.addItem({
-            iconHTML: "🗑️",
+            icon: "iconTrashcan",
             label: i18n('delete') || '删除',
             click: () => this.batchDelete()
         });
@@ -9524,53 +9524,53 @@ export class ProjectKanbanView {
             if (task.isRepeatInstance) {
                 // 周期事件实例 - 显示修改此实例和修改所有实例
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n('modifyThisInstance'),
                     click: () => this.editInstanceReminder(task)
                 });
                 menu.addItem({
-                    iconHTML: "🔄",
+                    icon: "iconRefresh",
                     label: i18n('modifyAllInstances'),
                     click: () => this.editTask(task)
                 });
             } else if (task.repeat?.enabled) {
                 // 原始周期事件 - 只显示编辑选项
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n('editTask'),
                     click: () => this.editTask(task)
                 });
             } else {
                 // 普通任务
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n('editTask'),
                     click: () => this.editTask(task)
                 });
                 // 绑定块功能
                 if (task.blockId || task.docId) {
                     menu.addItem({
-                        iconHTML: "📋",
+                        icon: "iconCopy",
                         label: i18n('copyBlockRef'),
                         click: () => this.copyBlockRef(task)
                     });
                 } else {
                     menu.addItem({
-                        iconHTML: "🔗",
+                        icon: "iconLink",
                         label: i18n('bindToBlock'),
                         submenu: [
                             {
-                                iconHTML: "🔗",
+                                icon: "iconLink",
                                 label: i18n('bindToBlock'),
                                 click: () => this.showBindToBlockDialog(task, 'bind')
                             },
                             {
-                                iconHTML: "📑",
+                                icon: "iconH1",
                                 label: i18n('newHeading'),
                                 click: () => this.showBindToBlockDialog(task, 'heading')
                             },
                             {
-                                iconHTML: "📄",
+                                icon: "iconFile",
                                 label: i18n('newDocument'),
                                 click: () => this.showBindToBlockDialog(task, 'document')
                             }
@@ -9580,12 +9580,12 @@ export class ProjectKanbanView {
             }
         } else {
             menu.addItem({
-                iconHTML: "ℹ️",
+                icon: "iconInfo",
                 label: i18n("subscribedTaskReadOnly") || "订阅任务（只读）",
                 disabled: true
             });
             menu.addItem({
-                iconHTML: "👁️",
+                icon: "iconEye",
                 label: i18n("viewTasks") || "查看任务",
                 click: () => this.editTask(task)
             });
@@ -9594,27 +9594,27 @@ export class ProjectKanbanView {
             // 绑定块功能 (即使是只读订阅任务也允许块操作)
             if (task.blockId || task.docId) {
                 menu.addItem({
-                    iconHTML: "📋",
+                    icon: "iconCopy",
                     label: i18n('copyBlockRef'),
                     click: () => this.copyBlockRef(task)
                 });
             } else {
                 menu.addItem({
-                    iconHTML: "🔗",
+                    icon: "iconLink",
                     label: i18n('bindToBlock'),
                     submenu: [
                         {
-                            iconHTML: "🔗",
+                            icon: "iconLink",
                             label: i18n('bindToBlock'),
                             click: () => this.showBindToBlockDialog(task, 'bind')
                         },
                         {
-                            iconHTML: "📑",
+                            icon: "iconH1",
                             label: i18n('newHeading'),
                             click: () => this.showBindToBlockDialog(task, 'heading')
                         },
                         {
-                            iconHTML: "📄",
+                            icon: "iconFile",
                             label: i18n('newDocument'),
                             click: () => this.showBindToBlockDialog(task, 'document')
                         }
@@ -9625,26 +9625,26 @@ export class ProjectKanbanView {
 
         if (!task.isSubscribed) {
             menu.addItem({
-                iconHTML: "➕",
+                icon: "iconAdd",
                 label: i18n('createSubtask'),
                 click: () => this.showCreateTaskDialog(task)
             });
 
             menu.addItem({
-                iconHTML: "⬆️",
+                icon: "iconUp",
                 label: i18n('createTaskBeforeCurrent') || '在当前任务前新增任务',
                 click: () => this.createTaskAdjacentTo(task, true)
             });
 
             menu.addItem({
-                iconHTML: "⬇️",
+                icon: "iconDown",
                 label: i18n('createTaskAfterCurrent') || '在当前任务后新增任务',
                 click: () => this.createTaskAdjacentTo(task, false)
             });
 
             // 粘贴新建子任务
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconPaste",
                 label: i18n('pasteCreateSubtask'),
                 click: () => this.showPasteTaskDialog(task)
             });
@@ -9653,7 +9653,7 @@ export class ProjectKanbanView {
         // 父子任务管理 (订阅任务不允许修改父子关系)
         if (task.parentId && !task.isSubscribed) {
             menu.addItem({
-                iconHTML: "🔗",
+                icon: "iconLinkOff",
                 label: i18n('unsetParentRelation'),
                 click: () => this.unsetParentChildRelation(task)
             });
@@ -9661,7 +9661,7 @@ export class ProjectKanbanView {
         // 复制子任务为多级 Markdown 列表
         if (childTasks.length > 0) {
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconCopy",
                 label: i18n('copySubtasksAsList'),
                 click: async () => {
                     const childLines = this.buildMarkdownListFromChildren(task.id);
@@ -9861,7 +9861,7 @@ export class ProjectKanbanView {
         const isPinned = !!task.pinned;
         // 置顶任务
         menu.addItem({
-            iconHTML: isPinned ? "📍" : "📌",
+            icon: isPinned ? "iconUnpin" : "iconPin",
             label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
             click: () => this.setReminderPinned(task, !isPinned)
         });
@@ -9869,14 +9869,14 @@ export class ProjectKanbanView {
         if (isEditable) {
             // 快速调整日期
             menu.addItem({
-                iconHTML: "📆",
+                icon: "iconCalendar",
                 label: i18n('quickReschedule') || '快速调整日期',
                 submenu: createQuickDateMenuItems(task, !!task.isRepeatInstance)
             });
 
             // 添加提醒时间
             menu.addItem({
-                iconHTML: "⏰",
+                icon: "iconTNNotification",
                 label: i18n("addReminderTime") || "添加提醒时间",
                 click: () => {
                     showAddTaskReminderTimeDialog(
@@ -9895,16 +9895,16 @@ export class ProjectKanbanView {
             // 设置优先级子菜单
             const priorityMenuItems = [];
             const priorities = [
-                { key: 'high', label: i18n('priorityHigh'), icon: '🔴' },
-                { key: 'medium', label: i18n('priorityMedium'), icon: '🟡' },
-                { key: 'low', label: i18n('priorityLow'), icon: '🔵' },
-                { key: 'none', label: i18n('none'), icon: '⚫' }
+                { key: 'high', label: i18n('priorityHigh'), icon: 'iconTNPriorityHigh' },
+                { key: 'medium', label: i18n('priorityMedium'), icon: 'iconTNPriorityMedium' },
+                { key: 'low', label: i18n('priorityLow'), icon: 'iconTNPriorityLow' },
+                { key: 'none', label: i18n('none'), icon: 'iconTNPriorityNone' }
             ];
 
             const currentPriority = task.priority || 'none';
             priorities.forEach(priority => {
                 priorityMenuItems.push({
-                    iconHTML: priority.icon,
+                    icon: priority.icon,
                     label: priority.label,
                     current: currentPriority === priority.key,
                     click: () => this.setPriority(task, priority.key)
@@ -9912,7 +9912,7 @@ export class ProjectKanbanView {
             });
 
             menu.addItem({
-                iconHTML: "🎯",
+                icon: "iconTNPriority",
                 label: i18n('setPriority'),
                 submenu: priorityMenuItems
             });
@@ -9945,7 +9945,7 @@ export class ProjectKanbanView {
             const statusMenuItems: any[] = [];
             statusCandidates.forEach((s: any) => {
                 statusMenuItems.push({
-                    iconHTML: s.icon || '',
+                    icon: 'iconTNStatus',
                     label: s.name || s.id,
                     current: currentStatus === s.id,
                     click: () => this.changeTaskStatus(task, s.id)
@@ -9953,7 +9953,7 @@ export class ProjectKanbanView {
             });
 
             menu.addItem({
-                iconHTML: "🔀",
+                icon: "iconTNStatus",
                 label: i18n('setStatus') || '设置状态',
                 submenu: statusMenuItems
             });
@@ -9973,7 +9973,7 @@ export class ProjectKanbanView {
 
                     // 添加"移除分组"选项
                     groupMenuItems.push({
-                        iconHTML: "❌",
+                        icon: "iconClose",
                         label: i18n('removeGroup'),
                         current: !currentGroupId,
                         // 传入 task 对象（setTaskCustomGroup 期望第一个参数为 task 对象）
@@ -9983,7 +9983,7 @@ export class ProjectKanbanView {
                     // 添加所有未归档分组选项
                     activeGroups.forEach((group: any) => {
                         groupMenuItems.push({
-                            iconHTML: group.icon || "",
+                            icon: 'iconTNProject',
                             label: group.name,
                             current: currentGroupId === group.id,
                             // 传入 task 对象（setTaskCustomGroup 期望第一个参数为 task 对象）
@@ -9992,7 +9992,7 @@ export class ProjectKanbanView {
                     });
 
                     menu.addItem({
-                        iconHTML: "📂",
+                        icon: "iconTNProject",
                         label: i18n('setGroup'),
                         submenu: groupMenuItems
                     });
@@ -10019,7 +10019,7 @@ export class ProjectKanbanView {
                     });
 
                     menu.addItem({
-                        iconHTML: "🏷️",
+                        icon: "iconTags",
                         label: i18n('setTags'),
                         submenu: tagMenuItems
                     });
@@ -10051,7 +10051,7 @@ export class ProjectKanbanView {
 
                     // 添加“移除里程碑”选项
                     milestoneMenuItems.push({
-                        iconHTML: "❌",
+                        icon: "iconClose",
                         label: i18n('noMilestone') || '无里程碑',
                         current: !currentMilestoneId,
                         click: () => this.setTaskMilestone(task, null)
@@ -10059,7 +10059,7 @@ export class ProjectKanbanView {
 
                     availableMilestones.forEach(ms => {
                         milestoneMenuItems.push({
-                            iconHTML: ms.icon || "🚩",
+                            icon: "iconTNMilestone",
                             label: ms.name,
                             current: currentMilestoneId === ms.id,
                             click: () => this.setTaskMilestone(task, ms.id)
@@ -10067,7 +10067,7 @@ export class ProjectKanbanView {
                     });
 
                     menu.addItem({
-                        iconHTML: "🚩",
+                        icon: "iconTNMilestone",
                         label: i18n('setMilestone') || "设置里程碑",
                         submenu: milestoneMenuItems
                     });
@@ -10082,7 +10082,7 @@ export class ProjectKanbanView {
         // 番茄钟
         const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n('startPomodoro'),
             ...(pomodoroDirectStart2
                 ? { click: () => this.startPomodoro(task) }
@@ -10090,12 +10090,12 @@ export class ProjectKanbanView {
         });
 
         menu.addItem({
-            iconHTML: "⏱️",
+            icon: "iconTNStopwatch",
             label: i18n('startStopwatch'),
             click: () => this.startPomodoroCountUp(task)
         });
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconTNStatistic",
             label: i18n("viewPomodoros") || "查看番茄钟",
             click: () => this.showPomodoroSessions(task)
         });
@@ -10107,19 +10107,19 @@ export class ProjectKanbanView {
             if (task.isRepeatInstance) {
                 // 周期事件实例 - 显示删除此实例和删除所有实例
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n('deleteThisInstance'),
                     click: () => this.deleteInstanceOnly(task)
                 });
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n('deleteAllInstances'),
                     click: () => this.deleteTask(task)
                 });
             } else {
                 // 普通任务或原始周期事件
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n('deleteTask'),
                     click: () => this.deleteTask(task)
                 });

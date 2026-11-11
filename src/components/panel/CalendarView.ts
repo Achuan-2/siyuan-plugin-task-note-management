@@ -3781,7 +3781,7 @@ export class CalendarView {
             const relatedEventId = calendarEvent.extendedProps.eventId || "";
             const isHabitPomodoro = typeof relatedEventId === 'string' && relatedEventId.startsWith('habit');
             menu.addItem({
-                iconHTML: "✏️",
+                icon: "iconEdit",
                 label: i18n("editPomodoro") || "编辑番茄钟",
                 click: () => {
                     this.editPomodoroRecordFromCalendar(calendarEvent);
@@ -3789,7 +3789,7 @@ export class CalendarView {
             });
 
             menu.addItem({
-                iconHTML: "📝",
+                icon: "iconEdit",
                 label: isHabitPomodoro ? (i18n("viewPomodoroHabit") || "查看所属习惯") : i18n("viewPomodoroTask"),
                 click: async () => {
                     try {
@@ -3866,7 +3866,7 @@ export class CalendarView {
 
             if (isHabitPomodoro) {
                 menu.addItem({
-                    iconHTML: "📊",
+                    icon: "iconTNStatistic",
                     label: i18n("viewStatsMenuItem") || "查看统计",
                     click: async () => {
                         await this.openHabitStatsDialog(relatedEventId);
@@ -3876,7 +3876,7 @@ export class CalendarView {
 
 
             menu.addItem({
-                iconHTML: "🗑️",
+                icon: "iconTrashcan",
                 label: i18n("deletePomodoroRecord"),
                 click: async () => {
                     const session = this.getPomodoroSessionFromCalendarEvent(calendarEvent);
@@ -3954,26 +3954,26 @@ export class CalendarView {
                 return;
             }
             menu.addItem({
-                iconHTML: "✅",
+                icon: "iconCheck",
                 label: i18n("checkInMenuItem") || "打卡",
                 submenu: this.createHabitCheckInSubmenu(habit, habitDate)
             });
             menu.addItem({
-                iconHTML: "🗓️️",
+                icon: "iconCalendar",
                 label: i18n("editDayCheckInData") || "编辑当天打卡数据",
                 click: async () => {
                     await this.openHabitDayDialog(calendarEvent.extendedProps.habitId, habitDate);
                 }
             });
             menu.addItem({
-                iconHTML: "📝",
+                icon: "iconEdit",
                 label: i18n("editHabitMenuItem") || "编辑习惯",
                 click: async () => {
                     await this.openHabitEditDialog(calendarEvent.extendedProps.habitId);
                 }
             });
             menu.addItem({
-                iconHTML: "📊",
+                icon: "iconTNStatistic",
                 label: i18n("viewStatsMenuItem") || "查看统计",
                 click: async () => {
                     await this.openHabitStatsDialog(calendarEvent.extendedProps.habitId);
@@ -3988,13 +3988,13 @@ export class CalendarView {
 
         if (calendarEvent.extendedProps.isSubscribed && calendarEvent.extendedProps.subscriptionType !== 'caldav') {
             menu.addItem({
-                iconHTML: "ℹ️",
+                icon: "iconInfo",
                 label: i18n("subscribedTaskReadOnly"),
                 disabled: true
             });
 
             menu.addItem({
-                iconHTML: "👁️",
+                icon: "iconEye",
                 label: i18n("viewTasks") || "查看任务",
                 click: () => {
                     this.showTimeEditDialog(calendarEvent);
@@ -4003,7 +4003,7 @@ export class CalendarView {
 
             if (calendarEvent.extendedProps.projectId) {
                 menu.addItem({
-                    iconHTML: "📂",
+                    icon: "iconTNProject",
                     label: i18n("openProjectKanban"),
                     click: () => {
                         this.openProjectKanban(calendarEvent.extendedProps.projectId);
@@ -4015,7 +4015,7 @@ export class CalendarView {
 
             const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
-                iconHTML: "🍅",
+                icon: "iconTNPomodoro",
                 label: i18n("startPomodoro"),
                 ...(pomodoroDirectStart
                     ? { click: () => this.startPomodoro(calendarEvent) }
@@ -4023,7 +4023,7 @@ export class CalendarView {
             });
 
             menu.addItem({
-                iconHTML: "⏱️",
+                icon: "iconTNStopwatch",
                 label: i18n("startCountUp"),
                 click: () => {
                     this.startPomodoroCountUp(calendarEvent);
@@ -4031,7 +4031,7 @@ export class CalendarView {
             });
 
             menu.addItem({
-                iconHTML: "📊",
+                icon: "iconTNStatistic",
                 label: i18n("viewPomodoros") || "查看番茄钟",
                 click: () => {
                     void this.showPomodoroSessions(calendarEvent);
@@ -4068,7 +4068,7 @@ export class CalendarView {
                 const isTodayCompleted = !!(reminder && reminder.dailyCompletions && reminder.dailyCompletions[targetDate] === true);
 
                 menu.addItem({
-                    iconHTML: isGloballyCompleted ? "↩️" : "✅",
+                    icon: isGloballyCompleted ? "iconUndo" : "iconCheck",
                     label: isGloballyCompleted ? (i18n("markAsUncompleted") || "取消完成") : (i18n("markAsCompleted") || "完成任务"),
                     click: () => {
                         this.toggleEventCompleted(calendarEvent, 'global');
@@ -4076,7 +4076,7 @@ export class CalendarView {
                 });
 
                 menu.addItem({
-                    iconHTML: isTodayCompleted ? "↩️" : "✅",
+                    icon: isTodayCompleted ? "iconUndo" : "iconCheck",
                     label: isTodayCompleted ? (i18n("unmarkTodayCompleted") || "取消今日已完成") : (i18n("markTodayCompleted") || "今日已完成"),
                     click: () => {
                         this.toggleEventCompleted(calendarEvent, 'today', targetDate);
@@ -4087,7 +4087,7 @@ export class CalendarView {
                 if (targetDate === todayStr) {
                     const isIgnoredToday = reminder && Array.isArray(reminder.todayIgnored) && reminder.todayIgnored.includes(todayStr);
                     menu.addItem({
-                        iconHTML: isIgnoredToday ? "↩️" : "⭕",
+                        icon: isIgnoredToday ? "iconUndo" : "iconTNSkip",
                         label: isIgnoredToday ? (i18n("undoDailyDessertIgnore") || "取消今日忽略") : (i18n("todayIgnored") ? i18n("todayIgnored").replace('⭕ ', '') : i18n("ignoreForToday")),
                         click: () => {
                             this.toggleEventTodayIgnored(calendarEvent, todayStr);
@@ -4097,7 +4097,7 @@ export class CalendarView {
             } else {
                 const isGloballyCompleted = calendarEvent.extendedProps.completed;
                 menu.addItem({
-                    iconHTML: isGloballyCompleted ? "↩️" : "✅",
+                    icon: isGloballyCompleted ? "iconUndo" : "iconCheck",
                     label: isGloballyCompleted ? i18n("markAsUncompleted") : i18n("markAsCompleted"),
                     click: () => {
                         this.toggleEventCompleted(calendarEvent);
@@ -4109,21 +4109,21 @@ export class CalendarView {
 
             if (!calendarEvent.extendedProps.blockId) {
                 menu.addItem({
-                    iconHTML: "🔗",
+                    icon: "iconLink",
                     label: i18n("bindToBlock"),
                     submenu: [
                         {
-                            iconHTML: "🔗",
+                            icon: "iconLink",
                             label: i18n("bindToBlock"),
                             click: () => this.showBindToBlockDialog(calendarEvent, 'bind')
                         },
                         {
-                            iconHTML: "📑",
+                            icon: "iconH1",
                             label: i18n("newHeading"),
                             click: () => this.showBindToBlockDialog(calendarEvent, 'heading')
                         },
                         {
-                            iconHTML: "📄",
+                            icon: "iconFile",
                             label: i18n("newDocument"),
                             click: () => this.showBindToBlockDialog(calendarEvent, 'document')
                         }
@@ -4132,7 +4132,7 @@ export class CalendarView {
                 menu.addSeparator();
             } else {
                 menu.addItem({
-                    iconHTML: "📖",
+                    icon: "iconNotebook",
                     label: i18n("openNote"),
                     click: () => {
                         this.handleEventClick({ event: calendarEvent });
@@ -4144,7 +4144,7 @@ export class CalendarView {
             if (calendarEvent.extendedProps.isRepeated) {
                 if (!(calendarEvent.extendedProps.isSubscribed && calendarEvent.extendedProps.subscriptionType !== 'caldav')) {
                     menu.addItem({
-                        iconHTML: "📝",
+                        icon: "iconEdit",
                         label: i18n("modifyThisInstance"),
                         click: () => {
                             this.showInstanceEditDialog(calendarEvent);
@@ -4152,7 +4152,7 @@ export class CalendarView {
                     });
 
                     menu.addItem({
-                        iconHTML: "📝",
+                        icon: "iconEdit",
                         label: i18n("modifyAllInstances"),
                         click: () => {
                             this.showTimeEditDialogForSeries(calendarEvent);
@@ -4162,7 +4162,7 @@ export class CalendarView {
             } else if (calendarEvent.extendedProps.repeat?.enabled) {
                 // 对于周期原始事件，提供与实例一致的选项
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n("modifyThisInstance"),
                     click: () => {
                         this.splitRecurringEvent(calendarEvent);
@@ -4170,7 +4170,7 @@ export class CalendarView {
                 });
 
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n("modifyAllInstances"),
                     click: () => {
                         this.showTimeEditDialog(calendarEvent);
@@ -4178,7 +4178,7 @@ export class CalendarView {
                 });
             } else {
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n("modify"),
                     click: () => {
                         this.showTimeEditDialog(calendarEvent);
@@ -4188,7 +4188,7 @@ export class CalendarView {
 
         } else {
             menu.addItem({
-                iconHTML: "👁️",
+                icon: "iconEye",
                 label: i18n("viewTasks") || "查看任务",
                 click: () => {
                     this.showTimeEditDialog(calendarEvent);
@@ -4196,7 +4196,7 @@ export class CalendarView {
             });
             if (calendarEvent.extendedProps.blockId) {
                 menu.addItem({
-                    iconHTML: "📖",
+                    icon: "iconNotebook",
                     label: i18n("openNote"),
                     click: () => {
                         this.handleEventClick({ event: calendarEvent });
@@ -4208,7 +4208,7 @@ export class CalendarView {
         // 添加创建子任务选项 (订阅任务不允许创建子任务)
         if (!calendarEvent.extendedProps.isSubscribed) {
             menu.addItem({
-                iconHTML: "➕",
+                icon: "iconAdd",
                 label: i18n("createSubtask"),
                 click: () => {
                     this.showCreateSubtaskDialog(calendarEvent);
@@ -4219,7 +4219,7 @@ export class CalendarView {
         // 如果是子任务，添加查看父任务选项
         if (calendarEvent.extendedProps.parentId) {
             menu.addItem({
-                iconHTML: "👁️‍🗨️",
+                icon: "iconEye",
                 label: i18n("viewParentTask"),
                 click: () => {
                     this.showParentTaskDialog(calendarEvent);
@@ -4232,14 +4232,14 @@ export class CalendarView {
 
             // 快速调整日期
             menu.addItem({
-                iconHTML: "📆",
+                icon: "iconCalendar",
                 label: i18n("quickReschedule") || "快速调整日期",
                 submenu: this.createQuickDateContextMenuItems(calendarEvent, calendarEvent.extendedProps.isRepeated)
             });
 
             // 添加提醒时间
             menu.addItem({
-                iconHTML: "⏰",
+                icon: "iconTNNotification",
                 label: i18n("addReminderTime") || "添加提醒时间",
                 click: () => {
                     showAddTaskReminderTimeDialog(
@@ -4257,15 +4257,15 @@ export class CalendarView {
             // 添加优先级设置子菜单
             const priorityMenuItems = [];
             const priorities = [
-                { key: 'high', label: i18n("high"), color: '#e74c3c', icon: '🔴' },
-                { key: 'medium', label: i18n("medium"), color: '#f39c12', icon: '🟡' },
-                { key: 'low', label: i18n("low"), color: '#3498db', icon: '🔵' },
-                { key: 'none', label: i18n("none"), color: '#8f8f8f', icon: '⚫' }
+                { key: 'high', label: i18n("high"), color: '#e74c3c', icon: 'iconTNPriorityHigh' },
+                { key: 'medium', label: i18n("medium"), color: '#f39c12', icon: 'iconTNPriorityMedium' },
+                { key: 'low', label: i18n("low"), color: '#3498db', icon: 'iconTNPriorityLow' },
+                { key: 'none', label: i18n("none"), color: '#8f8f8f', icon: 'iconTNPriorityNone' }
             ];
 
             priorities.forEach(priority => {
                 priorityMenuItems.push({
-                    iconHTML: priority.icon,
+                    icon: priority.icon,
                     label: priority.label,
                     click: () => {
                         this.setPriority(calendarEvent, priority.key);
@@ -4274,14 +4274,14 @@ export class CalendarView {
             });
 
             menu.addItem({
-                iconHTML: "🎯",
+                icon: "iconTNPriority",
                 label: i18n("setPriority"),
                 submenu: priorityMenuItems
             });
 
             if (originalEventType !== 'reminderTime') {
                 menu.addItem({
-                    iconHTML: calendarEvent.allDay ? "⏰" : "📅",
+                    icon: calendarEvent.allDay ? "iconTNNotification" : "iconCalendar",
                     label: calendarEvent.allDay ? i18n("changeToTimed") : i18n("changeToAllDay"),
                     click: () => {
                         this.toggleAllDayEvent(calendarEvent);
@@ -4295,7 +4295,7 @@ export class CalendarView {
         // 添加复制块引选项 - 只对已绑定块的事件显示，排除未绑定块的事项和快速提醒
         if (calendarEvent.extendedProps.blockId) {
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconCopy",
                 label: i18n("copyBlockRef"),
                 click: () => {
                     this.copyBlockRef(calendarEvent);
@@ -4305,7 +4305,7 @@ export class CalendarView {
 
         // 添加复制事件标题菜单项
         menu.addItem({
-            iconHTML: "📄",
+            icon: "iconCopy",
             label: i18n("copyEventTitle"),
             click: () => {
                 this.copyEventTitle(calendarEvent);
@@ -4314,7 +4314,7 @@ export class CalendarView {
 
         // 添加创建副本菜单项
         menu.addItem({
-            iconHTML: "📅",
+            icon: "iconCopy",
             label: i18n("createCopy"),
             click: () => {
                 this.createCopy(calendarEvent);
@@ -4326,7 +4326,7 @@ export class CalendarView {
         // 添加项目管理选项（仅当任务有projectId时显示）
         if (calendarEvent.extendedProps.projectId) {
             menu.addItem({
-                iconHTML: "📂",
+                icon: "iconTNProject",
                 label: i18n("openProjectKanban"),
                 click: () => {
                     this.openProjectKanban(calendarEvent.extendedProps.projectId);
@@ -4338,7 +4338,7 @@ export class CalendarView {
         // 添加番茄钟选项
         const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n("startPomodoro"),
             ...(pomodoroDirectStart2
                 ? { click: () => this.startPomodoro(calendarEvent) }
@@ -4346,7 +4346,7 @@ export class CalendarView {
         });
 
         menu.addItem({
-            iconHTML: "⏱️",
+            icon: "iconTNStopwatch",
             label: i18n("startCountUp"),
             click: () => {
                 this.startPomodoroCountUp(calendarEvent);
@@ -4354,7 +4354,7 @@ export class CalendarView {
         });
 
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconTNStatistic",
             label: i18n("viewPomodoros") || "查看番茄钟",
             click: () => {
                 void this.showPomodoroSessions(calendarEvent);
@@ -4366,7 +4366,7 @@ export class CalendarView {
 
             if (originalEventType === 'reminderTime') {
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteReminderTime") || "删除此提醒时间",
                     click: () => {
                         this.deleteReminderTimeEvent(rawCalendarEvent);
@@ -4376,7 +4376,7 @@ export class CalendarView {
 
             if (calendarEvent.extendedProps.isRepeated) {
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteThisInstance"),
                     click: () => {
                         this.deleteInstanceOnly(calendarEvent);
@@ -4384,7 +4384,7 @@ export class CalendarView {
                 });
 
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteAllInstances"),
                     click: () => {
                         this.deleteEvent(calendarEvent);
@@ -4393,7 +4393,7 @@ export class CalendarView {
             } else if (calendarEvent.extendedProps.repeat?.enabled) {
                 // 对于周期原始事件，提供与实例一致的删除选项
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteThisInstance"),
                     click: () => {
                         this.skipFirstOccurrence(calendarEvent);
@@ -4401,7 +4401,7 @@ export class CalendarView {
                 });
 
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteAllInstances"),
                     click: () => {
                         this.deleteEvent(calendarEvent);
@@ -4409,7 +4409,7 @@ export class CalendarView {
                 });
             } else {
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteReminder"),
                     click: () => {
                         this.deleteEvent(calendarEvent);
@@ -4565,7 +4565,6 @@ export class CalendarView {
         const startDateStr = props.date || props.originalDate;
         const endDateStr = props.endDate || props.originalEndDate || startDateStr;
         const isSpanningTask = !!(startDateStr && endDateStr && endDateStr !== startDateStr);
-        const calendarIcon = "📅";
         const removeIcon = "❌";
         const editIcon = "✏️";
 
@@ -4619,7 +4618,6 @@ export class CalendarView {
             targetTask,
             onlyThisInstance,
             eventSource: 'calendar',
-            iconHTML: calendarIcon,
             onApplyStartDate: applyStartDate,
             onApplyEndDate: applyEndDate,
             onSaved: async (savedReminder) => {

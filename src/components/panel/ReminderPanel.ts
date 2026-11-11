@@ -1310,7 +1310,6 @@ export class ReminderPanel {
         const dayAfterStr = getRelativeDateString(2);
         const nextWeekStr = getRelativeDateString(7);
         const isSpanningTask = !!(targetReminder.date && targetReminder.endDate && targetReminder.endDate !== targetReminder.date);
-        const calendarIcon = "📅";
         const removeIcon = "❌";
         const editIcon = "✏️";
 
@@ -1352,7 +1351,6 @@ export class ReminderPanel {
             targetTask: targetReminder,
             onlyThisInstance,
             eventSource: this.panelId,
-            iconHTML: calendarIcon,
             onApplyStartDate: applyStartDate,
             onApplyEndDate: applyEndDate,
             onSaved: async (savedReminder) => {
@@ -8072,7 +8070,7 @@ export class ReminderPanel {
         const statusMenuItems: any[] = [];
         statusCandidates.forEach((s: any) => {
             statusMenuItems.push({
-                iconHTML: s.icon || '',
+                icon: 'iconTNStatus',
                 label: s.name || s.id,
                 current: currentStatus === s.id,
                 click: () => {
@@ -8091,7 +8089,7 @@ export class ReminderPanel {
             // 导航选项
             if (reminder.blockId) {
                 menu.addItem({
-                    iconHTML: "📖",
+                    icon: "iconNotebook",
                     label: i18n("openNote") || "打开笔记",
                     click: () => this.openBlockTab(reminder.blockId)
                 });
@@ -8109,7 +8107,7 @@ export class ReminderPanel {
             // 复制块引用/绑定块（与打开项目看板一组）
             if (reminder.blockId) {
                 menu.addItem({
-                    iconHTML: "📋",
+                    icon: "iconCopy",
                     label: i18n("copyBlockRef") || "复制块引用",
                     click: () => this.copyBlockRef(reminder)
                 });
@@ -8120,19 +8118,19 @@ export class ReminderPanel {
             // 生产力工具
             const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
-                iconHTML: "🍅",
+                icon: "iconTNPomodoro",
                 label: i18n("startPomodoro") || "开始番茄钟",
                 ...(pomodoroDirectStart
                     ? { click: () => this.startPomodoro(reminder) }
                     : { submenu: this.createPomodoroStartSubmenu(reminder) })
             });
             menu.addItem({
-                iconHTML: "⏱️",
+                icon: "iconTNStopwatch",
                 label: i18n("startCountUp") || "开始正向计时",
                 click: () => this.startPomodoroCountUp(reminder)
             });
             menu.addItem({
-                iconHTML: "📊",
+                icon: "iconTNStatistic",
                 label: i18n("viewPomodoros") || "查看番茄钟",
                 click: () => this.showPomodoroSessions(reminder)
             });
@@ -8141,7 +8139,7 @@ export class ReminderPanel {
 
             // 说明订阅来源
             menu.addItem({
-                iconHTML: "ℹ️",
+                icon: "iconInfo",
                 label: i18n("subscribedTask") || "订阅日历任务",
                 disabled: true
             });
@@ -8177,7 +8175,7 @@ export class ReminderPanel {
         // 任务完成/取消完成（置于右键菜单最顶部）
         if (isEditable) {
             menu.addItem({
-                iconHTML: reminder.completed ? "↩️" : "✅",
+                icon: reminder.completed ? "iconUndo" : "iconCheck",
                 label: reminder.completed ? (i18n("markAsUncompleted") || "取消完成") : (i18n("markAsCompleted") || "完成任务"),
                 click: () => {
                     if (reminder.isRepeatInstance) {
@@ -8203,7 +8201,7 @@ export class ReminderPanel {
             const isTodayCompleted = reminder.isSpanningTodayCompletedInstance || this.hasDailyCompletionMark(reminder, today);
             if (!isIgnoredToday) {
                 menu.addItem({
-                    iconHTML: isTodayCompleted ? "↩️" : "✅",
+                    icon: isTodayCompleted ? "iconUndo" : "iconCheck",
                     label: isTodayCompleted ? i18n("unmarkTodayCompleted") : i18n("markTodayCompleted"),
                     click: () => {
                         if (isTodayCompleted) {
@@ -8216,7 +8214,7 @@ export class ReminderPanel {
 
                 if (!isTodayCompleted) {
                     menu.addItem({
-                        iconHTML: "⭕",
+                        icon: "iconTNSkip",
                         label: i18n("todayIgnored").replace('⭕ ', ''),
                         click: () => {
                             this.ignoreDailyDessertToday(reminder);
@@ -8225,7 +8223,7 @@ export class ReminderPanel {
                 }
             } else {
                 menu.addItem({
-                    iconHTML: "↩️",
+                    icon: "iconUndo",
                     label: i18n("undoDailyDessertIgnore") || "取消今日忽略",
                     click: () => {
                         this.undoDailyDessertIgnore(reminder);
@@ -8237,7 +8235,7 @@ export class ReminderPanel {
 
         if (isEditable && isDessert && !reminder.completed && !isAlreadyCompletedToday) {
             menu.addItem({
-                iconHTML: "✅",
+                icon: "iconCheck",
                 label: i18n("markTodayCompleted"),
                 click: () => {
                     // Logic: Mark complete, set completion time, AND set date to today (so it shows in calendar history)
@@ -8248,7 +8246,7 @@ export class ReminderPanel {
             // --- ❌ 今日忽略 ---
             if (!isIgnoredToday) {
                 menu.addItem({
-                    iconHTML: "⭕",
+                    icon: "iconTNSkip",
                     label: i18n("todayIgnored").replace('⭕ ', ''),
                     click: () => {
                         this.ignoreDailyDessertToday(reminder);
@@ -8256,7 +8254,7 @@ export class ReminderPanel {
                 });
             } else {
                 menu.addItem({
-                    iconHTML: "↩️",
+                    icon: "iconUndo",
                     label: i18n("undoDailyDessertIgnore") || "取消今日忽略",
                     click: () => {
                         this.undoDailyDessertIgnore(reminder);
@@ -8275,7 +8273,7 @@ export class ReminderPanel {
             const today = getLogicalDateString();
             if (dailyCompleted.includes(today)) {
                 menu.addItem({
-                    iconHTML: "↩️",
+                    icon: "iconUndo",
                     label: i18n("unmarkTodayCompleted"),
                     click: () => {
                         this.undoDailyDessertCompletion(reminder);
@@ -8287,18 +8285,18 @@ export class ReminderPanel {
         if (isEditable) {
             if (reminder.isRepeatInstance) {
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n("modifyThisInstance"),
                     click: () => this.showTimeEditDialog(reminder, false)
                 });
                 menu.addItem({
-                    iconHTML: "🔄",
+                    icon: "iconRefresh",
                     label: i18n("modifyAllInstances"),
                     click: () => this.showTimeEditDialog(reminder, true)
                 });
             } else {
                 menu.addItem({
-                    iconHTML: "📝",
+                    icon: "iconEdit",
                     label: i18n("modify"),
                     click: () => this.showTimeEditDialog(reminder)
                 });
@@ -8307,13 +8305,13 @@ export class ReminderPanel {
         // --- 创建子任务 (订阅任务不允许创建子任务) ---
         if (!reminder.isSubscribed) {
             menu.addItem({
-                iconHTML: "➕",
+                icon: "iconAdd",
                 label: i18n("createSubtask"),
                 click: () => this.showCreateSubtaskDialog(reminder)
             });
             // 粘贴新建子任务（参考 ProjectKanbanView 的实现）
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconPaste",
                 label: i18n("pasteCreateSubtask"),
                 click: () => this.showPasteTaskDialog(reminder)
             });
@@ -8321,7 +8319,7 @@ export class ReminderPanel {
         // 解除父子任务关系（仅当任务有父任务时显示，且非订阅任务）
         if (reminder.parentId && !reminder.isSubscribed) {
             menu.addItem({
-                iconHTML: "🔓",
+                icon: "iconLinkOff",
                 label: i18n("unsetParentRelation"),
                 click: async () => {
                     try {
@@ -8341,17 +8339,17 @@ export class ReminderPanel {
         const createPriorityMenuItems = (onlyThisInstance: boolean = false) => {
             const menuItems = [];
             const priorities = [
-                { key: 'high', label: i18n("high"), icon: '🔴' },
-                { key: 'medium', label: i18n("medium"), icon: '🟡' },
-                { key: 'low', label: i18n("low"), icon: '🔵' },
-                { key: 'none', label: i18n("none"), icon: '⚫' }
+                { key: 'high', label: i18n("high"), icon: 'iconTNPriorityHigh' },
+                { key: 'medium', label: i18n("medium"), icon: 'iconTNPriorityMedium' },
+                { key: 'low', label: i18n("low"), icon: 'iconTNPriorityLow' },
+                { key: 'none', label: i18n("none"), icon: 'iconTNPriorityNone' }
             ];
 
             const currentPriority = reminder.priority || 'none';
 
             priorities.forEach(priority => {
                 menuItems.push({
-                    iconHTML: priority.icon,
+                    icon: priority.icon,
                     label: priority.label,
                     current: currentPriority === priority.key,
                     click: () => {
@@ -8370,7 +8368,7 @@ export class ReminderPanel {
             return menuItems;
         };
 
-        // 优化分类子菜单项创建 - 确保emoji正确显示
+        // 分类子菜单统一使用 SVG 图标
         // onlyThisInstance: true=只修改此实例, false=修改所有实例（原始事件）
         const createCategoryMenuItems = (onlyThisInstance: boolean = false) => {
             const menuItems = [];
@@ -8379,7 +8377,7 @@ export class ReminderPanel {
 
             // Add "无分类" option
             menuItems.push({
-                iconHTML: "❌",
+                icon: "iconClose",
                 label: i18n("noCategory"),
                 current: !currentCategoryId,
                 click: () => {
@@ -8395,10 +8393,10 @@ export class ReminderPanel {
                 }
             });
 
-            // Add existing categories with proper emoji display
+            // 添加已有分类
             categories.forEach(category => {
                 menuItems.push({
-                    iconHTML: category.icon || "🏷",
+                    icon: "iconTags",
                     label: category.name,
                     current: currentCategoryId === category.id,
                     click: () => {
@@ -8444,13 +8442,13 @@ export class ReminderPanel {
                 }
             };
 
-            items.push({ iconHTML: "📅", label: i18n("moveToToday") || "移至今天", click: () => apply(todayStr) });
-            items.push({ iconHTML: "📅", label: i18n("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
-            items.push({ iconHTML: "📅", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
-            items.push({ iconHTML: "📅", label: i18n("postponeSevenDays") || "推迟7天", click: () => apply(addDaysToDate(targetReminder.date || targetReminder.endDate || todayStr, 7)) });
-            items.push({ iconHTML: "❌", label: i18n("clearDate") || "清除日期", click: () => apply(null) });
+            items.push({ icon: "iconCalendar", label: i18n("moveToToday") || "移至今天", click: () => apply(todayStr) });
+            items.push({ icon: "iconCalendar", label: i18n("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
+            items.push({ icon: "iconCalendar", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
+            items.push({ icon: "iconCalendar", label: i18n("postponeSevenDays") || "推迟7天", click: () => apply(addDaysToDate(targetReminder.date || targetReminder.endDate || todayStr, 7)) });
+            items.push({ icon: "iconClose", label: i18n("clearDate") || "清除日期", click: () => apply(null) });
             items.push({
-                iconHTML: "✏️", label: i18n("editDate") || "编辑日期", click: () => {
+                icon: "iconEdit", label: i18n("editDate") || "编辑日期", click: () => {
                     const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
                     const parsedInstance = targetReminder.isRepeatInstance ? parseReminderInstanceId(targetReminder.id) : null;
                     const originalInstanceDate = parsedInstance?.instanceDate || targetReminder.date;
@@ -8497,27 +8495,27 @@ export class ReminderPanel {
             // 复制块引用/绑定块（与打开项目看板一组）
             if (reminder.blockId) {
                 menu.addItem({
-                    iconHTML: "📋",
+                    icon: "iconCopy",
                     label: i18n("copyBlockRef"),
                     click: () => this.copyBlockRef(reminder)
                 });
                 if (isEditable) {
                     menu.addItem({
-                        iconHTML: "🔗",
+                        icon: "iconLink",
                         label: i18n("bindToBlock"),
                         submenu: [
                             {
-                                iconHTML: "🔗",
+                                icon: "iconLink",
                                 label: i18n("bindToBlock"),
                                 click: () => this.showBindToBlockDialog(reminder, 'bind')
                             },
                             {
-                                iconHTML: "📑",
+                                icon: "iconH1",
                                 label: i18n("newHeading"),
                                 click: () => this.showBindToBlockDialog(reminder, 'heading')
                             },
                             {
-                                iconHTML: "📄",
+                                icon: "iconFile",
                                 label: i18n("newDocument"),
                                 click: () => this.showBindToBlockDialog(reminder, 'document')
                             }
@@ -8527,21 +8525,21 @@ export class ReminderPanel {
             } else if (isEditable) {
                 // 未绑定块的事件显示绑定块选项
                 menu.addItem({
-                    iconHTML: "🔗",
+                    icon: "iconLink",
                     label: i18n("bindToBlock"),
                     submenu: [
                         {
-                            iconHTML: "🔗",
+                            icon: "iconLink",
                             label: i18n("bindToBlock"),
                             click: () => this.showBindToBlockDialog(reminder, 'bind')
                         },
                         {
-                            iconHTML: "📑",
+                            icon: "iconH1",
                             label: i18n("newHeading"),
                             click: () => this.showBindToBlockDialog(reminder, 'heading')
                         },
                         {
-                            iconHTML: "📄",
+                            icon: "iconFile",
                             label: i18n("newDocument"),
                             click: () => this.showBindToBlockDialog(reminder, 'document')
                         }
@@ -8553,7 +8551,7 @@ export class ReminderPanel {
 
             // 置顶任务
             menu.addItem({
-                iconHTML: isPinned ? "📍" : "📌",
+                icon: isPinned ? "iconUnpin" : "iconPin",
                 label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
                 click: () => this.setReminderPinned(reminder, !isPinned)
             });
@@ -8561,14 +8559,14 @@ export class ReminderPanel {
             if (isEditable) {
                 // 快速调整日期 (重复实例：只修改此实例)
                 menu.addItem({
-                    iconHTML: "📆",
+                    icon: "iconCalendar",
                     label: i18n("quickReschedule") || "快速调整日期",
                     submenu: this.createQuickDateContextMenuItems(reminder, true)
                 });
 
                 // 添加提醒时间
                 menu.addItem({
-                    iconHTML: "⏰",
+                    icon: "iconTNNotification",
                     label: i18n("addReminderTime") || "添加提醒时间",
                     click: () => {
                         showAddTaskReminderTimeDialog(
@@ -8585,17 +8583,17 @@ export class ReminderPanel {
 
                 // 重复实例右键修改优先级/分类时，统一修改原始任务（影响所有实例）
                 menu.addItem({
-                    iconHTML: "🎯",
+                    icon: "iconTNPriority",
                     label: i18n("setPriority"),
                     submenu: createPriorityMenuItems(true)
                 });
                 menu.addItem({
-                    iconHTML: "🏷️",
+                    icon: "iconTags",
                     label: i18n("setCategory"),
                     submenu: createCategoryMenuItems(false)
                 });
                 menu.addItem({
-                    iconHTML: "🔀",
+                    icon: "iconTNStatus",
                     label: i18n('setStatus') || '设置状态',
                     submenu: statusMenuItems
                 });
@@ -8604,19 +8602,19 @@ export class ReminderPanel {
 
             const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
-                iconHTML: "🍅",
+                icon: "iconTNPomodoro",
                 label: i18n("startPomodoro"),
                 ...(pomodoroDirectStart2
                     ? { click: () => this.startPomodoro(reminder) }
                     : { submenu: this.createPomodoroStartSubmenu(reminder) })
             });
             menu.addItem({
-                iconHTML: "⏱️",
+                icon: "iconTNStopwatch",
                 label: i18n("startCountUp"),
                 click: () => this.startPomodoroCountUp(reminder)
             });
             menu.addItem({
-                iconHTML: "📊",
+                icon: "iconTNStatistic",
                 label: i18n("viewPomodoros") || "查看番茄钟",
                 click: () => this.showPomodoroSessions(reminder)
             });
@@ -8624,12 +8622,12 @@ export class ReminderPanel {
             if (isDeletable) {
                 menu.addSeparator();
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteThisInstance"),
                     click: () => this.deleteInstanceOnly(reminder)
                 });
                 menu.addItem({
-                    iconHTML: "🗑️",
+                    icon: "iconTrashcan",
                     label: i18n("deleteAllInstances"),
                     click: () => this.deleteOriginalReminder(reminder.originalId)
                 });
@@ -8649,27 +8647,27 @@ export class ReminderPanel {
             // 复制块引用/绑定块（与打开项目看板一组）
             if (reminder.blockId) {
                 menu.addItem({
-                    iconHTML: "📋",
+                    icon: "iconCopy",
                     label: i18n("copyBlockRef"),
                     click: () => this.copyBlockRef(reminder)
                 });
                 if (isEditable) {
                     menu.addItem({
-                        iconHTML: "🔗",
+                        icon: "iconLink",
                         label: i18n("bindToBlock"),
                         submenu: [
                             {
-                                iconHTML: "🔗",
+                                icon: "iconLink",
                                 label: i18n("bindToBlock"),
                                 click: () => this.showBindToBlockDialog(reminder, 'bind')
                             },
                             {
-                                iconHTML: "📑",
+                                icon: "iconH1",
                                 label: i18n("newHeading"),
                                 click: () => this.showBindToBlockDialog(reminder, 'heading')
                             },
                             {
-                                iconHTML: "📄",
+                                icon: "iconFile",
                                 label: i18n("newDocument"),
                                 click: () => this.showBindToBlockDialog(reminder, 'document')
                             }
@@ -8679,21 +8677,21 @@ export class ReminderPanel {
             } else if (isEditable) {
                 // 未绑定块的事件显示绑定块选项
                 menu.addItem({
-                    iconHTML: "🔗",
+                    icon: "iconLink",
                     label: i18n("bindToBlock"),
                     submenu: [
                         {
-                            iconHTML: "🔗",
+                            icon: "iconLink",
                             label: i18n("bindToBlock"),
                             click: () => this.showBindToBlockDialog(reminder, 'bind')
                         },
                         {
-                            iconHTML: "📑",
+                            icon: "iconH1",
                             label: i18n("newHeading"),
                             click: () => this.showBindToBlockDialog(reminder, 'heading')
                         },
                         {
-                            iconHTML: "📄",
+                            icon: "iconFile",
                             label: i18n("newDocument"),
                             click: () => this.showBindToBlockDialog(reminder, 'document')
                         }
@@ -8705,7 +8703,7 @@ export class ReminderPanel {
 
             // 置顶任务
             menu.addItem({
-                iconHTML: isPinned ? "📍" : "📌",
+                icon: isPinned ? "iconUnpin" : "iconPin",
                 label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
                 click: () => this.setReminderPinned(reminder, !isPinned)
             });
@@ -8713,14 +8711,14 @@ export class ReminderPanel {
             if (isEditable) {
                 // 快速调整日期（普通任务）
                 menu.addItem({
-                    iconHTML: "📆",
+                    icon: "iconCalendar",
                     label: i18n("quickReschedule") || "快速调整日期",
                     submenu: this.createQuickDateContextMenuItems(reminder, false)
                 });
 
                 // 添加提醒时间
                 menu.addItem({
-                    iconHTML: "⏰",
+                    icon: "iconTNNotification",
                     label: i18n("addReminderTime") || "添加提醒时间",
                     click: () => {
                         showAddTaskReminderTimeDialog(
@@ -8735,17 +8733,17 @@ export class ReminderPanel {
                     }
                 });
                 menu.addItem({
-                    iconHTML: "🎯",
+                    icon: "iconTNPriority",
                     label: i18n("setPriority"),
                     submenu: createPriorityMenuItems()
                 });
                 menu.addItem({
-                    iconHTML: "🏷️",
+                    icon: "iconTags",
                     label: i18n("setCategory"),
                     submenu: createCategoryMenuItems()
                 });
                 menu.addItem({
-                    iconHTML: "🔀",
+                    icon: "iconTNStatus",
                     label: i18n('setStatus') || '设置状态',
                     submenu: statusMenuItems
                 });
@@ -8754,26 +8752,26 @@ export class ReminderPanel {
 
             const pomodoroDirectStart3 = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
-                iconHTML: "🍅",
+                icon: "iconTNPomodoro",
                 label: i18n("startPomodoro"),
                 ...(pomodoroDirectStart3
                     ? { click: () => this.startPomodoro(reminder) }
                     : { submenu: this.createPomodoroStartSubmenu(reminder) })
             });
             menu.addItem({
-                iconHTML: "⏱️",
+                icon: "iconTNStopwatch",
                 label: i18n("startCountUp"),
                 click: () => this.startPomodoroCountUp(reminder)
             });
             menu.addItem({
-                iconHTML: "📊",
+                icon: "iconTNStatistic",
                 label: i18n("viewPomodoros") || "查看番茄钟",
                 click: () => this.showPomodoroSessions(reminder)
             });
 
             if (isDeletable) {
                 menu.addItem({
-                    iconHTML: "🗑",
+                    icon: "iconTrashcan",
                     label: i18n("deleteReminder"),
                     click: () => this.deleteReminder(reminder)
                 });
@@ -11770,7 +11768,7 @@ export class ReminderPanel {
 
         // 提示行
         menu.addItem({
-            iconHTML: '☑️',
+            icon: 'iconSelectAll',
             label: `${selectedCount} ${i18n('tasksSelected') || '个任务已选择'}`,
             click: () => { }
         });
@@ -11778,7 +11776,7 @@ export class ReminderPanel {
 
         // 设置已完成
         menu.addItem({
-            iconHTML: '✅',
+            icon: 'iconCheck',
             label: i18n('setCompleted') || '设置已完成',
             click: () => this.panelBatchSetCompleted()
         });
@@ -11789,30 +11787,30 @@ export class ReminderPanel {
         const dayAfterStr = getRelativeDateString(2);
         const nextWeekStr = getRelativeDateString(7);
         menu.addItem({
-            iconHTML: '🗓️',
+            icon: 'iconCalendar',
             label: i18n('setDate') || '设置日期',
             submenu: [
-                { iconHTML: '📅', label: i18n('moveToToday') || '移至今天', click: () => this.panelBatchSetDate(todayStr) },
-                { iconHTML: '📅', label: i18n('moveToTomorrow') || '移至明天', click: () => this.panelBatchSetDate(tomorrowStr) },
-                { iconHTML: '📅', label: i18n('moveToDayAfterTomorrow') || '移至后天', click: () => this.panelBatchSetDate(dayAfterStr) },
-                { iconHTML: '📅', label: i18n('postponeSevenDays') || '推迟7天', click: () => this.panelBatchSetDate(nextWeekStr) },
-                { iconHTML: '❌', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) },
-                { iconHTML: '🗓️', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
+                { icon: 'iconCalendar', label: i18n('moveToToday') || '移至今天', click: () => this.panelBatchSetDate(todayStr) },
+                { icon: 'iconCalendar', label: i18n('moveToTomorrow') || '移至明天', click: () => this.panelBatchSetDate(tomorrowStr) },
+                { icon: 'iconCalendar', label: i18n('moveToDayAfterTomorrow') || '移至后天', click: () => this.panelBatchSetDate(dayAfterStr) },
+                { icon: 'iconCalendar', label: i18n('postponeSevenDays') || '推迟7天', click: () => this.panelBatchSetDate(nextWeekStr) },
+                { icon: 'iconClose', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) },
+                { icon: 'iconCalendar', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
             ]
         });
 
         // 设置优先级子菜单
         const priorities = [
-            { key: 'high', label: i18n('priorityHigh') || '高', icon: '🔴' },
-            { key: 'medium', label: i18n('priorityMedium') || '中', icon: '🟡' },
-            { key: 'low', label: i18n('priorityLow') || '低', icon: '🔵' },
-            { key: 'none', label: i18n('none') || '无', icon: '⚫' }
+            { key: 'high', label: i18n('priorityHigh') || '高', icon: 'iconTNPriorityHigh' },
+            { key: 'medium', label: i18n('priorityMedium') || '中', icon: 'iconTNPriorityMedium' },
+            { key: 'low', label: i18n('priorityLow') || '低', icon: 'iconTNPriorityLow' },
+            { key: 'none', label: i18n('none') || '无', icon: 'iconTNPriorityNone' }
         ];
         menu.addItem({
-            iconHTML: '🎯',
+            icon: 'iconTNPriority',
             label: i18n('setPriority') || '设置优先级',
             submenu: priorities.map(p => ({
-                iconHTML: p.icon,
+                icon: p.icon,
                 label: p.label,
                 click: () => this.panelBatchSetPriority(p.key)
             }))
@@ -11822,19 +11820,19 @@ export class ReminderPanel {
         const categories = this.categoryManager.getCategories();
         if (categories.length > 0) {
             const catItems: any[] = [{
-                iconHTML: '❌',
+                icon: 'iconClose',
                 label: i18n('noCategory') || '无分类',
                 click: () => this.panelBatchSetCategory(null)
             }];
             categories.forEach((cat: any) => {
                 catItems.push({
-                    iconHTML: cat.icon || '🏷',
+                    icon: 'iconTags',
                     label: cat.name,
                     click: () => this.panelBatchSetCategory(cat.id)
                 });
             });
             menu.addItem({
-                iconHTML: '🏷',
+                icon: 'iconTags',
                 label: i18n('setCategory') || '设置分类',
                 submenu: catItems
             });
@@ -11845,7 +11843,7 @@ export class ReminderPanel {
 
         // 退出多选
         menu.addItem({
-            iconHTML: '❌',
+            icon: 'iconClose',
             label: i18n('exitBatchSelect') || '退出多选',
             click: () => this.exitPanelMultiSelectMode()
         });
@@ -11854,7 +11852,7 @@ export class ReminderPanel {
 
         // 删除
         menu.addItem({
-            iconHTML: '🗑️',
+            icon: 'iconTrashcan',
             label: i18n('delete') || '删除',
             click: () => this.panelBatchDelete()
         });

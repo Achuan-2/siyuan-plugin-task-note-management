@@ -88,14 +88,14 @@ export function createPomodoroStartSubmenu(options: {
     const currentSettings = plugin?.settings;
     const defaultDurationMinutes = resolveDefaultPomodoroDuration(source, currentSettings);
     const presetItems = getPomodoroPresetMinutes(plugin?.settings).map((minutes) => ({
-        iconHTML: "🕒",
+        icon: "iconClock",
         label: `${minutes} ${i18n('minutes') || '分钟'}`,
         click: () => startPomodoro(minutes)
     }));
 
     return [
         {
-            iconHTML: '🍅',
+            icon: 'iconTNPomodoro',
             label: `${i18n('sortDefault') || '默认'} (${defaultDurationMinutes} ${i18n('minutes') || '分钟'})`,
             click: async () => {
                 if (!plugin || typeof plugin.loadSettings !== 'function') {
@@ -111,7 +111,7 @@ export function createPomodoroStartSubmenu(options: {
         ...presetItems,
         { type: 'separator' },
         {
-            iconHTML: '✏️',
+            icon: 'iconEdit',
             label: i18n('managePresets') || '编辑预设',
             click: () => managePresets ? managePresets() : showPomodoroPresetDialog(plugin)
         }

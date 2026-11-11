@@ -8,7 +8,7 @@ export interface QuickDateMenuOptions {
     targetTask: any;
     onlyThisInstance?: boolean;
     eventSource?: string;
-    iconHTML?: string;
+    icon?: string;
     onApplyStartDate: (newDate: string | null) => Promise<void> | void;
     onApplyEndDate: (newDate: string) => Promise<void> | void;
     onSaved?: (savedTask?: any) => Promise<void> | void;
@@ -64,7 +64,7 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
         targetTask,
         onlyThisInstance = false,
         eventSource,
-        iconHTML = "📅",
+        icon = "iconCalendar",
         onApplyStartDate,
         onApplyEndDate,
         onSaved
@@ -76,8 +76,8 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
     const dayAfterStr = getRelativeDateString(2);
 
     const isSpanningTask = !!(targetTask.date && targetTask.endDate && targetTask.endDate !== targetTask.date);
-    const editIcon = "✏️";
-    const removeIcon = "❌";
+    const editIcon = "iconEdit";
+    const removeIcon = "iconClose";
 
     // 计算本周与下周的三级菜单及星期几后缀
     const [todayYear, todayMonth, todayDay] = todayStr.split('-').map(Number);
@@ -113,7 +113,7 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
             const dateStr = addDaysToDate(todayStr, daysOffset);
             const dayName = weekdayNames[d - 1];
             subItems.push({
-                iconHTML: iconHTML,
+                icon,
                 label: dayName,
                 click: () => applyDate(dateStr)
             });
@@ -129,7 +129,7 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
             const dateStr = addDaysToDate(todayStr, daysOffset);
             const dayName = weekdayNames[d - 1];
             subItems.push({
-                iconHTML: iconHTML,
+                icon,
                 label: dayName,
                 click: () => applyDate(dateStr)
             });
@@ -142,23 +142,23 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
         getBaseDate?: () => string | undefined
     ) => {
         const submenuItems: any[] = [
-            { iconHTML: iconHTML, label: todayLabel, click: () => applyDate(todayStr) },
-            { iconHTML: iconHTML, label: tomorrowLabel, click: () => applyDate(tomorrowStr) },
-            { iconHTML: iconHTML, label: dayAfterLabel, click: () => applyDate(dayAfterStr) },
+            { icon, label: todayLabel, click: () => applyDate(todayStr) },
+            { icon, label: tomorrowLabel, click: () => applyDate(tomorrowStr) },
+            { icon, label: dayAfterLabel, click: () => applyDate(dayAfterStr) },
         ];
 
         // 仅在周一至周四时显示“移至本周”（周五~周日时，今天/明天/后天已完全涵盖本周剩余日期）
         if (currentIsoDay < 5) {
             submenuItems.push({
-                iconHTML: iconHTML,
+                icon,
                 label: i18n("moveToThisWeek") || "移至本周",
                 submenu: createThisWeekSubmenu(applyDate)
             });
         }
 
         submenuItems.push(
-            { iconHTML: iconHTML, label: i18n("moveToNextWeek") || "移至下周", submenu: createNextWeekSubmenu(applyDate) },
-            { iconHTML: iconHTML, label: i18n("postponeSevenDays") || "推迟7天", click: () => applyDate(addDaysToDate((getBaseDate ? getBaseDate() : null) || targetTask.date || targetTask.endDate || todayStr, 7)) }
+            { icon, label: i18n("moveToNextWeek") || "移至下周", submenu: createNextWeekSubmenu(applyDate) },
+            { icon, label: i18n("postponeSevenDays") || "推迟7天", click: () => applyDate(addDaysToDate((getBaseDate ? getBaseDate() : null) || targetTask.date || targetTask.endDate || todayStr, 7)) }
         );
 
         return submenuItems;
@@ -176,28 +176,28 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
 
     if (isSpanningTask) {
         items.push({
-            iconHTML: iconHTML,
+            icon,
             label: i18n("adjustStartDate") || "调整开始日期",
             submenu: createDateTargetSubmenu(onApplyStartDate, () => targetTask.date)
         });
         items.push({
-            iconHTML: iconHTML,
+            icon,
             label: i18n("adjustEndDate") || "调整结束日期",
             submenu: createDateTargetSubmenu(onApplyEndDate, () => targetTask.endDate || targetTask.date)
         });
-        items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => onApplyStartDate(null) });
-        items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
+        items.push({ icon: removeIcon, label: i18n("clearDate") || "清除日期", click: () => onApplyStartDate(null) });
+        items.push({ icon: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
     } else {
-        items.push({ iconHTML: iconHTML, label: todayLabel, click: () => onApplyStartDate(todayStr) });
-        items.push({ iconHTML: iconHTML, label: tomorrowLabel, click: () => onApplyStartDate(tomorrowStr) });
-        items.push({ iconHTML: iconHTML, label: dayAfterLabel, click: () => onApplyStartDate(dayAfterStr) });
+        items.push({ icon, label: todayLabel, click: () => onApplyStartDate(todayStr) });
+        items.push({ icon, label: tomorrowLabel, click: () => onApplyStartDate(tomorrowStr) });
+        items.push({ icon, label: dayAfterLabel, click: () => onApplyStartDate(dayAfterStr) });
         if (currentIsoDay < 5) {
-            items.push({ iconHTML: iconHTML, label: i18n("moveToThisWeek") || "移至本周", submenu: createThisWeekSubmenu(onApplyStartDate) });
+            items.push({ icon, label: i18n("moveToThisWeek") || "移至本周", submenu: createThisWeekSubmenu(onApplyStartDate) });
         }
-        items.push({ iconHTML: iconHTML, label: i18n("moveToNextWeek") || "移至下周", submenu: createNextWeekSubmenu(onApplyStartDate) });
-        items.push({ iconHTML: iconHTML, label: i18n("postponeSevenDays") || "推迟7天", click: () => onApplyStartDate(addDaysToDate(targetTask.date || targetTask.endDate || todayStr, 7)) });
-        items.push({ iconHTML: removeIcon, label: i18n("clearDate") || "清除日期", click: () => onApplyStartDate(null) });
-        items.push({ iconHTML: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
+        items.push({ icon, label: i18n("moveToNextWeek") || "移至下周", submenu: createNextWeekSubmenu(onApplyStartDate) });
+        items.push({ icon, label: i18n("postponeSevenDays") || "推迟7天", click: () => onApplyStartDate(addDaysToDate(targetTask.date || targetTask.endDate || todayStr, 7)) });
+        items.push({ icon: removeIcon, label: i18n("clearDate") || "清除日期", click: () => onApplyStartDate(null) });
+        items.push({ icon: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
     }
 
     return items;

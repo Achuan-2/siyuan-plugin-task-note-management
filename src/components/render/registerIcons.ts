@@ -1,6 +1,60 @@
 import { Plugin } from "siyuan";
 
 export function registerCustomIcons(plugin: Plugin) {
+    // 任务菜单图标：复用宿主 SVG 尺寸与主题色，优先级保留颜色区分。
+    plugin.addIcons(`
+        <symbol id="iconTNStopwatch" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="14" r="8"/>
+                <path d="M9 2h6m-3 0v4m6 2 2-2m-8 5v4l2 2"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNSkip" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="m6 6 12 12"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNStatus" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="5" cy="5" r="2"/>
+                <circle cx="5" cy="12" r="2"/>
+                <circle cx="5" cy="19" r="2"/>
+                <path d="M11 5h10m-10 7h10m-10 7h10"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNMilestone" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 22V3c5-4 11 4 16 0v12c-5 4-11-4-16 0"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNPriority" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 21V3h16l-4 5 4 5H4"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNPriorityHigh" viewBox="0 0 24 24">
+            <g fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 21V3h16l-4 5 4 5H4"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNPriorityMedium" viewBox="0 0 24 24">
+            <g fill="none" stroke="#f39c12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 21V3h16l-4 5 4 5H4"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNPriorityLow" viewBox="0 0 24 24">
+            <g fill="none" stroke="#3498db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 21V3h16l-4 5 4 5H4"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNPriorityNone" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 21V3m0 0h16l-4 5 4 5H4" stroke-dasharray="3 3"/>
+            </g>
+        </symbol>
+    `);
+
     plugin.addIcons(`
             <symbol id="iconTNProject" viewBox="0 0 24 24">
                 <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
