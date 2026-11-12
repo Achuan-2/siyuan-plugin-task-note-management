@@ -445,23 +445,6 @@ export class HabitPanel {
         try {
             const menu = new Menu("habitMoreMenu");
 
-            // 插件设置
-            menu.addItem({
-                icon: 'iconSettings',
-                label: i18n("pluginSettings"),
-                click: () => {
-                    try {
-                        if (this.plugin && typeof this.plugin.openSetting === 'function') {
-                            this.plugin.openSetting();
-                        } else {
-                            console.warn('plugin.openSetting is not available');
-                        }
-                    } catch (err) {
-                        console.error("Failed to open plugin settings:", err);
-                    }
-                }
-            });
-
             // 分组管理
             menu.addItem({
                 icon: 'iconTags',
@@ -519,6 +502,23 @@ export class HabitPanel {
                         ]
                     }
                 ]
+            });
+
+            // 插件设置
+            menu.addItem({
+                icon: 'iconSettings',
+                label: i18n("pluginSettings"),
+                click: () => {
+                    try {
+                        if (this.plugin && typeof this.plugin.openSetting === 'function') {
+                            this.plugin.openSetting();
+                        } else {
+                            console.warn('plugin.openSetting is not available');
+                        }
+                    } catch (err) {
+                        console.error("Failed to open plugin settings:", err);
+                    }
+                }
             });
 
             // 使用按钮的位置定位菜单（回退到事件坐标）
