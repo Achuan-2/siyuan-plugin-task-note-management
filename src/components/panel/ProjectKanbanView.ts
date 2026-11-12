@@ -1275,7 +1275,7 @@ export class ProjectKanbanView {
 
             const pasteTaskBtn = document.createElement('button');
             pasteTaskBtn.className = 'b3-button';
-            pasteTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg> ${i18n('pasteNew')}`;
+            pasteTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconTNPaste"></use></svg> ${i18n('pasteNew')}`;
             pasteTaskBtn.addEventListener('click', () => this.showPasteTaskDialog(undefined, undefined, undefined, true));
             controlsGroup.appendChild(pasteTaskBtn);
         }
@@ -2399,7 +2399,7 @@ export class ProjectKanbanView {
             const pasteTaskBtn = document.createElement('button');
             pasteTaskBtn.className = 'b3-button b3-button--outline';
             pasteTaskBtn.classList.add('ariaLabel'); pasteTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
-            pasteTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
+            pasteTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconTNPaste"></use></svg>`;
             pasteTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.showPasteTaskDialog(undefined, this.getActiveStatusGroupId(status), status, true);
@@ -6687,7 +6687,7 @@ export class ProjectKanbanView {
                 // Paste Task Button
                 const pasteBtn = document.createElement('button');
                 pasteBtn.className = 'b3-button b3-button--outline';
-                pasteBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
+                pasteBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconTNPaste"></use></svg>`;
                 pasteBtn.classList.add('ariaLabel'); pasteBtn.setAttribute('aria-label', i18n('pasteNew'));
                 pasteBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -7710,7 +7710,7 @@ export class ProjectKanbanView {
         const pasteGroupTaskBtn = document.createElement('button');
         pasteGroupTaskBtn.className = 'b3-button b3-button--outline';
         pasteGroupTaskBtn.classList.add('ariaLabel'); pasteGroupTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
-        pasteGroupTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>`;
+        pasteGroupTaskBtn.innerHTML = `<svg class="b3-button__icon"><use xlink:href="#iconTNPaste"></use></svg>`;
         pasteGroupTaskBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const gid = group.id === 'ungrouped' ? null : group.id;
@@ -8095,7 +8095,7 @@ export class ProjectKanbanView {
             pasteTaskBtn.className = 'b3-button b3-button--text';
             pasteTaskBtn.style.cssText = 'padding: 2px; margin-left: 2px;';
             pasteTaskBtn.classList.add('ariaLabel'); pasteTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
-            pasteTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconPaste"></use></svg>`;
+            pasteTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconTNPaste"></use></svg>`;
             pasteTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 // 显示选择器
@@ -8348,7 +8348,7 @@ export class ProjectKanbanView {
             pasteTaskBtn.className = 'b3-button b3-button--text';
             pasteTaskBtn.style.cssText = 'padding: 2px; margin-left: 2px;';
             pasteTaskBtn.classList.add('ariaLabel'); pasteTaskBtn.setAttribute('aria-label', i18n('pasteNew'));
-            pasteTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconPaste"></use></svg>`;
+            pasteTaskBtn.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconTNPaste"></use></svg>`;
             pasteTaskBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const gid = group.id === 'ungrouped' ? null : group.id;
@@ -9644,7 +9644,7 @@ export class ProjectKanbanView {
 
             // 粘贴新建子任务
             menu.addItem({
-                icon: "iconPaste",
+                icon: "iconTNPaste",
                 label: i18n('pasteCreateSubtask'),
                 click: () => this.showPasteTaskDialog(task)
             });

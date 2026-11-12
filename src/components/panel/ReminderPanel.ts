@@ -8311,7 +8311,7 @@ export class ReminderPanel {
             });
             // 粘贴新建子任务（参考 ProjectKanbanView 的实现）
             menu.addItem({
-                icon: "iconPaste",
+                icon: "iconTNPaste",
                 label: i18n("pasteCreateSubtask"),
                 click: () => this.showPasteTaskDialog(reminder)
             });
@@ -11455,7 +11455,7 @@ export class ReminderPanel {
 
             // 添加粘贴新建任务
             menu.addItem({
-                icon: 'iconPaste',
+                icon: 'iconTNPaste',
                 label: i18n("pasteCreateTask") || "粘贴新建任务",
                 click: () => {
                     const { defaultDate } = this.getNewTaskDateAttributes();

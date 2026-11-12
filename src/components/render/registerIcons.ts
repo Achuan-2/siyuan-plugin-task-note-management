@@ -3,6 +3,13 @@ import { Plugin } from "siyuan";
 export function registerCustomIcons(plugin: Plugin) {
     // 任务菜单图标：复用宿主 SVG 尺寸与主题色，优先级保留颜色区分。
     plugin.addIcons(`
+        <symbol id="iconTNPaste" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/>
+                <rect x="8" y="2" width="8" height="4" rx="1"/>
+                <path d="M12 10v8m-3-3 3 3 3-3"/>
+            </g>
+        </symbol>
         <symbol id="iconTNStopwatch" viewBox="0 0 24 24">
             <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="14" r="8"/>
