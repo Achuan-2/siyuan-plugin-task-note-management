@@ -41,6 +41,9 @@ export class MobileTaskShortcut {
     private badgeMode: BadgeMode = "separate";
     private taskCount = 0;
     private habitCount = 0;
+    // 键盘避让只改变显示位置，不覆盖用户保存的拖动位置。
+    private preferredTop: number | null = null;
+    private positionCleanup: (() => void) | null = null;
 
     private tabContainers: Map<TabId, HTMLElement> = new Map();
     private panels: Map<TabId, ReminderPanel | ProjectPanel | HabitPanel | CalendarView> = new Map();
@@ -98,15 +101,15 @@ export class MobileTaskShortcut {
             if (saved) {
                 const pos: SavedPosition = JSON.parse(saved);
                 let left = Math.max(-btnW / 2, Math.min(pos.left, window.innerWidth - btnW / 2));
-                let top = Math.max(0, Math.min(pos.top, window.innerHeight - btnH));
+                this.preferredTop = pos.top;
                 button.style.left = `${left}px`;
-                button.style.top = `${top}px`;
                 button.style.right = "auto";
                 button.style.bottom = "auto";
                 this.dockState = pos.dock !== undefined ? pos.dock : defaultDock;
                 this.applyDock();
             } else {
                 const defaultTop = Math.max(0, window.innerHeight - 72 - btnH);
+                this.preferredTop = defaultTop;
                 button.style.top = `${defaultTop}px`;
                 button.style.bottom = "auto";
                 button.style.right = "auto";
@@ -123,11 +126,70 @@ export class MobileTaskShortcut {
             const rect = button.getBoundingClientRect();
             const pos: SavedPosition = {
                 left: rect.left,
-                top: rect.top,
+                top: this.preferredTop ?? rect.top,
                 dock: this.dockState,
             };
             localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(pos));
         } catch (_) { /* ignore */ }
+    }
+
+    private getVerticalBounds(buttonHeight: number) {
+        const viewport = window.visualViewport;
+        const top = Math.max(0, viewport?.offsetTop ?? 0);
+        let bottom = Math.min(window.innerHeight, viewport ? top + viewport.height : window.innerHeight);
+        const toolbar = document.getElementById("keyboardToolbar");
+        if (toolbar && !toolbar.classList.contains("fn__none")) {
+            const rect = toolbar.getBoundingClientRect();
+            // 使用宿主工具栏的实际边界，同时兼容软键盘与展开的工具面板。
+            if (rect.width > 0 && rect.height > 0 && rect.bottom > top && rect.top < bottom) {
+                bottom = Math.min(bottom, rect.top - 8);
+            }
+        }
+        return { top, maxTop: Math.max(top, bottom - buttonHeight) };
+    }
+
+    private watchPosition() {
+        this.positionCleanup?.();
+        const viewport = window.visualViewport;
+        let frame: number | null = null;
+        let toolbar: HTMLElement | null = null;
+        const schedule = () => {
+            if (frame !== null) return;
+            frame = window.requestAnimationFrame(() => {
+                frame = null;
+                observeToolbar();
+                this.applyDock();
+            });
+        };
+        const toolbarObserver = new MutationObserver(schedule);
+        const resizeObserver = new ResizeObserver(schedule);
+        const observeToolbar = () => {
+            const current = document.getElementById("keyboardToolbar");
+            if (current === toolbar) return;
+            toolbarObserver.disconnect();
+            resizeObserver.disconnect();
+            toolbar = current;
+            if (toolbar) {
+                toolbarObserver.observe(toolbar, { attributes: true, attributeFilter: ["class", "style"] });
+                resizeObserver.observe(toolbar);
+            }
+        };
+        // 工具栏可能在插件之后挂载；body 的键盘状态类也可能改变其可见性。
+        const bodyObserver = new MutationObserver(schedule);
+        bodyObserver.observe(document.body, { childList: true, attributes: true, attributeFilter: ["class", "style"] });
+        observeToolbar();
+        window.addEventListener("resize", schedule);
+        viewport?.addEventListener("resize", schedule);
+        viewport?.addEventListener("scroll", schedule);
+        this.positionCleanup = () => {
+            if (frame !== null) window.cancelAnimationFrame(frame);
+            window.removeEventListener("resize", schedule);
+            viewport?.removeEventListener("resize", schedule);
+            viewport?.removeEventListener("scroll", schedule);
+            toolbarObserver.disconnect();
+            resizeObserver.disconnect();
+            bodyObserver.disconnect();
+        };
     }
 
     private applyDock() {
@@ -137,8 +199,12 @@ export class MobileTaskShortcut {
         const rect = button.getBoundingClientRect();
         const btnW = rect.width || button.offsetWidth || 52;
         const btnH = rect.height || button.offsetHeight || 52;
-        const currentTop = rect.top > 0 ? rect.top : (window.innerHeight - 72 - btnH);
-        const clampedTop = Math.max(0, Math.min(currentTop, window.innerHeight - btnH));
+        const currentTop = this.preferredTop ?? rect.top;
+        const bounds = this.getVerticalBounds(btnH);
+        const clampedTop = Math.max(bounds.top, Math.min(currentTop, bounds.maxTop));
+        button.style.top = `${clampedTop}px`;
+        button.style.right = "auto";
+        button.style.bottom = "auto";
 
         if (this.dockState === "left") {
             button.style.left = `${-btnW / 2}px`;
@@ -257,7 +323,9 @@ export class MobileTaskShortcut {
             const btnW = button.offsetWidth;
             const btnH = button.offsetHeight;
             const clampedX = Math.max(0, Math.min(x, window.innerWidth - btnW));
-            const clampedY = Math.max(0, Math.min(y, window.innerHeight - btnH));
+            const bounds = this.getVerticalBounds(btnH);
+            const clampedY = Math.max(bounds.top, Math.min(y, bounds.maxTop));
+            this.preferredTop = clampedY;
             button.style.left = `${clampedX}px`;
             button.style.top = `${clampedY}px`;
             button.style.right = "auto";
@@ -326,10 +394,14 @@ export class MobileTaskShortcut {
         this.habitBadge = button.querySelector(".mobile-task-shortcut__badge--habit") as HTMLElement;
 
         this.restorePosition(settings);
+        this.watchPosition();
         this.renderBadges();
     }
 
     private removeButton(destroyDialog: boolean = true) {
+        this.positionCleanup?.();
+        this.positionCleanup = null;
+        this.preferredTop = null;
         if (this.longPressTimer !== null) {
             clearTimeout(this.longPressTimer);
             this.longPressTimer = null;
