@@ -254,7 +254,7 @@ test('5000 条独立任务只读一次本地任务和当天会话，不逐任务
     assert.ok(idReads < 5000 * 12, `Unexpected full scans: ${idReads} id reads`);
 });
 
-function panelClass() {
+function panelClass(renderTask) {
     const relative = 'src/components/panel/ReminderPanel.ts';
     const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
     const names = ['completedSubtaskCollapse', 'isTaskCollapsed', 'renderRemindersIteratively', 'getReminderElementSignature', 'getReminderBadgeVisibility', 'preprocessAsyncData',
@@ -263,9 +263,68 @@ function panelClass() {
     const code = ts.transpileModule(`class Panel { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
-    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'cleanReminderItem', 'parseReminderInstanceId', 'i18n', code + '; return Panel;')(
+    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'cleanReminderItem', 'parseReminderInstanceId', 'i18n', 'TaskRenderer', code + '; return Panel;')(
         TaskHierarchyIndex, CompletedSubtaskCollapseState, load('src/utils/reminderLoadUtils.ts').cleanReminderItem, () => null, key => key,
+        { render: renderTask },
     );
+}
+
+test('侧栏双击普通任务、子任务和重复实例打开编辑，标题单击仍打开绑定块', async () => {
+    for (const task of [
+        { id: 'task', blockId: 'block' },
+        { id: 'child', parentId: 'parent' },
+        { id: 'repeat', isRepeatInstance: true, originalId: 'original', date: today },
+        { id: 'caldav', isSubscribed: true, subscriptionType: 'caldav', caldavEditable: true },
+    ]) {
+        const { callbacks, renderedTask, edits, openedBlocks, event } = sidebarInteractionFixture(task);
+        await callbacks.onCardDoubleClick(renderedTask, event());
+        assert.deepEqual(edits, [task]);
+        if (task.blockId) {
+            callbacks.onTitleClick(renderedTask, event());
+            assert.deepEqual(openedBlocks, [task.blockId]);
+        }
+    }
+});
+
+test('侧栏双击不编辑只读订阅任务、交互控件或多选中的任务', async () => {
+    for (const task of [
+        { id: 'ics', isSubscribed: true },
+        { id: 'caldav', isSubscribed: true, subscriptionType: 'caldav', caldavEditable: false },
+    ]) {
+        const { callbacks, renderedTask, edits, event } = sidebarInteractionFixture(task);
+        await callbacks.onCardDoubleClick(renderedTask, event());
+        assert.deepEqual(edits, []);
+    }
+    const { panel, callbacks, renderedTask, edits, event } = sidebarInteractionFixture({ id: 'task' });
+    for (const overrides of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { target: { closest: () => ({}) } }]) {
+        await callbacks.onCardDoubleClick(renderedTask, event(overrides));
+    }
+    panel.isMultiSelectMode = true;
+    await callbacks.onCardDoubleClick(renderedTask, event());
+    assert.deepEqual(edits, []);
+});
+
+function sidebarInteractionFixture(task) {
+    let callbacks, renderedTask;
+    const edits = [], openedBlocks = [];
+    const Panel = panelClass((rendered, _context, handlers) => {
+        renderedTask = rendered;
+        callbacks = handlers;
+        return {};
+    });
+    const panel = Object.assign(new Panel(), {
+        allRemindersMap: new Map(), currentTab: 'all', reminderElementStates: new WeakMap(),
+        remindersContainer: { querySelector: () => null },
+        getReminderElementSignature: () => '', getReminderBadgeVisibility: () => ({}),
+        isTaskCardDocumentTitleEnabled: () => false, isTodayLikeView: () => false,
+        showTimeEditDialog: async reminder => edits.push(reminder),
+        openBlockTab: blockId => openedBlocks.push(blockId),
+    });
+    panel.createReminderElementOptimized(task, new Map(), today);
+    return {
+        panel, callbacks, renderedTask, edits, openedBlocks,
+        event: (overrides = {}) => ({ preventDefault() {}, stopPropagation() {}, target: { closest: () => null }, ...overrides }),
+    };
 }
 
 test('侧栏共用本轮索引，保持深度优先顺序、折叠和隐藏父任务展示', () => {

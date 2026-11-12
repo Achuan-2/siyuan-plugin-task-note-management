@@ -3291,6 +3291,18 @@ export class ReminderPanel {
                     this.lastClickedReminderId = r.id;
                 }
             },
+            onCardDoubleClick: async (r: any, e: MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this.isMultiSelectMode || e.ctrlKey || e.metaKey || e.shiftKey) return;
+                const target = e.target as HTMLElement;
+                if (target.closest('button, input, textarea, select, a, [contenteditable="true"], [contenteditable=""], [data-type="a"]:not(.reminder-item__title), .reminder-item__progress-wrap')) return;
+
+                const isEditable = !r.isSubscribed || (r.subscriptionType === 'caldav' && r.caldavEditable);
+                if (isEditable) {
+                    await this.showTimeEditDialog(r);
+                }
+            },
             onTitleClick: (r: any, e: MouseEvent) => {
                 if (this.isMultiSelectMode) {
                     e.preventDefault();
