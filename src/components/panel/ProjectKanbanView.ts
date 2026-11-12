@@ -1913,7 +1913,7 @@ export class ProjectKanbanView {
                 milestoneFilterBtn = document.createElement('button');
                 milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
                 milestoneFilterBtn.classList.add('ariaLabel'); milestoneFilterBtn.setAttribute('aria-label', i18n('filterMilestone'));
-                milestoneFilterBtn.innerHTML = '🚩';
+                milestoneFilterBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconTNMilestone"></use></svg>';
                 milestoneFilterBtn.dataset.groupId = groupId;
                 milestoneFilterBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -2027,8 +2027,7 @@ export class ProjectKanbanView {
                 title: i18n('noMilestone') || '无里程碑',
                 milestones: [{
                     id: '__no_milestone__',
-                    name: i18n('noMilestone') || '无里程碑',
-                    icon: '🚫'
+                    name: i18n('noMilestone') || '无里程碑'
                 }],
                 groupId: targetGroupId // 在 Status 视图下，targetGroupId 是 Status ID；Custom 视图下是 Group ID
             });
@@ -2104,7 +2103,7 @@ export class ProjectKanbanView {
             const optionsContainer = document.createElement('div');
             menu.appendChild(optionsContainer);
 
-            const appendOption = (name: string, iconText: string, milestoneId?: string, archived = false) => {
+            const appendOption = (name: string, iconId: string, milestoneId?: string, archived = false) => {
                 const label = document.createElement('label');
                 label.style.cssText = 'display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; transition: background 0.2s;';
                 label.onmouseenter = () => label.style.backgroundColor = 'var(--b3-theme-surface-lighter)';
@@ -2134,9 +2133,12 @@ export class ProjectKanbanView {
                     if (!multiSelectCheckbox.checked) closePopup();
                 });
 
-                const icon = document.createElement('span');
-                icon.style.marginRight = '6px';
-                icon.textContent = iconText;
+                const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                icon.style.cssText = 'width: 16px; height: 16px; flex-shrink: 0; margin-right: 6px;';
+                icon.setAttribute('aria-hidden', 'true');
+                const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+                use.setAttribute('href', `#${iconId}`);
+                icon.appendChild(use);
                 const nameEl = document.createElement('span');
                 nameEl.textContent = name;
                 nameEl.style.cssText = 'flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
@@ -2152,7 +2154,7 @@ export class ProjectKanbanView {
             const renderOptions = () => {
                 optionsContainer.replaceChildren();
                 clearBtn.style.display = multiSelectCheckbox.checked ? '' : 'none';
-                if (!multiSelectCheckbox.checked) appendOption(i18n('allTasks'), '📋');
+                if (!multiSelectCheckbox.checked) appendOption(i18n('allTasks'), 'iconTNTodoList');
                 milestonesToShow.forEach(section => {
                     // 状态视图按分组显示里程碑，“无里程碑”不显示分组标题。
                     if (this.kanbanMode === 'status' && section.milestones.length > 0 && section.title !== (i18n('noMilestone') || '无里程碑')) {
@@ -2180,7 +2182,8 @@ export class ProjectKanbanView {
                     }
 
                     section.milestones.forEach(ms => {
-                        appendOption(ms.name, ms.icon || '🚩', ms.id, ms.archived);
+                        const iconId = ms.id === '__no_milestone__' ? 'iconTNSkip' : 'iconTNMilestone';
+                        appendOption(ms.name, iconId, ms.id, ms.archived);
                     });
                 });
             };
@@ -7444,7 +7447,7 @@ export class ProjectKanbanView {
                     const milestoneFilterBtn = document.createElement('button');
                     milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
                     milestoneFilterBtn.classList.add('ariaLabel'); milestoneFilterBtn.setAttribute('aria-label', i18n('filterMilestone'));
-                    milestoneFilterBtn.innerHTML = '🚩';
+                    milestoneFilterBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconTNMilestone"></use></svg>';
                     milestoneFilterBtn.dataset.groupId = status;
                     milestoneFilterBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
