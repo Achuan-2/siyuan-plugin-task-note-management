@@ -12,7 +12,7 @@ const content = process.env.QUICK_REMINDER_SOURCE_REF
     ? execFileSync('git', ['show', `${process.env.QUICK_REMINDER_SOURCE_REF}:${relative}`], { cwd: root, encoding: 'utf8' })
     : fs.readFileSync(path.join(root, relative), 'utf8');
 const source = ts.createSourceFile(relative, content, ts.ScriptTarget.Latest, true);
-const names = ['renderStatusSelector', 'updateKanbanStatusSelector',
+const names = ['renderStatusSelector', 'renderSettingLabel', 'updateKanbanStatusSelector',
     'normalizeGroupVisibleStatusIds', 'filterKanbanStatusesBySelectedGroup', 'saveReminder'];
 const methods = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'QuickReminderDialog')
     .members.filter(node => names.includes(node.name?.getText(source)))
@@ -30,9 +30,10 @@ const projectStatuses = [...defaults, { id: 'waiting', name: 'waiting' }];
 
 function fixture({ defaultStatus = 'waiting', reminder, group } = {}) {
     const timers = [];
-    const StatusDialog = new Function('ProjectManager', 'i18n', 'setTimeout', `${code};return StatusDialog;`)(
+    const StatusDialog = new Function('ProjectManager', 'i18n', 'setTimeout', 'renderTaskMetadataIcon', 'renderTaskMetadataText', `${code};return StatusDialog;`)(
         { getInstance: () => ({ getDefaultKanbanStatuses: () => defaults }) }, key => key,
         callback => timers.push(callback),
+        name => `<svg data-icon="${name}"></svg>`, text => text,
     );
     const selector = {
         style: {}, options: [],

@@ -15,7 +15,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { SubtasksDialog } from "./SubtasksDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
-import { setTaskMetadataText, renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
+import { setTaskMetadataText, renderTaskMetadataIcon, renderTaskMetadataText, type TaskMetadataIcon } from "../render/taskMetadataIcons";
 import { collectTaskDeletionIds, deleteTaskTree } from "../../utils/taskTreeDeletion";
 import { getAllReminders } from "../../utils/icsSubscription";
 import { showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
@@ -3009,7 +3009,7 @@ export class QuickReminderDialog {
                         </div>
                         <div id="quickTaskTabPanel" role="tabpanel" style="min-height: 0;">
                         <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("parentTask")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('parent', i18n("parentTask"))}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: default;" placeholder="${i18n("noParentTask")}">
                                 <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("viewParentTask")}" style="display: none;">
@@ -3024,7 +3024,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("eventTitle")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('note', i18n("eventTitle"))}</label>
                             <div class="title-input-container" style="display: flex; gap: 8px; align-items: flex-start;">
                                 <textarea id="quickReminderTitle" class="b3-text-field" rows="1" placeholder="${i18n("enterReminderTitle")}" spellcheck="false" style="flex: 1; max-height: 200px; resize: vertical; overflow-y: auto; padding: 4px 8px; line-height: 1.5;" required autofocus></textarea>
                                 <button type="button" id="quickNlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("smartDateRecognition")}">
@@ -3058,7 +3058,7 @@ export class QuickReminderDialog {
 
                         <div id="quickTaskSettingsPanel" role="tabpanel">
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("reminderDate")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('calendar', i18n("reminderDate"))}</label>
                             <div style="display: flex; flex-direction: column; gap: 8px;">
                                 <!-- 开始行: responsive, keep date flexible but ensure time + clear button never wrap -->
                                 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -3127,7 +3127,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("customReminderTimes")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('alarm', i18n("customReminderTimes"))}</label>
                             <div id="quickCustomTimeList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
                                 <!-- Added times will be shown here -->
                             </div>
@@ -3172,7 +3172,7 @@ export class QuickReminderDialog {
                         
                         <!-- 添加重复设置 -->
                         <div class="b3-form__group" id="repeatSettingsGroup" style="${this.isInstanceEdit ? 'display: none;' : ''}">
-                            <label class="b3-form__label">${i18n("repeatSettings")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('repeat', i18n("repeatSettings"))}</label>
                             <div class="repeat-setting-container">
                                 <button type="button" id="quickRepeatSettingsBtn" class="b3-button b3-button--outline" style="width: 100%;">
                                     <span id="quickRepeatDescription">${i18n("noRepeat")}</span>
@@ -3182,7 +3182,7 @@ export class QuickReminderDialog {
                         </div>
                         <div class="b3-form__group">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                <label class="b3-form__label" style="margin-bottom: 0;">${i18n("eventCategory")}
+                                <label class="b3-form__label" style="margin-bottom: 0;">${this.renderSettingLabel('group', i18n("eventCategory"))}
                                     <button type="button" id="quickManageCategoriesBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("manageCategories")}">
                                         <svg class="b3-button__icon"><use xlink:href="#iconSettings"></use></svg>
                                     </button>
@@ -3197,7 +3197,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("priority")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('flag', i18n("priority"))}</label>
                             <div class="priority-selector" id="quickPrioritySelector">
                                 <div class="priority-option" data-priority="none">
                                     <div class="priority-dot none"></div>
@@ -3218,7 +3218,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickProjectGroup" style="${this.hideProjectSelector ? 'display: none;' : ''}">
-                            <label class="b3-form__label">${i18n("setProject")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('project', i18n("setProject"))}</label>
                             <div class="custom-select" id="quickProjectSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
                                     <input type="text" id="quickProjectSearchInput" class="b3-text-field" placeholder="${i18n("searchProject")}" autocomplete="off" style="width: 100%; padding-right: 30px;  background: var(--b3-select-background);" spellcheck="false">
@@ -3230,7 +3230,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickCustomGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("setTaskGroup")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('group', i18n("setTaskGroup"))}</label>
                             <div class="custom-select" id="quickCustomGroupSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
                                     <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
@@ -3242,7 +3242,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickMilestoneGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("milestone")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('flag', i18n("milestone"))}</label>
                             <div class="custom-select" id="quickMilestoneSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
                                     <svg id="quickMilestoneSelectedIcon" aria-hidden="true" style="display: none; position: absolute; z-index: 1; left: 8px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; pointer-events: none;"><use xlink:href="#iconTNMilestone"></use></svg>
@@ -3255,7 +3255,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickTagsGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("setTags")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('tag', i18n("setTags"))}</label>
                             <div id="quickTagsSelector" class="tags-selector" style="display: flex; flex-wrap: wrap; gap: 6px;">
                                 <!-- 标签选择器将在这里渲染 -->
                             </div>
@@ -3264,7 +3264,7 @@ export class QuickReminderDialog {
                         ${this.renderStatusSelector()}
                         <!-- 完成时间显示和编辑 -->
                         <div class="b3-form__group" id="quickCompletedTimeGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("completedAt")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('clock', i18n("completedAt"))}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <input type="datetime-local" id="quickCompletedTime" class="b3-text-field" style="flex: 1;" lang="${langTag}">
                                 <button type="button" id="quickSetCompletedNowBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("setToNow")}">
@@ -3277,7 +3277,7 @@ export class QuickReminderDialog {
                         </div>
                         <!-- 绑定块/文档输入，允许手动输入块 ID 或文档 ID -->
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("bindToBlock") || '块或文档 ID'}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('document', i18n("bindToBlock") || '块或文档 ID')}</label>
                             <div style="display: flex; gap: 8px; flex-wrap: wrap; ">
                                 <input type="text" id="quickBlockInput" class="b3-text-field" value="${this.defaultBlockId || ''}" placeholder="${i18n("enterBlockId")}" style="flex: 1;" spellcheck="false">
                                 <button type="button" id="quickCopyBlockRefBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("copyBlockRef")}">
@@ -3300,7 +3300,7 @@ export class QuickReminderDialog {
                         </div>
                         <!-- 网页链接输入 -->
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("bindUrl")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('link', i18n("bindUrl"))}</label>
                             <div style="display: flex; gap: 8px;">
                                 <input type="url" id="quickUrlInput" class="b3-text-field" placeholder="${i18n("enterUrl")}" style="flex: 1;" spellcheck="false">
                                 <button type="button" id="quickOpenUrlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("openUrl") || '在浏览器中打开'}">
@@ -3309,7 +3309,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickHabitGroup">
-                            <label class="b3-form__label">${i18n("bindHabit") || "绑定习惯"}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('habit', i18n("bindHabit") || "绑定习惯")}</label>
                             <div class="custom-select" id="quickHabitSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
                                     <input type="text" id="quickHabitSearchInput" class="b3-text-field" placeholder="${i18n("searchHabit") || "搜索习惯"}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
@@ -3331,14 +3331,14 @@ export class QuickReminderDialog {
                                     <span class="b3-checkbox__label">${i18n("taskAutoCheckInHabitOnComplete") || "任务完成时自动完成习惯打卡"}</span>
                                 </label>
                                 <div id="quickHabitAutoCheckInOptionRow" style="display: none; margin-top: 8px; gap: 8px; align-items: center;">
-                                    <label class="b3-form__label" style="margin: 0; white-space: nowrap;">${i18n("taskAutoCheckInOption") || "打卡选项"}</label>
+                                    <label class="b3-form__label" style="margin: 0; white-space: nowrap;">${this.renderSettingLabel('clipboard', i18n("taskAutoCheckInOption") || "打卡选项")}</label>
                                     <select id="quickHabitAutoCheckInOption" class="b3-select" style="flex: 1; min-width: 0;"></select>
                                 </div>
                             </div>
                         </div>
                         <!-- Removed Notes from sequential settings layout -->
                         <div class="b3-form__group" id="quickEditAllInstancesGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("recurringTask")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('repeat', i18n("recurringTask"))}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <button type="button" id="quickEditAllInstancesBtn" class="b3-button b3-button--outline" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
@@ -3348,7 +3348,7 @@ export class QuickReminderDialog {
                         </div>
 
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("estimatedPomodoroDuration")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('hourglass', i18n("estimatedPomodoroDuration"))}</label>
                             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                                 <div style="display: flex; align-items: center; gap: 6px; flex: 1 1 150px; min-width: 140px;">
                                     <input type="number" id="quickEstimatedPomodoroHours" class="b3-text-field" min="0" step="1" placeholder="0" style="width: 100%;">
@@ -3361,7 +3361,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("customProgress") || "自定义进度"}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('progress', i18n("customProgress") || "自定义进度")}</label>
                             <div style="display: flex; flex-direction: column; gap: 8px;">
                                 <label class="b3-checkbox" style="display: flex; align-items: center;">
                                     <input type="checkbox" class="b3-switch" id="quickCustomProgressEnabled">
@@ -3376,7 +3376,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickPomodorosGroup" style="display: none;">
-                            <label class="b3-form__label">${i18n("pomodoros")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('tomato', i18n("pomodoros"))}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
                                 <button type="button" id="quickViewPomodorosBtn" class="b3-button b3-button--outline" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;">
                                     <span id="quickPomodorosCountText">${i18n("viewPomodoros")}</span>
@@ -3385,7 +3385,7 @@ export class QuickReminderDialog {
                         </div>
 
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${i18n("displaySettings")}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('eye', i18n("displaySettings"))}</label>
                             <div style="display: flex; flex-direction: column; gap: 8px;">
                                 <label class="b3-checkbox">
                                     <input type="checkbox" class="b3-switch" id="quickIsAvailableToday">
@@ -3393,7 +3393,7 @@ export class QuickReminderDialog {
                                     <span class="b3-checkbox__label">${renderTaskMetadataText(i18n("availableTodayDesc"))}</span>
                                 </label>
                                 <div id="quickAvailableDateGroup" style="display: none; margin-left: 28px;">
-                                    <label class="b3-form__label" style="font-size: 12px;">${i18n("startDate")}</label>
+                                    <label class="b3-form__label" style="font-size: 12px;">${this.renderSettingLabel('calendar', i18n("startDate"))}</label>
                                     <input type="date" id="quickAvailableStartDate" class="b3-text-field" style="width: 100%;" lang="${langTag}">
                                 </div>
                                 <label class="b3-checkbox">
@@ -4021,6 +4021,11 @@ export class QuickReminderDialog {
         }
     }
 
+    /** 统一任务表单标题的图标尺寸、文字间距及对齐。 */
+    private renderSettingLabel(icon: TaskMetadataIcon, text: string): string {
+        return `<span style="display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;">${renderTaskMetadataIcon(icon, 16)}<span>${renderTaskMetadataText(text)}</span></span>`;
+    }
+
     // 渲染任务状态选择器
     private renderStatusSelector(): string {
         // 如果 showKanbanStatus 为 'none'，不显示任务状态选择器
@@ -4031,7 +4036,7 @@ export class QuickReminderDialog {
         // 返回占位符，项目选择器初始化完成后再填充实际可用的状态。
         return `
             <div class="b3-form__group">
-                <label class="b3-form__label">${i18n("taskStatus")}</label>
+                <label class="b3-form__label">${this.renderSettingLabel('status', i18n("taskStatus"))}</label>
                 <div class="task-status-selector" id="quickStatusSelector" style="display: flex; gap: 3px; flex-wrap: wrap;">
                     <!-- 动态内容将通过updateKanbanStatusSelector填充 -->
                 </div>

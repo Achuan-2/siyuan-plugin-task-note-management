@@ -20,6 +20,12 @@ const paths = {
     calendarHeart: '<path d="M12.127 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.125"/><path d="M14.62 17.8A2.25 2.25 0 1118 14.836a2.25 2.25 0 113.38 2.966l-2.626 2.856a.998.998 0 01-1.507 0z"/><path d="M16 2v3"/><path d="M3 9h18"/><path d="M8 2v3"/>',
     clipboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 12h6m-6 4h6"/>',
     note: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M16 3l5 5M10 14l-1 4 4-1L22 8a2.1 2.1 0 0 0-5-5Z"/>',
+    group: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7 .5l4-4a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7-.5l-4 4a5 5 0 0 0 7 7l2-2"/>',
+    habit: '<path d="M12 21v-8a7 7 0 0 1 7-7h2v2a7 7 0 0 1-7 7h-2M12 17a7 7 0 0 1-9-7V8h2a7 7 0 0 1 7 7M5 21h14"/>',
+    progress: '<path d="M3 3v16a2 2 0 0 0 2 2h16M8 16v-4m5 4V8m5 8V4"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    status: '<path d="M10 5h11M10 12h11M10 19h11M3 5h.01m-.01 7h.01M3 19h.01"/>',
     tomato: renderTomatoIconContent(),
 } as const;
 
