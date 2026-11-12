@@ -1632,7 +1632,12 @@ export class TaskRenderer {
                         font-weight: 500;
                     `;
 
-                    categoryEl.innerHTML = renderTaskMetadataIcon('tag');
+                    if (category.icon) {
+                        const categoryIcon = document.createElement('span');
+                        categoryIcon.textContent = category.icon;
+                        categoryIcon.style.flexShrink = '0';
+                        categoryEl.appendChild(categoryIcon);
+                    }
                     const categoryName = document.createElement('span');
                     categoryName.textContent = category.name;
                     categoryEl.appendChild(categoryName);
