@@ -198,8 +198,8 @@ export class ProjectKanbanView {
     private selectedFilterTags: Set<string> = new Set();
     // 筛选里程碑集合 (groupId -> Set of milestoneIds)
     private selectedFilterMilestones: Map<string, Set<string>> = new Map();
-    // 每个分组的所有可用里程碑ID (groupId -> Set of all available milestoneIds)
-    private allAvailableMilestones: Map<string, Set<string>> = new Map();
+    // 按状态列/分组记录多选模式，默认使用单选。
+    private multiSelectMilestoneFilters: Set<string> = new Set();
     private milestoneFilterButton: HTMLButtonElement;
     private isFilterActive: boolean = false;
     private selectedDateFilters: Set<string> = new Set();
@@ -1902,8 +1902,7 @@ export class ProjectKanbanView {
     private updateMilestoneFilterButton(rightContainer: HTMLElement, groupId: string) {
         if (!rightContainer) return;
 
-        const milestoneFilterSet = this.selectedFilterMilestones.get(groupId);
-        const hasActiveMilestoneFilter = milestoneFilterSet && milestoneFilterSet.size > 0;
+        const hasActiveMilestoneFilter = this.selectedFilterMilestones.has(groupId);
         // 检查当前状态列/分组是否实际有里程碑任务（基于当前过滤后的任务）
         const statusMilestones = this._statusMilestonesInView.get(groupId);
         const hasMilestonesInThisGroup = (statusMilestones && statusMilestones.size > 0) || !!hasActiveMilestoneFilter;
@@ -1934,14 +1933,7 @@ export class ProjectKanbanView {
                 }
             }
 
-            // 更新高亮状态：只在部分选择时添加 b3-button--primary
-            const allAvailableSet = this.allAvailableMilestones.get(groupId);
-            const selectedSet = this.selectedFilterMilestones.get(groupId);
-            const isPartialSelection = selectedSet && allAvailableSet &&
-                selectedSet.size > 0 &&
-                selectedSet.size < allAvailableSet.size;
-
-            if (isPartialSelection) {
+            if (hasActiveMilestoneFilter) {
                 milestoneFilterBtn.classList.add('b3-button--primary');
                 milestoneFilterBtn.classList.remove('b3-button--outline');
             } else {
@@ -2041,20 +2033,11 @@ export class ProjectKanbanView {
                 groupId: targetGroupId // 在 Status 视图下，targetGroupId 是 Status ID；Custom 视图下是 Group ID
             });
 
-            // 收集所有可用里程碑ID（用于后续比较是否全选）
+            // 从“全部任务”切换到多选时，将当前可见选项展开为显式选择。
             const allAvailableMilestoneIds = new Set<string>();
             milestonesToShow.forEach(group => {
                 group.milestones.forEach(m => allAvailableMilestoneIds.add(m.id));
             });
-
-            // 存储该分组的所有可用里程碑ID
-            this.allAvailableMilestones.set(targetGroupId, allAvailableMilestoneIds);
-
-            // 如果之前没有选择过，默认全选（不设置 Set 即代表全选/无论是否有新里程碑加入都显示）
-            // const hasExistingFilter = this.selectedFilterMilestones.has(targetGroupId);
-            // if (!hasExistingFilter) {
-            //     // 移除此处自动填充逻辑，保持 selectedFilterMilestones 中无 key 状态
-            // }
 
             // 创建弹窗容器
             const menu = document.createElement('div');
@@ -2078,36 +2061,27 @@ export class ProjectKanbanView {
 
             // 操作按钮容器
             const btnsContainer = document.createElement('div');
-            btnsContainer.style.cssText = 'display: flex; gap: 8px; margin-bottom: 12px;';
+            btnsContainer.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 12px;';
 
-            // 全选按钮（等于不筛选）
-            const selectAllBtn = document.createElement('button');
-            selectAllBtn.className = 'b3-button b3-button--text b3-button--small';
-            selectAllBtn.style.flex = '1';
-            selectAllBtn.textContent = i18n('selectAll') || '全选';
-            selectAllBtn.addEventListener('click', () => {
-                // 全选等于不筛选，删除该分组的筛选设置
-                this.selectedFilterMilestones.delete(targetGroupId);
-
-                // 更新 UI
-                const checkboxes = menu.querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
-                checkboxes.forEach(cb => cb.checked = true);
-
-                this.queueLoadTasks();
-                this.updateMilestoneFilterButtonsState();
-            });
-            btnsContainer.appendChild(selectAllBtn);
+            const multiSelectLabel = document.createElement('label');
+            multiSelectLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; cursor: pointer; margin-right: auto;';
+            const multiSelectCheckbox = document.createElement('input');
+            multiSelectCheckbox.type = 'checkbox';
+            multiSelectCheckbox.className = 'b3-checkbox';
+            multiSelectCheckbox.checked = this.multiSelectMilestoneFilters.has(targetGroupId);
+            const multiSelectText = document.createElement('span');
+            multiSelectText.textContent = i18n('multiSelect');
+            multiSelectLabel.append(multiSelectCheckbox, multiSelectText);
+            btnsContainer.appendChild(multiSelectLabel);
 
             // 清除按钮
             const clearBtn = document.createElement('button');
             clearBtn.className = 'b3-button b3-button--text b3-button--small';
-            clearBtn.style.flex = '1';
             clearBtn.textContent = i18n('clearSelection');
             clearBtn.addEventListener('click', () => {
                 // 设置为空 Set，表示清除所有选择（不显示任何任务）
                 this.selectedFilterMilestones.set(targetGroupId, new Set());
-                const checkboxes = menu.querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
-                checkboxes.forEach(cb => cb.checked = false);
+                renderOptions();
                 this.queueLoadTasks();
                 this.updateMilestoneFilterButtonsState();
             });
@@ -2116,11 +2090,10 @@ export class ProjectKanbanView {
             // 管理按钮
             const manageBtn = document.createElement('button');
             manageBtn.className = 'b3-button b3-button--text b3-button--small';
-            manageBtn.style.flex = '1';
             manageBtn.textContent = i18n('manage') || '管理';
             manageBtn.addEventListener('click', () => {
                 // 关闭筛选菜单
-                menu.remove();
+                closePopup();
                 // 如果 targetGroup 存在，则只管理该分组；否则管理全部（Status 视图下显示全部）
                 this.showManageMilestonesDialog(targetGroup ? targetGroupId : undefined);
             });
@@ -2128,116 +2101,109 @@ export class ProjectKanbanView {
 
             menu.appendChild(btnsContainer);
 
-            // 渲染列表项
-            milestonesToShow.forEach(section => {
-                // [修改] 如果是 Status 视图且里程碑列表不为空，显示分组标题进行区分
-                // 排除 "无里程碑" 这一项
-                if (this.kanbanMode === 'status' && section.milestones.length > 0 && section.title !== (i18n('noMilestone') || '无里程碑')) {
-                    const groupTitle = document.createElement('div');
-                    groupTitle.style.cssText = `
-                        padding: 8px 8px 4px 8px;
-                        font-size: 11px;
-                        font-weight: bold;
-                        color: var(--b3-theme-on-surface);
-                        opacity: 0.8;
-                        text-transform: uppercase;
-                        letter-spacing: 0.5px;
-                        border-top: 1px solid var(--b3-theme-border);
-                        margin-top: 4px;
-                    `;
+            const optionsContainer = document.createElement('div');
+            menu.appendChild(optionsContainer);
 
-                    // 找出第一个真正包含里程碑且不是“无里程碑”的分组，去掉它的顶部边距和边框
-                    const firstVisibleGroup = milestonesToShow.find(s => s.milestones.length > 0 && s.title !== (i18n('noMilestone') || '无里程碑'));
-                    if (section === firstVisibleGroup) {
-                        groupTitle.style.borderTop = 'none';
-                        groupTitle.style.marginTop = '0';
+            const appendOption = (name: string, iconText: string, milestoneId?: string, archived = false) => {
+                const label = document.createElement('label');
+                label.style.cssText = 'display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; transition: background 0.2s;';
+                label.onmouseenter = () => label.style.backgroundColor = 'var(--b3-theme-surface-lighter)';
+                label.onmouseleave = () => label.style.backgroundColor = '';
+
+                const input = document.createElement('input');
+                input.type = multiSelectCheckbox.checked ? 'checkbox' : 'radio';
+                input.name = `milestone-filter-${targetGroupId}`;
+                if (multiSelectCheckbox.checked) input.className = 'b3-checkbox';
+                input.style.marginRight = '8px';
+                const selected = this.selectedFilterMilestones.get(targetGroupId);
+                input.checked = milestoneId === undefined ? !selected : !!selected?.has(milestoneId);
+
+                input.addEventListener('change', () => {
+                    if (multiSelectCheckbox.checked && milestoneId !== undefined) {
+                        const selection = new Set(this.selectedFilterMilestones.get(targetGroupId));
+                        if (input.checked) selection.add(milestoneId);
+                        else selection.delete(milestoneId);
+                        this.selectedFilterMilestones.set(targetGroupId, selection);
+                    } else if (milestoneId === undefined) {
+                        this.selectedFilterMilestones.delete(targetGroupId);
+                    } else {
+                        this.selectedFilterMilestones.set(targetGroupId, new Set([milestoneId]));
                     }
+                    this.queueLoadTasks();
+                    this.updateMilestoneFilterButtonsState();
+                    if (!multiSelectCheckbox.checked) closePopup();
+                });
 
-                    groupTitle.textContent = section.title;
-                    menu.appendChild(groupTitle);
+                const icon = document.createElement('span');
+                icon.style.marginRight = '6px';
+                icon.textContent = iconText;
+                const nameEl = document.createElement('span');
+                nameEl.textContent = name;
+                nameEl.style.cssText = 'flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+                if (archived) {
+                    nameEl.style.textDecoration = 'line-through';
+                    nameEl.style.opacity = '0.6';
+                    nameEl.style.color = 'var(--b3-theme-on-surface-light)';
                 }
+                label.append(input, icon, nameEl);
+                optionsContainer.appendChild(label);
+            };
 
-                section.milestones.forEach(ms => {
-                    const label = document.createElement('label');
-                    label.style.cssText = 'display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; transition: background 0.2s;';
-                    label.onmouseenter = () => label.style.backgroundColor = 'var(--b3-theme-surface-lighter)';
-                    label.onmouseleave = () => label.style.backgroundColor = '';
+            const renderOptions = () => {
+                optionsContainer.replaceChildren();
+                clearBtn.style.display = multiSelectCheckbox.checked ? '' : 'none';
+                if (!multiSelectCheckbox.checked) appendOption(i18n('allTasks'), '📋');
+                milestonesToShow.forEach(section => {
+                    // 状态视图按分组显示里程碑，“无里程碑”不显示分组标题。
+                    if (this.kanbanMode === 'status' && section.milestones.length > 0 && section.title !== (i18n('noMilestone') || '无里程碑')) {
+                        const groupTitle = document.createElement('div');
+                        groupTitle.style.cssText = `
+                            padding: 8px 8px 4px 8px;
+                            font-size: 11px;
+                            font-weight: bold;
+                            color: var(--b3-theme-on-surface);
+                            opacity: 0.8;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            border-top: 1px solid var(--b3-theme-border);
+                            margin-top: 4px;
+                        `;
 
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.className = 'b3-checkbox';
-                    checkbox.style.marginRight = '8px';
-                    // 使用 key: targetGroupId
-                    const currentFilterSet = this.selectedFilterMilestones.get(section.groupId);
-                    // 如果 Set 不存在，说明是“全选/不筛选”状态，应该显示为选中
-                    checkbox.checked = !currentFilterSet || currentFilterSet.has(ms.id);
-
-                    checkbox.addEventListener('change', () => {
-                        const groupId = section.groupId;
-                        let set = this.selectedFilterMilestones.get(groupId);
-
-                        if (!set) {
-                            // 当前是“全选”状态，用户取消勾选了一个
-                            if (!checkbox.checked) {
-                                // 初始化 Set 为“除了被取消勾选的这个之外的所有项”
-                                const allAvailable = this.allAvailableMilestones.get(groupId);
-                                set = new Set(allAvailable);
-                                set.delete(ms.id);
-                                this.selectedFilterMilestones.set(groupId, set);
-                            }
-                        } else {
-                            // 当前是“筛选”状态
-                            if (checkbox.checked) {
-                                set.add(ms.id);
-
-                                // 检查是否已全选：如果是，则恢复为“不筛选”状态
-                                const allAvailable = this.allAvailableMilestones.get(groupId);
-                                if (allAvailable && set.size === allAvailable.size) {
-                                    this.selectedFilterMilestones.delete(groupId);
-                                }
-                            } else {
-                                set.delete(ms.id);
-                            }
+                        const firstVisibleGroup = milestonesToShow.find(s => s.milestones.length > 0 && s.title !== (i18n('noMilestone') || '无里程碑'));
+                        if (section === firstVisibleGroup) {
+                            groupTitle.style.borderTop = 'none';
+                            groupTitle.style.marginTop = '0';
                         }
 
-                        this.queueLoadTasks();
-                        this.updateMilestoneFilterButtonsState();
-                    });
-
-                    const icon = document.createElement('span');
-                    icon.style.marginRight = '6px';
-                    icon.textContent = ms.icon || '🚩';
-
-                    const name = document.createElement('span');
-                    name.textContent = ms.name;
-                    name.style.flex = '1';
-                    name.style.overflow = 'hidden';
-                    name.style.textOverflow = 'ellipsis';
-                    name.style.whiteSpace = 'nowrap';
-
-                    // 已归档的里程碑显示为暗色
-                    if (ms.archived) {
-                        name.style.textDecoration = 'line-through';
-                        name.style.opacity = '0.6';
-                        name.style.color = 'var(--b3-theme-on-surface-light)';
+                        groupTitle.textContent = section.title;
+                        optionsContainer.appendChild(groupTitle);
                     }
 
-                    label.appendChild(checkbox);
-                    label.appendChild(icon);
-                    label.appendChild(name);
-                    menu.appendChild(label);
+                    section.milestones.forEach(ms => {
+                        appendOption(ms.name, ms.icon || '🚩', ms.id, ms.archived);
+                    });
                 });
-            });
+            };
 
-            if (milestonesToShow.length === 0) {
-                const emptyTip = document.createElement('div');
-                emptyTip.style.padding = '12px';
-                emptyTip.style.color = 'var(--b3-theme-on-surface)';
-                emptyTip.style.opacity = '0.6';
-                emptyTip.style.textAlign = 'center';
-                emptyTip.textContent = i18n('noMilestones') || '暂无里程碑';
-                menu.appendChild(emptyTip);
-            }
+            multiSelectCheckbox.addEventListener('change', () => {
+                const selected = this.selectedFilterMilestones.get(targetGroupId);
+                if (multiSelectCheckbox.checked) {
+                    this.multiSelectMilestoneFilters.add(targetGroupId);
+                    if (!selected) this.selectedFilterMilestones.set(targetGroupId, new Set(allAvailableMilestoneIds));
+                } else {
+                    this.multiSelectMilestoneFilters.delete(targetGroupId);
+                    const firstSelected = selected?.values().next().value;
+                    if (firstSelected !== undefined) {
+                        this.selectedFilterMilestones.set(targetGroupId, new Set([firstSelected]));
+                    } else {
+                        this.selectedFilterMilestones.delete(targetGroupId);
+                    }
+                }
+                renderOptions();
+                this.queueLoadTasks();
+                this.updateMilestoneFilterButtonsState();
+            });
+            renderOptions();
 
             // 添加到 body 并计算自适应位置
             document.body.appendChild(menu);
@@ -2285,16 +2251,8 @@ export class ProjectKanbanView {
         const buttons = this.container.querySelectorAll('.milestone-filter-btn') as NodeListOf<HTMLButtonElement>;
         buttons.forEach(btn => {
             const groupId = btn.dataset.groupId;
-            const selectedSet = groupId ? this.selectedFilterMilestones.get(groupId) : undefined;
-            const allAvailableSet = groupId ? this.allAvailableMilestones.get(groupId) : undefined;
-
-            // 检查是否是部分选择（有选择但不等于全部）
-            const isPartialSelection = selectedSet && allAvailableSet &&
-                selectedSet.size > 0 &&
-                selectedSet.size < allAvailableSet.size;
-
-            // 只在部分选择时添加 b3-button--primary
-            if (isPartialSelection) {
+            // 空集合也在筛选任务；只有“全部任务”不高亮。
+            if (groupId && this.selectedFilterMilestones.has(groupId)) {
                 btn.classList.add('b3-button--primary');
                 btn.classList.remove('b3-button--outline');
             } else {
@@ -7479,8 +7437,8 @@ export class ProjectKanbanView {
                 headerRight.appendChild(count);
 
                 // 里程碑筛选按钮
-                const milestoneFilterSet = this.selectedFilterMilestones.get(status);
-                const hasMilestonesInThisStatus = this._statusHasMilestoneTasks.has(status) || (milestoneFilterSet && milestoneFilterSet.size > 0);
+                const hasActiveMilestoneFilter = this.selectedFilterMilestones.has(status);
+                const hasMilestonesInThisStatus = this._statusHasMilestoneTasks.has(status) || hasActiveMilestoneFilter;
 
                 if (hasMilestonesInThisStatus) {
                     const milestoneFilterBtn = document.createElement('button');
@@ -7493,11 +7451,7 @@ export class ProjectKanbanView {
                         this.showMilestoneFilterMenu(e, status);
                     });
                     // 只在部分选择时添加 b3-button--primary
-                    const allAvailableSet = this.allAvailableMilestones.get(status);
-                    const isPartialSelection = milestoneFilterSet && allAvailableSet &&
-                        milestoneFilterSet.size > 0 &&
-                        milestoneFilterSet.size < allAvailableSet.size;
-                    if (isPartialSelection) {
+                    if (hasActiveMilestoneFilter) {
                         milestoneFilterBtn.classList.add('b3-button--primary');
                         milestoneFilterBtn.classList.remove('b3-button--outline');
                     }
