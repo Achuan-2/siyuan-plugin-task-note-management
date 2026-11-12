@@ -259,11 +259,12 @@ export class ProjectPanel {
     private draggedFolderElement: HTMLElement | null = null;
     private draggedFolder: any = null;
     private currentProjectsCache: any[] = [];
-    // 保存每个状态分组的折叠状态（key = statusId, value = boolean; true=collapsed）
-    private groupCollapsedState: Record<string, boolean> = {};
     // 缓存提醒数据，避免为每个项目重复读取
     private reminderDataCache: any = null;
-    private currentViewMode: 'card' | 'list' = 'card';
+    private showDates = true;
+    private showTaskCounts = true;
+    private showPomodoro = true;
+    private showProgress = true;
     private isMobileClient: boolean = false;
 
     constructor(container: HTMLElement, plugin?: any) {
@@ -291,11 +292,11 @@ export class ProjectPanel {
                     const progressBarInner = projectEl.querySelector('.project-progress-inner') as HTMLElement;
                     const progressText = projectEl.querySelector('.project-progress-text') as HTMLElement;
 
-                    if (dynamicWrapper) {
+                    if (dynamicWrapper || pomodoroEl || progressBarInner) {
                         // 重新计算并更新该项目的统计信息（会根据项目的 kanban statuses 渲染）
                         await this.fillProjectTopLevelCounts(detail.projectId, dynamicWrapper, pomodoroEl, progressBarInner, progressText);
-                        return;
                     }
+                    return;
                 }
             }
 
@@ -343,59 +344,6 @@ export class ProjectPanel {
         this.container.classList.add('project-panel');
         this.container.innerHTML = '';
 
-        // 与任务、习惯侧栏的分组头保持一致
-        try {
-            let style = document.getElementById('project-panel-section-header-style') as HTMLStyleElement | null;
-            if (!style) {
-                style = document.createElement('style');
-                style.id = 'project-panel-section-header-style';
-                document.head.appendChild(style);
-            }
-            style.textContent = `
-                .project-panel .reminder-section-header {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    margin: 10px 0 8px;
-                    padding: 8px 10px;
-                    color: var(--b3-theme-on-surface);
-                    border-radius: 6px;
-                    cursor: pointer;
-                    user-select: none;
-                    transition: background-color 0.2s ease;
-                }
-                .project-panel .project-list > .project-group:first-child > .reminder-section-header {
-                    margin-top: 0;
-                }
-                .project-panel .reminder-section-header__title {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    min-width: 0;
-                    font-weight: 600;
-                }
-                .project-panel .reminder-section-header__count {
-                    margin-left: auto;
-                    color: var(--b3-theme-on-surface-light);
-                    font-size: 12px;
-                }
-                .project-panel .reminder-section-header__arrow {
-                    width: 14px;
-                    height: 14px;
-                    color: var(--b3-theme-on-surface-light);
-                    transition: transform 0.15s ease;
-                }
-                .project-panel .reminder-section-header[data-collapsed="true"] {
-                    background: var(--b3-theme-surface);
-                }
-                .project-panel .reminder-section-header[data-collapsed="true"] .reminder-section-header__arrow {
-                    transform: rotate(-90deg);
-                }
-            `;
-        } catch (error) {
-            console.warn("Failed to inject project status group header styles:", error);
-        }
-
         // 标题部分
         const header = document.createElement('div');
         header.className = 'project-header';
@@ -410,37 +358,8 @@ export class ProjectPanel {
         const titleSpan = document.createElement('span');
         titleSpan.textContent = i18n("projectManagement") || "项目管理";
 
-        // 添加切换视图下拉框
-        const viewModeSelect = document.createElement('select');
-        viewModeSelect.className = 'b3-select project-view-mode-select';
-        viewModeSelect.style.marginLeft = '8px';
-        viewModeSelect.style.padding = '2px 4px';
-        viewModeSelect.style.height = '22px';
-        viewModeSelect.style.fontSize = '12px';
-        viewModeSelect.style.width = 'auto';
-
-        const cardOption = document.createElement('option');
-        cardOption.value = 'card';
-        cardOption.textContent = i18n("statusViewMode") || "状态视图";
-        cardOption.selected = this.currentViewMode === 'card';
-
-        const listOption = document.createElement('option');
-        listOption.value = 'list';
-        listOption.textContent = i18n("folderViewMode") || "文件夹视图";
-        listOption.selected = this.currentViewMode === 'list';
-
-        viewModeSelect.appendChild(cardOption);
-        viewModeSelect.appendChild(listOption);
-
-        viewModeSelect.addEventListener('change', async () => {
-            this.currentViewMode = viewModeSelect.value as 'card' | 'list';
-            await this.savePanelSettings();
-            await this.loadProjects();
-        });
-
         titleContainer.appendChild(iconSpan);
         titleContainer.appendChild(titleSpan);
-        titleContainer.appendChild(viewModeSelect);
 
         // 添加右侧按钮容器
         const actionContainer = document.createElement('div');
@@ -615,14 +534,14 @@ export class ProjectPanel {
         this.container.appendChild(this.projectsContainer);
 
         this.projectsContainer.addEventListener('dragover', (e) => {
-            if (this.currentViewMode === 'list' && this.isDragging) {
+            if (this.isDragging) {
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
             }
         });
 
         this.projectsContainer.addEventListener('drop', async (e) => {
-            if (this.currentViewMode === 'list' && this.isDragging && this.draggedProject) {
+            if (this.isDragging && this.draggedProject) {
                 const target = e.target as HTMLElement;
                 if (!target.closest('.project-folder-group') && !target.closest('.project-item')) {
                     e.preventDefault();
@@ -875,11 +794,13 @@ export class ProjectPanel {
             this.sortProjects(displayProjects);
 
             // 预先读取提醒数据缓存，用于计算每个项目的任务计数
-            try {
-                this.reminderDataCache = await getAllReminders(this.plugin, undefined, false);
-            } catch (err) {
-                console.warn("Failed to read reminder data; counting will fall back asynchronously:", err);
-                this.reminderDataCache = null;
+            if (this.showTaskCounts || this.showPomodoro || this.showProgress) {
+                try {
+                    this.reminderDataCache = await getAllReminders(this.plugin, undefined, false);
+                } catch (err) {
+                    console.warn("Failed to read reminder data; counting will fall back asynchronously:", err);
+                    this.reminderDataCache = null;
+                }
             }
 
             // 渲染项目
@@ -944,466 +865,74 @@ export class ProjectPanel {
 
     private renderProjects(projects: any[]) {
         if (this.disposed) return;
-        this.projectsContainer.classList.toggle('project-document-tree', this.currentViewMode === 'list');
-
-        // 文件夹视图下，即使没有项目也要渲染文件夹
-        if (this.currentViewMode === 'list') {
-            this.projectsContainer.classList.add('project-document-tree');
-            this.renderProjectsAsChecklist(projects || []);
-            this.currentProjectsCache = [...(projects || [])];
-            return;
-        }
-
-        // 如果没有项目则显示空提示
-        if (!projects || projects.length === 0) {
-            // 当在 "all" 标签下，排除归档后可能为空
-            if (this.currentTab === 'all') {
-                this.projectsContainer.innerHTML = `<div class="project-empty">${i18n("noProjects") || '暂无项目'}</div>`;
-            } else {
-                const status = this.statusManager.getStatusById(this.currentTab);
-                const statusName = status ? status.name : i18n("allProjects");
-                const emptyText = i18n("noProjectsInStatus")?.replace("${status}", statusName) || `暂无"${statusName}"状态的项目`;
-                this.projectsContainer.innerHTML = `<div class="project-empty">${emptyText}</div>`;
-            }
-            // 清空缓存
-            this.currentProjectsCache = [];
-            return;
-        }
-
-        // 缓存当前项目列表
-        this.currentProjectsCache = [...projects];
-
-        this.projectsContainer.classList.remove('project-document-tree');
-
-        // 如果 currentTab 为 'all'，则按状态分组并排除 archived
-        if (this.currentTab === 'all') {
-            // 按状态分组
-            const groups: Record<string, any[]> = {};
-            projects.forEach(p => {
-                const st = p.status || 'active';
-                // 跳过归档状态
-                const statusInfo = this.statusManager.getStatusById(st);
-                if (statusInfo?.isArchived) return;
-                if (!groups[st]) groups[st] = [];
-                groups[st].push(p);
-            });
-
-            // 清空容器
-            this.projectsContainer.innerHTML = '';
-
-            // 获取按状态显示顺序（先使用 statusManager 中的顺序）
-            const statuses = this.statusManager.getStatuses();
-
-            // 先渲染非 statusManager 中定义的状态
-            const rendered = new Set<string>();
-
-            statuses.forEach(status => {
-                const sid = status.id;
-                if (groups[sid] && groups[sid].length > 0) {
-                    rendered.add(sid);
-                    const groupEl = this.createStatusGroupElement(status, groups[sid]);
-                    this.projectsContainer.appendChild(groupEl);
-                }
-            });
-
-            // 剩余自定义状态
-            Object.keys(groups).forEach(sid => {
-                if (rendered.has(sid)) return;
-                const statusInfo = this.statusManager.getStatusById(sid) || { id: sid, name: sid, icon: '' };
-                const groupEl = this.createStatusGroupElement(statusInfo, groups[sid]);
-                this.projectsContainer.appendChild(groupEl);
-            });
-
-            return;
-        }
-
-        // 非 'all' 标签，直接渲染列表（同之前逻辑）
-        this.projectsContainer.innerHTML = '';
-        projects.forEach((project: any) => {
-            const projectEl = this.createProjectElement(project);
-            this.projectsContainer.appendChild(projectEl);
-        });
+        this.currentProjectsCache = [...(projects || [])];
+        this.projectsContainer.classList.add('project-document-tree');
+        this.renderProjectsAsChecklist(this.currentProjectsCache);
     }
 
-    private createProjectElement(project: any): HTMLElement {
-        if (this.currentViewMode === 'list') {
-            return this.createProjectListElement(project);
-        }
+    private appendProjectStatistics(infoEl: HTMLElement, projectId: string) {
+        let dynamicWrapper: HTMLElement | null = null;
+        let pomodoroEl: HTMLElement | null = null;
+        let progressBarInner: HTMLElement | null = null;
+        let progressText: HTMLElement | null = null;
 
-        const today = getLogicalDateString();
-        const isOverdue = project.endDate && compareDateStrings(project.endDate, today) < 0;
-        const priority = project.priority || 'none';
-        const status = project.status || 'active';
+        if (this.showTaskCounts || this.showPomodoro) {
+            const countsContainer = document.createElement('div');
+            countsContainer.className = 'project-item__counts';
+            countsContainer.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;';
 
-        const projectEl = document.createElement('div');
-        projectEl.className = `project-item ${isOverdue ? 'project-item--overdue' : ''} project-item--${status} project-priority-${priority}`;
-
-        // 存储项目数据到元素
-        projectEl.dataset.projectId = project.id;
-        projectEl.dataset.priority = priority;
-
-        const itemMoreBtn = document.createElement('button');
-        itemMoreBtn.type = 'button';
-        itemMoreBtn.className = 'b3-button b3-button--text project-item__more-button';
-        itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        const shouldAlwaysShowMoreButton = !!this.plugin?.isInMobileApp;
-        itemMoreBtn.style.cssText = `
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 28px;
-            height: 28px;
-            padding: 0;
-            border-radius: 6px;
-            opacity: ${shouldAlwaysShowMoreButton ? '1' : '0'};
-            pointer-events: ${shouldAlwaysShowMoreButton ? 'auto' : 'none'};
-            transition: opacity 0.2s ease;
-            z-index: 10;
-        `;
-        itemMoreBtn.classList.add('ariaLabel');
-        itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
-        itemMoreBtn.draggable = false;
-
-        const setMoreButtonVisible = (visible: boolean) => {
-            if (shouldAlwaysShowMoreButton) return;
-            itemMoreBtn.style.opacity = visible ? '1' : '0';
-            itemMoreBtn.style.pointerEvents = visible ? 'auto' : 'none';
-        };
-
-        if (!shouldAlwaysShowMoreButton) {
-            projectEl.addEventListener('mouseenter', () => setMoreButtonVisible(true));
-            projectEl.addEventListener('mouseleave', () => setMoreButtonVisible(false));
-            itemMoreBtn.addEventListener('focus', () => setMoreButtonVisible(true));
-            itemMoreBtn.addEventListener('blur', () => setMoreButtonVisible(false));
-        }
-
-        itemMoreBtn.addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-        });
-        itemMoreBtn.addEventListener('dragstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        });
-        itemMoreBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const rect = itemMoreBtn.getBoundingClientRect();
-            this.showProjectContextMenu({
-                clientX: rect.right,
-                clientY: rect.bottom + 4
-            }, project);
-        });
-        projectEl.appendChild(itemMoreBtn);
-
-        // 桌面端允许直接拖拽排序；创建时间/标题排序下禁用
-        if (!this.isDragDisabledBySortMode()) {
-            this.addDragFunctionality(projectEl, project);
-        }
-        // 支持接收来自项目看板的任务拖入（修改任务所属项目）
-        this.addTaskDropTarget(projectEl, project);
-
-        // 添加右键菜单支持
-        projectEl.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            this.showProjectContextMenu(e, project);
-        });
-
-        // 添加单击打开项目看板支持
-        projectEl.addEventListener('click', (e) => {
-            if ((e.target as HTMLElement).closest('.project-item__more-button')) return;
-            e.preventDefault();
-            e.stopPropagation();
-            this.openProjectKanban(project);
-        });
-
-        const contentEl = document.createElement('div');
-        contentEl.className = 'project-item__content';
-
-        // 信息容器
-        const infoEl = document.createElement('div');
-        infoEl.className = 'project-item__info';
-
-        // 标题
-        const titleEl = document.createElement('span');
-        titleEl.className = 'project-item__title';
-
-        const parsed = this.parseTitle(project.title);
-        const displayTitle = parsed.text || i18n("unnamedNote") || '未命名项目';
-
-        const dotEl = document.createElement('span');
-        dotEl.className = 'project-item__color-dot';
-        dotEl.style.cssText = `
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: ${project.color || '#cccccc'};
-            flex-shrink: 0;
-            display: inline-block;
-            text-decoration: none !important;
-        `;
-        titleEl.appendChild(dotEl);
-
-        if (parsed.emoji) {
-            const emojiEl = document.createElement('span');
-            emojiEl.className = 'project-item__emoji-icon';
-            emojiEl.textContent = parsed.emoji;
-            emojiEl.style.cssText = `
-                font-size: 14px;
-                flex-shrink: 0;
-                display: inline-block;
-                text-decoration: none !important;
-            `;
-            titleEl.appendChild(emojiEl);
-        }
-
-        const textEl = document.createElement('span');
-        textEl.textContent = displayTitle;
-        titleEl.appendChild(textEl);
-
-        if (project.blockId) {
-            titleEl.setAttribute('data-type', 'a');
-            titleEl.setAttribute('data-href', `siyuan://blocks/${project.blockId}`);
-            titleEl.style.cssText = `
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                cursor: pointer;
-                color: var(--b3-protyle-inline-blockref-color);
-                font-weight: 500;
-                text-decoration: none;
-            `;
-            textEl.style.textDecoration = 'underline';
-            titleEl.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.openProject(project.blockId);
-            });
-        } else {
-            titleEl.style.cssText = `
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                font-weight: 500;
-            `;
-        }
-
-        // 时间信息容器
-        const timeContainer = document.createElement('div');
-        timeContainer.className = 'project-item__time-container';
-        timeContainer.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 4px;
-            flex-wrap: wrap;
-        `;
-
-        // 添加倒计时或已开始天数显示 - 只为非已归档的项目显示
-        if (status !== 'archived') {
-            if (project.endDate) {
-                // 有结束日期，显示倒计时
-                const countdownEl = this.createCountdownElement(project.endDate, today);
-                timeContainer.appendChild(countdownEl);
-            } else if (project.startDate) {
-                // 只有开始日期，显示已开始天数
-                const startedEl = this.createStartedElement(project.startDate, today);
-                timeContainer.appendChild(startedEl);
+            if (this.showTaskCounts) {
+                dynamicWrapper = document.createElement('div');
+                dynamicWrapper.className = 'project-counts-dynamic';
+                dynamicWrapper.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px;';
+                countsContainer.appendChild(dynamicWrapper);
             }
-        }
 
-        // 时间信息
-        const timeEl = document.createElement('div');
-        timeEl.className = 'project-item__time';
-        setTaskMetadataText(timeEl, this.formatProjectTime(project.startDate, project.endDate, today));
-        timeContainer.appendChild(timeEl);
-
-
-
-
-        // 添加优先级标签
-        if (priority !== 'none') {
-            const priorityLabel = document.createElement('span');
-            priorityLabel.className = `project-priority-label ${priority}`;
-            const priorityNames = {
-                'high': i18n("highPriority") || '高优先级',
-                'medium': i18n("mediumPriority") || '中优先级',
-                'low': i18n("lowPriority") || '低优先级'
-            };
-            priorityLabel.innerHTML = `<div class="priority-dot ${priority}"></div>${priorityNames[priority]}`;
-            timeContainer.appendChild(priorityLabel);
-        }
-
-        infoEl.appendChild(titleEl);
-        infoEl.appendChild(timeContainer);
-
-        // 添加项目下顶级任务计数（todo/doing/done）
-        const countsContainer = document.createElement('div');
-        countsContainer.className = 'project-item__counts';
-        countsContainer.style.cssText = `display:flex; gap:8px; margin-top:6px; align-items:center; flex-wrap: wrap;`;
-
-
-        const dynamicCountsWrapper = document.createElement('div');
-        dynamicCountsWrapper.className = 'project-counts-dynamic';
-        dynamicCountsWrapper.style.cssText = `display:flex; gap:8px; align-items:center; flex-wrap:wrap;`;
-        // initial legacy placeholders to avoid layout shift
-        dynamicCountsWrapper.innerHTML = `
-            <span class="project-count project-count--doing">${i18n("doing") || '进行中'}: ...</span>
-            <span class="project-count project-count--short-term">${i18n("shortTerm") || '短期'}: ...</span>
-            <span class="project-count project-count--long-term">${i18n("longTerm") || '长期'}: ...</span>
-            <span class="project-count project-count--done">${i18n("done") || '已完成'}: ...</span>
-        `;
-        countsContainer.appendChild(dynamicCountsWrapper);
-
-        // 添加番茄钟总数显示
-        const pomodoroCountEl = document.createElement('span');
-        pomodoroCountEl.className = 'project-count project-count--pomodoro';
-        setTaskMetadataText(pomodoroCountEl, i18n("projectPomodoroLoading"));
-        pomodoroCountEl.style.cssText = `
-            font-size: 12px;
-            color: var(--b3-theme-on-surface);
-            opacity: 0.8;
-            display: flex;
-            align-items: center;
-            gap: 2px;
-            background: rgba(231, 76, 60, 0.1);
-            padding: 2px 6px;
-            border-radius: 10px;
-            border: 1px solid rgba(231, 76, 60, 0.2);
-            white-space: nowrap;
-        `;
-        countsContainer.appendChild(pomodoroCountEl);
-
-        infoEl.appendChild(countsContainer);
-
-        // 添加项目进度条（参考 ProjectKanbanView 样式）
-        const progressWrapper = document.createElement('div');
-        progressWrapper.className = 'project-progress-wrapper';
-        progressWrapper.style.cssText = `
-            margin-top: 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        `;
-
-        const progressBarOuter = document.createElement('div');
-        progressBarOuter.className = 'project-progress-outer';
-        progressBarOuter.style.cssText = `
-            flex: 1;
-            height: 8px;
-            background: rgba(0,0,0,0.06);
-            border-radius: 6px;
-            overflow: hidden;
-        `;
-
-        const progressBarInner = document.createElement('div');
-        progressBarInner.className = 'project-progress-inner';
-        progressBarInner.style.cssText = `
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, #28a745, #7bd389);
-            border-radius: 6px;
-            transition: width 0.3s ease;
-        `;
-
-        progressBarOuter.appendChild(progressBarInner);
-
-        const progressText = document.createElement('div');
-        progressText.className = 'project-progress-text';
-        progressText.style.cssText = `
-            font-size: 12px;
-            color: var(--b3-theme-on-surface);
-            text-align: right;
-        `;
-
-        progressWrapper.appendChild(progressBarOuter);
-        progressWrapper.appendChild(progressText);
-
-        infoEl.appendChild(progressWrapper);
-
-        // 异步填充计数（使用缓存或实时读取），并同时更新进度条
-        this.fillProjectTopLevelCounts(project.id, dynamicCountsWrapper, pomodoroCountEl, progressBarInner, progressText).catch(err => {
-            console.warn("Failed to populate project task counts:", err);
-        });
-        // 分类显示
-        if (project.categoryId) {
-            const categoryIds = project.categoryId.split(',').filter((id: string) => id.trim());
-
-            if (categoryIds.length > 0) {
-                const categoryContainer = document.createElement('div');
-                categoryContainer.className = 'project-item__category-container';
-                categoryContainer.style.cssText = `
-                    margin-top: 4px;
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 4px;
+            if (this.showPomodoro) {
+                pomodoroEl = document.createElement('span');
+                pomodoroEl.className = 'project-count project-count--pomodoro';
+                setTaskMetadataText(pomodoroEl, i18n('projectPomodoroLoading'));
+                pomodoroEl.style.cssText = `
+                    display:inline-flex;align-items:center;gap:2px;font-size:12px;
+                    color:var(--b3-theme-on-surface);opacity:0.8;background:rgba(231,76,60,0.1);
+                    padding:2px 6px;border-radius:10px;border:1px solid rgba(231,76,60,0.2);white-space:nowrap;
                 `;
-
-                categoryIds.forEach((id: string) => {
-                    const category = this.categoryManager.getCategoryById(id);
-                    if (category) {
-                        const categoryEl = document.createElement('div');
-                        categoryEl.className = 'project-category-tag';
-                        categoryEl.style.cssText = `
-                            display: inline-flex;
-                            align-items: center;
-                            gap: 4px;
-                            padding: 2px 6px;
-                            background-color: ${category.color};
-                            border: 1px solid ${category.color}40;
-                            border-radius: 5px;
-                            font-size: 11px;
-                            color: #fff;
-                        `;
-
-                        if (category.icon) {
-                            const iconSpan = document.createElement('span');
-                            iconSpan.textContent = category.icon;
-                            iconSpan.style.cssText = `
-                                font-size: 12px;
-                                line-height: 1;
-                            `;
-                            categoryEl.appendChild(iconSpan);
-                        }
-
-                        const nameSpan = document.createElement('span');
-                        nameSpan.textContent = category.name;
-                        nameSpan.style.cssText = `
-                            font-size: 11px;
-                            font-weight: 500;
-                        `;
-                        categoryEl.appendChild(nameSpan);
-                        categoryContainer.appendChild(categoryEl);
-                    }
-                });
-
-                if (categoryContainer.hasChildNodes()) {
-                    infoEl.appendChild(categoryContainer);
-                }
+                countsContainer.appendChild(pomodoroEl);
             }
+            infoEl.appendChild(countsContainer);
         }
 
-        // 描述
-        if (project.note) {
-            const noteEl = document.createElement('div');
-            noteEl.className = 'project-item__note';
-            noteEl.textContent = project.note;
-            infoEl.appendChild(noteEl);
+        if (this.showProgress) {
+            const progressWrapper = document.createElement('div');
+            progressWrapper.className = 'project-progress-wrapper';
+            progressWrapper.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;';
+
+            const progressBarOuter = document.createElement('div');
+            progressBarOuter.className = 'project-progress-outer';
+            progressBarOuter.style.cssText = 'flex:1;height:8px;background:rgba(0,0,0,0.06);border-radius:6px;overflow:hidden;';
+            progressBarInner = document.createElement('div');
+            progressBarInner.className = 'project-progress-inner';
+            progressBarInner.style.cssText = 'height:100%;width:0%;background:linear-gradient(90deg,#28a745,#7bd389);border-radius:6px;transition:width 0.3s ease;';
+            progressBarOuter.appendChild(progressBarInner);
+
+            progressText = document.createElement('div');
+            progressText.className = 'project-progress-text';
+            progressText.style.cssText = 'font-size:12px;color:var(--b3-theme-on-surface);text-align:right;';
+            progressWrapper.appendChild(progressBarOuter);
+            progressWrapper.appendChild(progressText);
+            infoEl.appendChild(progressWrapper);
         }
 
-        contentEl.appendChild(infoEl);
-        projectEl.appendChild(contentEl);
-
-        return projectEl;
+        if (dynamicWrapper || pomodoroEl || progressBarInner) {
+            void this.fillProjectTopLevelCounts(projectId, dynamicWrapper, pomodoroEl, progressBarInner, progressText);
+        }
     }
 
     /**
      * 填充某个项目的顶级任务计数到元素
      */
-    private async fillProjectTopLevelCounts(projectId: string, dynamicWrapper: HTMLElement, pomodoroEl?: HTMLElement | null, progressBarInner?: HTMLElement | null, progressText?: HTMLElement | null) {
+    private async fillProjectTopLevelCounts(projectId: string, dynamicWrapper: HTMLElement | null, pomodoroEl?: HTMLElement | null, progressBarInner?: HTMLElement | null, progressText?: HTMLElement | null) {
+        if (!dynamicWrapper && !pomodoroEl && !progressBarInner) return;
         try {
             let reminderData = this.reminderDataCache;
             if (!reminderData) {
@@ -1411,41 +940,53 @@ export class ProjectPanel {
                 this.reminderDataCache = reminderData;
             }
 
-            const { ProjectManager } = await import("../dataManager/projectManager");
-            const projectManager = ProjectManager.getInstance(this.plugin);
-            const statuses = await projectManager.getProjectKanbanStatuses(projectId);
-            const settings = await this.plugin?.loadSettings?.() || this.plugin?.settings || {};
-            const holidayData = await this.plugin?.loadHolidayData?.() || {};
+            if (dynamicWrapper || progressBarInner) {
+                const projectManager = ProjectManager.getInstance(this.plugin);
+                const statuses = await projectManager.getProjectKanbanStatuses(projectId);
+                const settings = await this.plugin?.loadSettings?.() || this.plugin?.settings || {};
+                const holidayData = await this.plugin?.loadHolidayData?.() || {};
 
-            const result = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, statuses, settings, holidayData);
-            const countsMap = result.counts || {};
-            const completedCount = result.completed || (countsMap['completed'] || 0);
+                const result = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, statuses, settings, holidayData);
+                const countsMap = result.counts || {};
+                const completedCount = result.completed || (countsMap['completed'] || 0);
 
-            // Render dynamic status badges in order
-            dynamicWrapper.innerHTML = '';
-            if (statuses && Array.isArray(statuses) && statuses.length > 0) {
-                for (const s of statuses) {
-                    const id = s.id;
-                    const name = s.name || id;
-                    const icon = s.icon || '';
-                    const count = id === 'completed' ? completedCount : (countsMap[id] || 0);
-                    const span = document.createElement('span');
-                    span.className = `project-count project-count--${id}`;
-                    span.textContent = `${icon} ${name}: ${count}`;
-                    dynamicWrapper.appendChild(span);
+                if (dynamicWrapper) {
+                    // Render dynamic status badges in order
+                    dynamicWrapper.innerHTML = '';
+                    if (statuses && Array.isArray(statuses) && statuses.length > 0) {
+                        for (const s of statuses) {
+                            const id = s.id;
+                            const name = s.name || id;
+                            const icon = s.icon || '';
+                            const count = id === 'completed' ? completedCount : (countsMap[id] || 0);
+                            const span = document.createElement('span');
+                            span.className = `project-count project-count--${id}`;
+                            span.textContent = `${icon} ${name}: ${count}`;
+                            dynamicWrapper.appendChild(span);
+                        }
+                    } else {
+                        // Fallback to legacy labels
+                        const doing = countsMap['doing'] || 0;
+                        const shortTerm = countsMap['short_term'] || 0;
+                        const longTerm = countsMap['long_term'] || 0;
+                        const done = completedCount;
+                        dynamicWrapper.innerHTML = `
+                            <span class="project-count project-count--doing">${i18n("doing") || '进行中'}: ${doing}</span>
+                            <span class="project-count project-count--short-term">${i18n("shortTerm") || '短期'}: ${shortTerm}</span>
+                            <span class="project-count project-count--long-term">${i18n("longTerm") || '长期'}: ${longTerm}</span>
+                            <span class="project-count project-count--done">${i18n("done") || '已完成'}: ${done}</span>
+                        `;
+                    }
                 }
-            } else {
-                // Fallback to legacy labels
-                const doing = countsMap['doing'] || 0;
-                const shortTerm = countsMap['short_term'] || 0;
-                const longTerm = countsMap['long_term'] || 0;
-                const done = completedCount;
-                dynamicWrapper.innerHTML = `
-                    <span class="project-count project-count--doing">${i18n("doing") || '进行中'}: ${doing}</span>
-                    <span class="project-count project-count--short-term">${i18n("shortTerm") || '短期'}: ${shortTerm}</span>
-                    <span class="project-count project-count--long-term">${i18n("longTerm") || '长期'}: ${longTerm}</span>
-                    <span class="project-count project-count--done">${i18n("done") || '已完成'}: ${done}</span>
-                `;
+
+                // 计算进度： done / (sum of non-completed statuses + done)
+                if (progressBarInner && progressText) {
+                    const nonCompletedSum = Object.keys(countsMap).reduce((s, k) => k === 'completed' ? s : s + (countsMap[k] || 0), 0);
+                    const total = nonCompletedSum + completedCount;
+                    const percent = total === 0 ? 0 : Math.round((completedCount / total) * 100);
+                    progressBarInner.style.width = `${percent}%`;
+                    progressText.textContent = `${percent}%`;
+                }
             }
 
             // 更新番茄钟总数显示
@@ -1459,15 +1000,6 @@ export class ProjectPanel {
                 };
                 const focusText = totalFocus > 0 ? ` ⏱ ${formatMinutesToString(totalFocus)}` : '';
                 setTaskMetadataText(pomodoroEl, i18n("projectPomodoroTotal", { count: String(totalPomodoro), focus: String(focusText) }));
-            }
-
-            // 计算进度： done / (sum of non-completed statuses + done)
-            if (progressBarInner && progressText) {
-                const nonCompletedSum = Object.keys(countsMap).reduce((s, k) => k === 'completed' ? s : s + (countsMap[k] || 0), 0);
-                const total = nonCompletedSum + completedCount;
-                const percent = total === 0 ? 0 : Math.round((completedCount / total) * 100);
-                progressBarInner.style.width = `${percent}%`;
-                progressText.textContent = `${percent}%`;
             }
         } catch (error) {
             console.error("Failed to get project top-level task count:", error);
@@ -1941,7 +1473,7 @@ export class ProjectPanel {
                 month: 'short',
                 day: 'numeric'
             });
-            timeStr += ` → ${endStr}`;
+            timeStr += timeStr ? ` → ${endStr}` : `📅 ${endStr}`;
         }
 
         return timeStr || i18n("noDateWithIcon");
@@ -2875,6 +2407,29 @@ export class ProjectPanel {
         try {
             const menu = new Menu("projectMoreMenu");
 
+            const displayOptions: { key: 'showDates' | 'showTaskCounts' | 'showPomodoro' | 'showProgress'; label: string }[] = [
+                { key: 'showDates', label: 'projectPanelShowDates' },
+                { key: 'showTaskCounts', label: 'projectPanelShowTaskCounts' },
+                { key: 'showPomodoro', label: 'projectPanelShowPomodoro' },
+                { key: 'showProgress', label: 'projectPanelShowProgress' }
+            ];
+            menu.addItem({
+                icon: 'iconEye',
+                label: i18n('displaySettings'),
+                submenu: displayOptions.map(({ key, label }) => ({
+                    icon: this[key] ? 'iconSelect' : '',
+                    label: i18n(label),
+                    click: async () => {
+                        this[key] = !this[key];
+                        const scrollTop = this.projectsContainer.scrollTop;
+                        this.renderProjects(this.currentProjectsCache);
+                        this.projectsContainer.scrollTop = scrollTop;
+                        await this.savePanelSettings();
+                    }
+                }))
+            });
+            menu.addSeparator();
+
             // 添加分类管理
             menu.addItem({
                 icon: 'iconTags',
@@ -2968,92 +2523,6 @@ export class ProjectPanel {
         }
     }
 
-    /**
-     * 创建按状态分组的 DOM 元素，包含标题行（支持折叠/展开）和项目列表容器
-     */
-    private createStatusGroupElement(status: any, projects: any[]): HTMLElement {
-        const statusId = status.id || 'unknown';
-        const statusName = status.name || statusId;
-        const statusIcon = status.icon || '';
-        const collapsed = !!this.groupCollapsedState[statusId];
-
-        const groupWrapper = document.createElement('div');
-        groupWrapper.className = 'project-group';
-        groupWrapper.dataset.statusId = statusId;
-
-        const header = document.createElement('div');
-        header.className = 'project-group__header reminder-section-header';
-        header.dataset.collapsed = String(collapsed);
-        header.setAttribute('role', 'button');
-        header.setAttribute('tabindex', '0');
-        header.setAttribute('aria-expanded', String(!collapsed));
-
-        const titleSpan = document.createElement('span');
-        titleSpan.className = 'project-group__title reminder-section-header__title';
-        if (statusIcon) {
-            const iconSpan = document.createElement('span');
-            iconSpan.className = 'project-group__icon';
-            iconSpan.textContent = statusIcon;
-            titleSpan.appendChild(iconSpan);
-        }
-        titleSpan.appendChild(document.createTextNode(statusName));
-
-        const countSpan = document.createElement('span');
-        countSpan.className = 'reminder-section-header__count';
-        countSpan.textContent = String(projects.length);
-
-        const toggleIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        toggleIcon.classList.add('project-group__toggle-icon', 'reminder-section-header__arrow');
-        toggleIcon.setAttribute('aria-hidden', 'true');
-        toggleIcon.innerHTML = '<use xlink:href="#iconDown"></use>';
-
-        header.appendChild(titleSpan);
-        header.appendChild(countSpan);
-        header.appendChild(toggleIcon);
-
-        groupWrapper.appendChild(header);
-
-        const listContainer = document.createElement('div');
-        listContainer.className = 'project-group__list';
-        listContainer.style.cssText = 'display:flex; flex-direction:column; gap:6px; padding:6px;';
-
-        // 根据折叠状态决定是否隐藏
-        if (collapsed) {
-            listContainer.style.display = 'none';
-        }
-
-        projects.forEach((project: any) => {
-            const projectEl = this.createProjectElement(project);
-            listContainer.appendChild(projectEl);
-        });
-
-        const toggleGroup = () => {
-            const isCollapsedNow = !!this.groupCollapsedState[statusId];
-            this.groupCollapsedState[statusId] = !isCollapsedNow;
-            const isCollapsed = this.groupCollapsedState[statusId];
-            header.dataset.collapsed = String(isCollapsed);
-            header.setAttribute('aria-expanded', String(!isCollapsed));
-
-            if (isCollapsed) {
-                listContainer.style.display = 'none';
-            } else {
-                listContainer.style.display = 'flex';
-            }
-        };
-
-        header.addEventListener('click', toggleGroup);
-        header.addEventListener('keydown', (event: KeyboardEvent) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                toggleGroup();
-            }
-        });
-
-        groupWrapper.appendChild(listContainer);
-
-        return groupWrapper;
-    }
-
     private async showCategorySelectDialog() {
         const categories = await this.categoryManager.loadCategories();
 
@@ -3121,7 +2590,10 @@ export class ProjectPanel {
             this.currentSortCriteria = savedCriteria;
             this.syncLegacySortStateFromCriteria();
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
-            this.currentViewMode = settings.projectPanelViewMode || 'card';
+            this.showDates = settings.projectPanelShowDates !== false;
+            this.showTaskCounts = settings.projectPanelShowTaskCounts !== false;
+            this.showPomodoro = settings.projectPanelShowPomodoro !== false;
+            this.showProgress = settings.projectPanelShowProgress !== false;
         } catch (error) {
             console.error("Failed to restore project panel settings:", error);
         }
@@ -3137,7 +2609,10 @@ export class ProjectPanel {
             settings.projectPanelSortOrder = primary.order;
             settings.projectPanelSelectedCategories = this.selectedCategories;
             settings.projectPanelStatusFilter = this.currentTab;
-            settings.projectPanelViewMode = this.currentViewMode;
+            settings.projectPanelShowDates = this.showDates;
+            settings.projectPanelShowTaskCounts = this.showTaskCounts;
+            settings.projectPanelShowPomodoro = this.showPomodoro;
+            settings.projectPanelShowProgress = this.showProgress;
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error("Failed to save project panel settings:", error);
@@ -3215,7 +2690,7 @@ export class ProjectPanel {
         });
 
         rootProjects.forEach(project => {
-            const projectEl = this.createProjectElement(project);
+            const projectEl = this.createProjectListElement(project);
             this.projectsContainer.appendChild(projectEl);
         });
 
@@ -3388,7 +2863,7 @@ export class ProjectPanel {
         });
 
         folderProjects.forEach(project => {
-            const projectEl = this.createProjectElement(project);
+            const projectEl = this.createProjectListElement(project);
             this.applyDocumentTreeRowIndent(projectEl, depth + 1);
             childrenEl.appendChild(projectEl);
         });
@@ -3779,28 +3254,19 @@ export class ProjectPanel {
             width: 100%;
         `;
 
-        // 1. 起始和截止日期
-        let dateText = '';
-        if (project.startDate && project.endDate) {
-            dateText = `🗓️${project.startDate}-${project.endDate}`;
-        } else if (project.startDate) {
-            dateText = `🗓️${project.startDate}`;
-        } else if (project.endDate) {
-            dateText = i18n("projectDeadlineWithIcon", { date: String(project.endDate) });
-        }
-
-        if (dateText) {
+        // 日期显示沿用原卡片视图的开始天数与截止倒计时。
+        if (this.showDates && (project.startDate || project.endDate)) {
+            if (!this.statusManager.getStatusById(status)?.isArchived) {
+                if (project.endDate) {
+                    metaEl.appendChild(this.createCountdownElement(project.endDate, today));
+                } else if (project.startDate) {
+                    metaEl.appendChild(this.createStartedElement(project.startDate, today));
+                }
+            }
             const dateEl = document.createElement('span');
             dateEl.className = 'project-list-meta-date';
-            setTaskMetadataText(dateEl, dateText);
-            dateEl.style.cssText = `
-                color: var(--b3-theme-on-surface);
-                opacity: 0.7;
-                white-space: nowrap;
-                font-size: 11px;
-                display: inline-flex;
-                align-items: center;
-            `;
+            setTaskMetadataText(dateEl, this.formatProjectTime(project.startDate, project.endDate, today));
+            dateEl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;color:var(--b3-theme-on-surface);opacity:0.7;font-size:11px;';
             metaEl.appendChild(dateEl);
         }
 
@@ -3914,7 +3380,8 @@ export class ProjectPanel {
             metaEl.appendChild(statusEl);
         }
 
-        infoEl.appendChild(metaEl);
+        if (metaEl.hasChildNodes()) infoEl.appendChild(metaEl);
+        this.appendProjectStatistics(infoEl, project.id);
         contentEl.appendChild(infoEl);
         projectEl.appendChild(contentEl);
 

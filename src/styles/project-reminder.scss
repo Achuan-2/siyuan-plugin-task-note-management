@@ -764,22 +764,3 @@
         flex-shrink: 0;
     }
 }
-
-// 下拉框样式微调
-.project-view-mode-select {
-    cursor: pointer;
-    border: 1px solid var(--b3-theme-surface-lighter);
-    border-radius: 4px;
-    background-color: var(--b3-theme-surface);
-    color: var(--b3-theme-on-surface);
-    padding: 2px 25px 2px 8px !important;
-    outline: none;
-    font-size: 12px;
-    height: 24px;
-    transition: all 0.2s ease;
-
-    &:hover, &:focus {
-        border-color: var(--b3-theme-primary-light);
-        background-color: var(--b3-theme-surface-lighter);
-    }
-}

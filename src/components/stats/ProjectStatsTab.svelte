@@ -57,7 +57,7 @@
     const priorityOrderMap: Record<string, number> = { high: 3, medium: 2, low: 1, none: 0 };
 
     let loading = true;
-    let viewMode: "status" | "folder" = "status";
+    let viewMode: "status" | "folder" = "folder";
     let statusFilter = "all";
     let searchQuery = "";
     let statuses: any[] = [];
@@ -293,10 +293,6 @@
 
         statuses = projectManager.getStatusManager()?.getStatuses() || [];
         await reload();
-        // 与项目侧栏视图保持一致：侧栏为文件夹（列表）视图时，默认也使用文件夹视图
-        if (settings?.projectPanelViewMode === "list") {
-            viewMode = "folder";
-        }
         loading = false;
 
         window.addEventListener("projectUpdated", handleDataUpdated);

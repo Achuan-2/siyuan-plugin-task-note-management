@@ -233,6 +233,10 @@ export const DEFAULT_SETTINGS = {
     projectPanelSortOrder: 'desc',
     projectPanelSelectedCategories: [] as string[],
     projectPanelStatusFilter: 'all',
+    projectPanelShowDates: true,
+    projectPanelShowTaskCounts: true,
+    projectPanelShowPomodoro: true,
+    projectPanelShowProgress: true,
     reminderPanelSelectedCategories: [] as string[],
     reminderPanelShowProjectKanbanStatus: true,
     // 习惯面板筛选与排序
