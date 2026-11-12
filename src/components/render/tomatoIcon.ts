@@ -6,20 +6,24 @@ export const TOMATO_ICON_PATHS = {
     highlight: 'M5 13a6 6 0 0 0 3 5',
 } as const;
 
-/** 保留彩色版的填充、描边和层次，单色菜单仅用透明度区分部件。 */
+/** 菜单版沿用相同几何路径，以无填充的描边呈现。 */
 export function getTomatoIconLayers(mode: 'color' | 'monochrome' = 'color') {
-    const monochrome = mode === 'monochrome';
+    if (mode === 'monochrome') {
+        return Object.values(TOMATO_ICON_PATHS).map(d => ({
+            d, color: 'currentColor', fill: false, opacity: 1, width: 1.8,
+        }));
+    }
     return [
-        { d: TOMATO_ICON_PATHS.body, color: monochrome ? 'currentColor' : '#ef5b54', fill: true, opacity: monochrome ? 0.65 : 1, width: 0 },
-        { d: TOMATO_ICON_PATHS.leaves, color: monochrome ? 'currentColor' : '#4d9e57', fill: true, opacity: 1, width: 0 },
-        { d: TOMATO_ICON_PATHS.stem, color: monochrome ? 'currentColor' : '#397e44', fill: false, opacity: 1, width: 2 },
-        { d: TOMATO_ICON_PATHS.highlight, color: monochrome ? 'currentColor' : '#ffaaa1', fill: false, opacity: monochrome ? 0.35 : 1, width: 1.5 },
+        { d: TOMATO_ICON_PATHS.body, color: '#ef5b54', fill: true, opacity: 1, width: 0 },
+        { d: TOMATO_ICON_PATHS.leaves, color: '#4d9e57', fill: true, opacity: 1, width: 0 },
+        { d: TOMATO_ICON_PATHS.stem, color: '#397e44', fill: false, opacity: 1, width: 2 },
+        { d: TOMATO_ICON_PATHS.highlight, color: '#ffaaa1', fill: false, opacity: 1, width: 1.5 },
     ];
 }
 
 export function renderTomatoIconContent(mode: 'color' | 'monochrome' = 'color'): string {
     return getTomatoIconLayers(mode).map(layer => layer.fill
         ? `<path d="${layer.d}" fill="${layer.color}" fill-opacity="${layer.opacity}" stroke="none"/>`
-        : `<path d="${layer.d}" fill="none" stroke="${layer.color}" stroke-opacity="${layer.opacity}" stroke-width="${layer.width}" stroke-linecap="round"/>`
+        : `<path d="${layer.d}" fill="none" stroke="${layer.color}" stroke-opacity="${layer.opacity}" stroke-width="${layer.width}" stroke-linecap="round" stroke-linejoin="round"/>`
     ).join('');
 }
