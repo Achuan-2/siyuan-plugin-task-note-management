@@ -174,3 +174,11 @@ test('关闭全部统计时加载项目不读取任务数据，默认仍展示�
     assert.equal(metrics.counts, 0);
     assert.equal(metrics.pomodoro, 0);
 });
+
+test('番茄与专注时间选项开启时，即使累计时长为零也显示 0m', async () => {
+    const { panel } = fixture();
+    panel.countProjectTotalFocusTime = async () => 0;
+    panel.renderProjects([project()]);
+    await flush();
+    assert.ok(panel.projectsContainer.querySelector('.project-count--pomodoro').textContent.includes('⏱ 0m'));
+});

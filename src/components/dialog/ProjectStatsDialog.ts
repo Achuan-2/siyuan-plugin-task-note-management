@@ -74,11 +74,9 @@ export async function countProjectTotalFocusTime(plugin: any, projectId: string,
         const { PomodoroRecordManager } = await import("../dataManager/pomodoroRecord");
         const pomodoroManager = PomodoroRecordManager.getInstance(plugin);
         if (!pomodoroManager) return 0;
-        if ((pomodoroManager as any).initialize && typeof (pomodoroManager as any).initialize === 'function') {
-            await (pomodoroManager as any).initialize();
-        }
+        await pomodoroManager.initialize();
         const ids = new Set<string>();
-        Object.values(reminderData).forEach((r: any) => {
+        Object.values(reminderData || {}).forEach((r: any) => {
             if (r && r.projectId === projectId) {
                 ids.add(r.id);
                 if (r.repeat && r.repeat.instancePomodoroCount) {
@@ -87,13 +85,12 @@ export async function countProjectTotalFocusTime(plugin: any, projectId: string,
             }
         });
 
-        for (const date in pomodoroManager['records']) {
-            const record = pomodoroManager['records'][date];
-            if (!record || !record.sessions) continue;
-            for (const session of record.sessions) {
-                if (session && session.type === 'work' && session.completed && ids.has(session.eventId)) {
-                    totalMinutes += session.duration || 0;
-                }
+        // 历史会话按需加载，records 中可能没有 sessions；累计时长必须使用完整汇总索引。
+        // 每个事件只累计一次，同时包含重复任务尚未写入 instancePomodoroCount 的日期实例。
+        for (const [eventId, stats] of Object.entries(pomodoroManager.getEventStats())) {
+            const originalId = eventId.replace(/_\d{4}-\d{2}-\d{2}$/, '');
+            if (ids.has(eventId) || ids.has(originalId)) {
+                totalMinutes += stats.duration || 0;
             }
         }
     } catch (e) {

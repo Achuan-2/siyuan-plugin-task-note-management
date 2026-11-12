@@ -198,7 +198,7 @@
 
             pomodoro = await countProjectTotalPomodoro(plugin, project.id, reminderData);
             const focusMinutes = await countProjectTotalFocusTime(plugin, project.id, reminderData);
-            focusText = focusMinutes > 0 ? ` ⏱ ${formatMinutesShort(focusMinutes)}` : "";
+            focusText = ` ⏱ ${formatMinutesShort(focusMinutes)}`;
         } catch (e) {
             console.warn(`Failed to calculate project statistics: ${project.id}`, e);
         }

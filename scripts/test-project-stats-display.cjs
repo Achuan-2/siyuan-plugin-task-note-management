@@ -73,7 +73,9 @@ async function renderDialog({ statuses, startDate = '2026-11-10', groups = [] })
         }) } },
         '../../utils/icsSubscription': { getAllReminders: async () => ({}) },
         '../dataManager/projectManager': { ProjectManager: { getInstance: () => manager } },
-        '../dataManager/pomodoroRecord': { PomodoroRecordManager: { getInstance: () => ({ records: {} }) } },
+        '../dataManager/pomodoroRecord': { PomodoroRecordManager: { getInstance: () => ({
+            initialize: async () => {}, getEventStats: () => ({}),
+        }) } },
     });
     await dialog.showStatsDialogForProjects({}, '🎯', '统计项目', '统计', [project], 'project', {});
     return body.innerHTML;

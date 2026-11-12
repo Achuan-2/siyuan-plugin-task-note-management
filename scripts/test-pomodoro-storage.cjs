@@ -136,6 +136,45 @@ test('1000 日首次建摘要限制为 6 并发，释放明细；重启只读目
     assert.equal(warm.getDateSessions(date).length, 1);
 });
 
+test('项目专注时长读取完整索引，无需加载历史明细，包含子任务和重复实例且不重复计算', async () => {
+    const date = '2026-11-04';
+    const f = fixture({ [date]: record(date, [
+        session(date, 'root-session', 'root', { duration: 25 }),
+        session(date, 'child-session', 'child', { duration: 15 }),
+        session(date, 'partial', 'repeating_2026-11-03', { duration: 5, completed: false, count: 0 }),
+        session(date, 'countup', 'repeating_2026-11-04', { duration: 12.5, isCountUp: true, count: 0 }),
+        session(date, 'legacy', 'legacy-instance', { duration: 8 }),
+        session(date, 'unrelated', 'other-project', { duration: 100 }),
+        session(date, 'similar-prefix', 'repeating_other', { duration: 100 }),
+        session(date, 'in-progress', 'root', { duration: 50, inProgress: true }),
+        session(date, 'break', 'root', { duration: 5, type: 'shortBreak' }),
+    ]) });
+    const manager = f.manager();
+    await manager.initialize();
+    assert.equal(manager.getDateSessions(date).length, 0);
+    f.reset();
+
+    const relative = 'src/components/dialog/ProjectStatsDialog.ts';
+    const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
+    const method = source.statements.find(node => node.name?.getText(source) === 'countProjectTotalFocusTime');
+    const compiled = ts.transpileModule(method.getText(source).replace(/^export /, ''), {
+        compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
+    }).outputText;
+    const countFocus = new Function('require', `${compiled}; return countProjectTotalFocusTime;`)(() => ({
+        PomodoroRecordManager: { getInstance: () => manager },
+    }));
+    const reminders = {
+        root: { id: 'root', projectId: 'project' }, child: { id: 'child', projectId: 'project', parentId: 'root' },
+        repeating: { id: 'repeating', projectId: 'project', repeat: { instancePomodoroCount: { 'legacy-instance': 1 } } },
+        instance: { id: 'repeating_2026-11-04', projectId: 'project' },
+        other: { id: 'other-project', projectId: 'other-project' },
+    };
+    assert.equal(await countFocus({}, 'project', reminders), 65.5);
+    assert.equal(await countFocus({}, 'empty-project', reminders), 0);
+    assert.equal(f.stats.reads.length, 0);
+    assert.equal(manager.getDateSessions(date).length, 0);
+});
+
 test('指定日期重复刷新只读该文件，替换贡献而不重复累计', async () => {
     const f = fixture(twoDays()), m = f.manager(); await m.initialize(); f.reset();
     f.files.get('2026-11-04').sessions[0].duration = 40;

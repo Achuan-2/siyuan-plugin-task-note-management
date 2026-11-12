@@ -24,7 +24,7 @@ import { generateRandomColor } from "../../utils/uiUtils";
 import { ProjectFolderManager, ProjectFolder } from "../dataManager/projectFolderManager";
 import { ProjectFolderManageDialog } from "../dialog/ProjectFolderManageDialog";
 import { ProjectSelectorPopup } from "../dialog/ProjectSelectorPopup";
-import { showProjectStatsDialog, showFolderStatsDialog } from "../dialog/ProjectStatsDialog";
+import { showProjectStatsDialog, showFolderStatsDialog, countProjectTotalFocusTime as getProjectFocusMinutes } from "../dialog/ProjectStatsDialog";
 
 
 const PROJECT_PANEL_SORT_METHODS = new Set(['category', 'priority', 'time', 'startDate', 'endDate', 'created', 'title']);
@@ -998,7 +998,7 @@ export class ProjectPanel {
                     const mins = Math.floor(minutes % 60);
                     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
                 };
-                const focusText = totalFocus > 0 ? ` ⏱ ${formatMinutesToString(totalFocus)}` : '';
+                const focusText = ` ⏱ ${formatMinutesToString(totalFocus)}`;
                 setTaskMetadataText(pomodoroEl, i18n("projectPomodoroTotal", { count: String(totalPomodoro), focus: String(focusText) }));
             }
         } catch (error) {
@@ -1115,39 +1115,7 @@ export class ProjectPanel {
     }
 
     private async countProjectTotalFocusTime(projectId: string, reminderData: any): Promise<number> {
-        let totalMinutes = 0;
-        try {
-            const { PomodoroRecordManager } = await import("../dataManager/pomodoroRecord");
-            const pomodoroManager = PomodoroRecordManager.getInstance(this.plugin);
-            if (!pomodoroManager) return 0;
-            if ((pomodoroManager as any).initialize && typeof (pomodoroManager as any).initialize === 'function') {
-                await (pomodoroManager as any).initialize();
-            }
-            // Build set of ids to include
-            const ids = new Set<string>();
-            Object.values(reminderData).forEach((r: any) => {
-                if (r && r.projectId === projectId) {
-                    ids.add(r.id);
-                    if (r.repeat && r.repeat.instancePomodoroCount) {
-                        Object.keys(r.repeat.instancePomodoroCount).forEach(k => ids.add(k));
-                    }
-                }
-            });
-
-            // Sum durations across all sessions in records
-            for (const date in pomodoroManager['records']) {
-                const record = pomodoroManager['records'][date];
-                if (!record || !record.sessions) continue;
-                for (const session of record.sessions) {
-                    if (session && session.type === 'work' && session.completed && ids.has(session.eventId)) {
-                        totalMinutes += session.duration || 0;
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn("Failed to calculate project total focus duration:", e);
-        }
-        return totalMinutes;
+        return getProjectFocusMinutes(this.plugin, projectId, reminderData);
     }
     // 新增：添加拖拽功能
     private addDragFunctionality(projectEl: HTMLElement, project: any) {
