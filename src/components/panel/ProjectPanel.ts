@@ -893,7 +893,7 @@ export class ProjectPanel {
                 pomodoroEl.className = 'project-count project-count--pomodoro';
                 setTaskMetadataText(pomodoroEl, i18n('projectPomodoroLoading'));
                 pomodoroEl.style.cssText = `
-                    display:inline-flex;align-items:center;gap:2px;font-size:12px;
+                    display:inline-flex;align-items:center;gap:6px;font-size:12px;
                     color:var(--b3-theme-on-surface);opacity:0.8;background:rgba(231,76,60,0.1);
                     padding:2px 6px;border-radius:10px;border:1px solid rgba(231,76,60,0.2);white-space:nowrap;
                 `;

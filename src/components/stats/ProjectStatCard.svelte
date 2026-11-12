@@ -213,7 +213,7 @@
     .stat-item {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
         white-space: nowrap;
         background: rgba(231, 76, 60, 0.1);
         padding: 2px 6px;
