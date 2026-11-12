@@ -1282,7 +1282,7 @@ export class PomodoroTimer {
 
         try {
             const dialog = new Dialog({
-                title: `🍅 ${title}`,
+                title: renderPomodoroIcons(`🍅 ${title}`),
                 content: `
                     <div class="pomodoro-note-dialog" style="padding: 16px;">
                         <div style="font-weight: 600; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(taskTitle)}">
@@ -1449,7 +1449,7 @@ export class PomodoroTimer {
                     </style>
                 </head>
                 <body>
-                    <div class="title">🍅 ${this.escapeHtml(title)}</div>
+                    <div class="title">${renderPomodoroIcons(`🍅 ${title}`)}</div>
                     <div class="task" title="${this.escapeHtml(taskTitle)}">${this.escapeHtml(taskTitle)}</div>
                     <textarea id="note" autofocus placeholder="${i18n("pomodoroNotePlaceholder")}">${this.escapeHtml(session.note || '')}</textarea>
                     <div class="actions">
@@ -1549,7 +1549,7 @@ export class PomodoroTimer {
             }
 
             const dialog = new Dialog({
-                title: `${icon} ${title}`,
+                title: renderPomodoroIcons(`${icon} ${title}`),
                 content: `<div style="padding: 20px; text-align: center; font-size: 16px;">${message}</div>`,
                 width: "360px",
                 height: "auto",
@@ -3381,6 +3381,7 @@ export class PomodoroTimer {
 
         // 创建 SVG 圆环
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('pomodoro-progress-ring');
         svg.style.cssText = `
             width: 80px;
             height: 80px;

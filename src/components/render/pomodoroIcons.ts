@@ -1,6 +1,8 @@
+import randomRest from './icons/randomRest.svg?raw';
+
 /** 内联彩色 SVG 可同时用于思源面板和没有宿主图标库的独立窗口。 */
 function svg(content: string): string {
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="pomodoro-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" style="display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex-shrink:0;pointer-events:none">${content}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="pomodoro-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false" style="display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }
 
 function line(content: string, color = '#528bd4'): string {
@@ -24,13 +26,20 @@ const edit = svg('<path fill="#f6c46c" d="m4 15 11-11 5 5L9 20l-6 1Z"/><path fil
 const settings = svg('<path fill="#90a4c9" d="m10 2-1 3-3-1-2 3 2 3-3 1v4l3 1-1 3 3 2 3-2 1 3h4l1-3 3 1 2-3-2-3 3-1v-4l-3-1 1-3-3-2-3 2-1-3Z" transform="translate(-1 -1)"/><circle cx="12" cy="12" r="4" fill="#e6effb"/>');
 const chartUp = svg('<rect x="2" y="2" width="20" height="20" rx="3" fill="#e9f2fc"/>' + line('<path d="m5 17 5-6 4 3 5-8"/>', '#69b49a'));
 const chartDown = svg('<rect x="2" y="2" width="20" height="20" rx="3" fill="#e9f2fc"/>' + line('<path d="m5 7 5 6 4-3 5 8"/>', '#e68f92'));
+const tomato = svg('<path fill="#ef5b54" d="M8 7C4 6 2 9 2 13c0 5 4 9 10 9s10-4 10-9c0-4-3-7-7-6Z"/><path fill="#4d9e57" d="m12 7-6-3 2 5-3 2 5-1 2 3 2-3 5 1-3-3 2-4Z"/>' + line('<path d="M12 7V4c0-1 1-2 2-2"/>', '#397e44') + line('<path d="M5 13a6 6 0 0 0 3 5"/>', '#ffaaa1'));
+const shortBreak = svg('<path d="M16 9h2a3 3 0 0 1 0 6h-2" fill="none" stroke="#59a98a" stroke-width="2"/><path d="M3 8h13v7a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5Z" fill="#77c8a7"/><ellipse cx="9.5" cy="8" rx="6.5" ry="2" fill="#d8f0df"/><ellipse cx="9.5" cy="8" rx="4.5" ry="1" fill="#78a95f"/>' + line('<path d="M6 2v2m6-2v2M3 22h14"/>', '#59a98a'));
+const longBreak = svg('<rect x="5" y="3" width="14" height="13" rx="4" fill="#c1ade7"/><path d="M3 10a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2v-6a2 2 0 0 0-4 0v3H5v-3a2 2 0 0 0-2-2Z" fill="#9678c5"/>' + line('<path d="M5 20v2m14-2v2"/>', '#7259a3') + '<path d="M7 13h10v3H7Z" fill="#bda5df"/>');
+const timer = svg('<circle cx="12" cy="14" r="8" fill="#e3effc" stroke="#6498cc" stroke-width="1.8"/>' + line('<path d="M10 2h4m-2 8v4l3 2M5 5l2 2"/>', '#527eb1'));
 
 function arrow(rotation: number): string {
     return svg(`<g transform="rotate(${rotation} 12 12)"><rect x="2" y="2" width="20" height="20" rx="4" fill="#78b6e6"/>${line('<path d="M6 12h12m-5-5 5 5-5 5"/>', '#fff')}</g>`);
 }
 
-/** 操作控件使用 SVG；番茄、计时、休息阶段及随机微休息保持原生 emoji。 */
+/** 操作与阶段图标统一使用内联 SVG，独立窗口注入同一份图标映射。 */
 export const POMODORO_ICON_SVGS: Record<string, string> = {
+    '🍅': tomato, '🎲': randomRest, '🍵': shortBreak, '☕': shortBreak,
+    '🧘': longBreak, '🧘‍♀️': longBreak, '🧘‍♂️': longBreak,
+    '⏱': timer, '⏱️': timer,
     '🔊': sound, '🔇': mute,
     '📌': pin, '⭕': mini, '🔄': switchPhase, '▶️': play,
     '⏸': pause, '⏸️': pause, '⏹': stop, '⏹️': stop, '⋯': more,

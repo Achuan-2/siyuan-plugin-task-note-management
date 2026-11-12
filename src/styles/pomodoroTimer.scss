@@ -51,7 +51,7 @@
         }
 
         // SVG 圆环样式
-        svg {
+        .pomodoro-progress-ring {
             circle {
                 transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease;
             }
@@ -646,7 +646,7 @@
             height: 30vh !important;
             flex-shrink: 0 !important;
 
-            svg {
+            > .pomodoro-progress-ring {
                 width: 30vh !important;
                 height: 30vh !important;
             }
@@ -799,7 +799,7 @@
                     width: 250px !important;
                     height: 250px !important;
 
-                    svg {
+                    > .pomodoro-progress-ring {
                         width: 250px !important;
                         height: 250px !important;
                     }
