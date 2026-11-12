@@ -362,9 +362,19 @@ test('公共签名识别原地设置修改、节假日、显示选项和日期�
 function boardRenderingClass(renderTask) {
     const relative = 'src/components/panel/ProjectKanbanView.ts';
     const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
-    const names = ['completedSubtaskCollapse', 'isTaskCollapsed', 'renderTasksInColumn', 'renderTaskTree', 'renderColumn', 'createTaskElement'];
+    const names = ['taskCollapseOverrides', 'completedSubtaskCollapse', 'isTaskCollapsed', 'renderTasksInColumn', 'renderTaskTree', 'renderColumn', 'createTaskElement'];
     const members = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ProjectKanbanView').members;
-    const code = ts.transpileModule(`class Board { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} }`, {
+    // 直接执行 loadTasks 内的真实折叠初始化，覆盖重新读取历史 fold 后的行为。
+    let reloadCollapseBlock;
+    const findCollapseBlock = node => {
+        if (ts.isTryStatement(node) && node.catchClause?.getText(source).includes('Failed to set tasks collapsed by default')) {
+            reloadCollapseBlock = node.tryBlock.getText(source);
+        }
+        ts.forEachChild(node, findCollapseBlock);
+    };
+    findCollapseBlock(members.find(node => node.name?.getText(source) === 'loadTasks'));
+    assert.ok(reloadCollapseBlock, '找不到 loadTasks 的折叠初始化');
+    const code = ts.transpileModule(`class Board { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} reloadCollapseState() ${reloadCollapseBlock} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
     return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'TaskRenderer', 'getLogicalDateString', code + '; return Board;')(
@@ -384,6 +394,63 @@ function boardRenderingFixture(tasks) {
     const content = { appendChild: element => rendered.push(element) };
     return { board, content, rendered, indexes };
 }
+
+test('看板手动展开父任务后，子任务完成并重载历史 fold 不会折叠父任务', () => {
+    const callbacksById = new Map();
+    const Board = boardRenderingClass((task, _context, callbacks) => {
+        callbacksById.set(task.id, callbacks);
+        return { dataset: {} };
+    });
+    for (const [showCompletedSubtasks, hasGrandchild] of [[false, false], [true, false], [false, true], [true, true]]) {
+        const stored = [
+            { id: 'parent', completed: false, fold: true },
+            { id: 'child', parentId: 'parent', completed: false },
+            { id: 'sibling', parentId: 'parent', completed: false },
+            ...(hasGrandchild ? [{ id: 'grandchild', parentId: 'child', completed: false }] : []),
+        ];
+        const rendered = [];
+        const board = Object.assign(new Board(), {
+            tasks: structuredClone(stored), collapsedTasks: new Set(), plugin: {}, showCompletedSubtasks,
+            isAbandonedStatus: () => false, getActiveSortCriteria: () => [], sortByCriteria: () => 0,
+            renderKanban() {},
+        });
+        const content = { appendChild: el => rendered.push(el.dataset.taskId) };
+        board.reloadCollapseState();
+        board.renderTasksInColumn(content, board.tasks);
+        assert.deepEqual(rendered, ['parent']);
+        callbacksById.get('parent').onCollapseClick(board.tasks[0], false, { target: { closest: () => null } });
+
+        // 模拟完成子任务后重新读取数据，父任务自身仍未完成且历史 fold 仍为 true。
+        stored[1].completed = true;
+        if (hasGrandchild) stored[3].completed = true;
+        board.tasks = structuredClone(stored);
+        board.completedSubtaskCollapse.sync(board.tasks);
+        board.reloadCollapseState();
+        rendered.length = 0;
+        board.renderTasksInColumn(content, board.tasks);
+        assert.deepEqual(rendered, showCompletedSubtasks ? ['parent', 'child', 'sibling'] : ['parent', 'sibling']);
+        assert.equal(board.tasks[0].completed, false);
+
+        const reopened = Object.assign(new Board(), { tasks: structuredClone(stored), collapsedTasks: new Set() });
+        reopened.reloadCollapseState();
+        assert.equal(reopened.isTaskCollapsed(stored[0], true), true);
+    }
+});
+
+test('看板手动折叠优先于历史展开记录，筛选隐藏再显示后仍保留本次选择', () => {
+    let callbacks;
+    const Board = boardRenderingClass((_task, _context, cb) => { callbacks = cb; return { dataset: {} }; });
+    const tasks = [{ id: 'parent', fold: false }, { id: 'child', parentId: 'parent' }];
+    const board = Object.assign(new Board(), { tasks, collapsedTasks: new Set(), plugin: {}, renderKanban() {} });
+    board.reloadCollapseState();
+    board.createTaskElement(tasks[0]);
+    callbacks.onCollapseClick(tasks[0], true, { target: { closest: () => null } });
+    board.tasks = [];
+    board.reloadCollapseState();
+    board.tasks = structuredClone(tasks);
+    board.reloadCollapseState();
+    assert.equal(board.isTaskCollapsed(board.tasks[0], true), true);
+});
 
 test('侧栏已完成子任务覆盖历史展开状态，手动展开保留到关闭视图', () => {
     const Panel = panelClass();

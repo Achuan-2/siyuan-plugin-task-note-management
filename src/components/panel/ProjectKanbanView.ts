@@ -130,6 +130,8 @@ export class ProjectKanbanView {
     private searchKeyword: string = '';
     private searchInput: HTMLInputElement;
     private collapsedTasks: Set<string> = new Set();
+    // 当前视图的手动选择优先于历史 fold；刷新或切换筛选时保留。
+    private taskCollapseOverrides = new Map<string, boolean>();
     private completedSubtaskCollapse = new CompletedSubtaskCollapseState();
     // 临时保存要在下一次渲染后恢复的父任务折叠状态
     private _preserveCollapsedTasks: Set<string> | null = null;
@@ -3691,6 +3693,11 @@ export class ProjectKanbanView {
             });
 
             this.completedSubtaskCollapse.sync(this.tasks);
+            // 此处尚未应用搜索和分组筛选，只清理确实已不存在的任务。
+            const loadedTaskIds = new Set(this.tasks.map(task => task.id));
+            for (const id of this.taskCollapseOverrides.keys()) {
+                if (!loadedTaskIds.has(id)) this.taskCollapseOverrides.delete(id);
+            }
 
             // 任务数量大时，让出主线程以避免阻塞用户输入和绘制
             if (this.tasks.length > 100) {
@@ -8230,6 +8237,7 @@ export class ProjectKanbanView {
 
     private isTaskCollapsed(task: any, hasChildren: boolean): boolean {
         return this.completedSubtaskCollapse.getCollapsed(task, hasChildren)
+            ?? this.taskCollapseOverrides.get(task.id)
             ?? this.collapsedTasks.has(task.id);
     }
 
@@ -8699,6 +8707,7 @@ export class ProjectKanbanView {
             },
             onCollapseClick: (task: any, collapsed: boolean, e: MouseEvent) => {
                 this.completedSubtaskCollapse.setExpanded(task, !collapsed);
+                this.taskCollapseOverrides.set(task.id, collapsed);
                 // collapsed=true 表示要折叠，collapsed=false 表示要展开
                 if (collapsed) {
                     this.collapsedTasks.add(task.id);
@@ -11660,6 +11669,7 @@ export class ProjectKanbanView {
                             await TaskRenderer.preloadNoteImages(savedTaskForView.note || '');
                             if (!hadSiblingBefore) {
                                 this.collapsedTasks.delete(savedTaskParentId);
+                                this.taskCollapseOverrides.set(savedTaskParentId, false);
                             }
                             const refreshed = this.refreshTaskTreeAround(savedTaskParentId);
                             if (!refreshed) {
