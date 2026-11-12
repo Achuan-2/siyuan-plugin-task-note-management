@@ -4326,6 +4326,7 @@ export default class ReminderPlugin extends Plugin {
         });
         this.frontendReminders = new FrontendReminderService({
             owner: this.instanceId,
+            isReady: () => this.kernel.state.code === 2,
             bind: (method, handler) => this.kernel.rpc.bind(method, handler),
             unbind: (method, handler) => this.kernel.rpc.unbind(method, handler),
             call: (method, params) => params === undefined ? this.kernel.rpc.call[method]() : this.kernel.rpc.call[method](params),
@@ -4347,6 +4348,7 @@ export default class ReminderPlugin extends Plugin {
             onError: error => console.warn("Failed to receive kernel reminder:", error)
         });
         const refresh = () => {
+            if (this.kernel.state.code !== 2) return;
             void this.kernel.rpc.call['refresh-reminder-schedule']().catch(() => {});
             void this.frontendReminders?.recover();
             void this.desktopEmails?.recover();
@@ -4376,12 +4378,16 @@ export default class ReminderPlugin extends Plugin {
         this.desktopEmails = new DesktopEmailService({
             owner: this.instanceId,
             canSend: () => !this.isInMobileApp && typeof (window as any).require === 'function',
+            isReady: () => this.kernel.state.code === 2,
+            isEnabled: () => this.settings?.reminderEmailEnabled === true && this.settings.reminderEmailTransport === 'smtp',
             bind: (method, handler) => this.kernel.rpc.bind(method, handler),
             unbind: (method, handler) => this.kernel.rpc.unbind(method, handler),
             call: (method, params) => params === undefined ? this.kernel.rpc.call[method]() : this.kernel.rpc.call[method](params),
             send: (settings, title, message) => this.getDesktopSmtpSender().send(settings, title, message),
             close: () => this.desktopSmtpSender?.close(),
-            onError: () => console.warn("Desktop SMTP email sending failed; kernel will schedule retry")
+            onError: stage => console.warn(stage === 'send'
+                ? "Desktop SMTP email sending failed; kernel will schedule retry"
+                : "Failed to recover pending SMTP emails from kernel")
         });
         this.desktopEmails.start();
         this.frontendReminders.start();

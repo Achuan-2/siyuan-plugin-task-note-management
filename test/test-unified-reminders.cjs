@@ -34,14 +34,16 @@ function fixture(t, overrides = {}) {
     const logger = { info: async () => {}, warn: async () => {}, error: async error => errors.push(error) };
     let service = new KernelReminderService(storage, client, logger, runtime);
     function receiver(owner, options = {}) {
-        const shown = [], marked = [], dates = [];
+        const shown = [], marked = [], dates = [], calls = [];
         let rpcFailure = false;
         const local = new Set();
         const frontend = new FrontendReminderService({
-            owner, canReceive: () => true,
+            owner, canReceive: () => true, isReady: () => options.ready !== false,
             bind(method, handler) { if (!handlers.has(method)) handlers.set(method, new Set()); handlers.get(method).add(handler); },
             unbind(method, handler) { handlers.get(method)?.delete(handler); },
             call: async (method, params) => {
+                calls.push(method);
+                if (options.emptyResponse) return undefined;
                 if (rpcFailure) throw new Error('kernel not ready');
                 if (method === 'get-reminder-events') return service.getFrontendEvents();
                 if (method === 'claim-reminder-event') return service.claimFrontendEvent(params.key, params.owner);
@@ -54,7 +56,7 @@ function fixture(t, overrides = {}) {
             show: async event => { if (options.failShow) throw new Error('UI failed'); shown.push(clone(event)); },
             onLogicalDate: date => dates.push(date), onError: error => errors.push(error)
         });
-        return { frontend, shown, marked, dates, setRpcFailure(value) { rpcFailure = value; } };
+        return { frontend, shown, marked, dates, calls, setRpcFailure(value) { rpcFailure = value; } };
     }
     return { files, storage, service, broadcasts, errors, requests, receiver,
         setFailure(value) { failWebhook = value; },
@@ -144,6 +146,32 @@ test('内核尚未就绪时前端不建立计时器，后续恢复连接可以�
     front.setRpcFailure(true); front.frontend.start(); await front.frontend.recover();
     assert.equal(front.shown.length, 0);
     front.setRpcFailure(false); await front.frontend.recover();
+    assert.equal(front.shown.length, 1);
+    front.frontend.stop();
+});
+
+test('内核加载中不调用 RPC，运行后仍可补取提醒', async t => {
+    const f = fixture(t), options = { ready: false };
+    const front = f.receiver('early-window', options);
+    front.frontend.start(); await front.frontend.recover();
+    assert.deepEqual(front.calls, []);
+    assert.deepEqual(f.errors, []);
+    options.ready = true;
+    await front.frontend.recover();
+    assert.equal(front.shown.length, 1);
+    front.frontend.stop();
+});
+
+test('补取 RPC 返回空结果时不读取 logicalDate，后续响应恢复后正常展示', async t => {
+    const f = fixture(t), options = { emptyResponse: true };
+    const front = f.receiver('reconnecting-window', options);
+    front.frontend.start(); await front.frontend.recover();
+    assert.deepEqual(f.errors, []);
+    assert.deepEqual(front.dates, []);
+    assert.deepEqual(front.shown, []);
+    options.emptyResponse = false;
+    await front.frontend.recover();
+    assert.deepEqual([...new Set(front.dates)], ['2026-10-08']);
     assert.equal(front.shown.length, 1);
     front.frontend.stop();
 });

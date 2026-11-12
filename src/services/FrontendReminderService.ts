@@ -5,6 +5,7 @@ interface FrontendReminderHost {
     bind(method: string, handler: (...args: any[]) => any): void;
     unbind(method: string, handler: (...args: any[]) => any): void;
     call(method: string, params?: any): Promise<any>;
+    isReady(): boolean;
     canReceive(): boolean;
     hasNotified(event: ReminderDueEvent): Promise<boolean>;
     markNotified(event: ReminderDueEvent): Promise<void>;
@@ -21,13 +22,13 @@ export class FrontendReminderService {
     private shown = new Set<string>();
     private logicalDate = '';
     private readonly onDue = (params: { events: ReminderDueEvent[] }) => this.receive(params?.events);
-    private readonly onDay = (event: { logicalDate: string }) => this.updateLogicalDate(event.logicalDate);
+    private readonly onDay = (event?: { logicalDate: string }) => this.updateLogicalDate(event?.logicalDate);
     private readonly onData = () => { void this.recover(); };
 
     constructor(private readonly host: FrontendReminderHost) {}
 
-    private updateLogicalDate(date: string): void {
-        if (!this.running || !date) return;
+    private updateLogicalDate(date?: string): void {
+        if (!this.running || typeof date !== 'string' || !date) return;
         if (this.logicalDate !== date) this.shown.clear();
         this.logicalDate = date;
         this.host.onLogicalDate(date);
@@ -52,12 +53,13 @@ export class FrontendReminderService {
 
     /** 启动、内核就绪和连接恢复时补取；普通时间提醒仅补当前分钟。 */
     public recover(): Promise<void> {
-        if (!this.running) return Promise.resolve();
+        if (!this.running || !this.host.isReady()) return Promise.resolve();
         if (this.recovery) return this.recovery;
         this.recovery = (async () => {
             try {
                 const snapshot: ReminderEventSnapshot = await this.host.call('get-reminder-events');
-                if (!this.running) return;
+                // 启动或重连期间 RPC 可能没有结果，等待内核就绪事件再次补取。
+                if (!this.running || !snapshot) return;
                 this.updateLogicalDate(snapshot.logicalDate);
                 await this.receive(snapshot.events);
             } catch (error) { if (this.running) this.host.onError(error); }

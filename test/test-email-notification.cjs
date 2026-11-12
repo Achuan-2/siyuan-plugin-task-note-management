@@ -300,7 +300,7 @@ test('桌面 SMTP 接收器独立发送、确认并在卸载时解绑，浏览�
         : method === 'claim-smtp-email' ? f.scheduler.claimDesktopEmail(params.key, params.owner, now())
         : f.scheduler.finishDesktopEmail(params.key, params.owner, params.sent, now());
     const host = {
-        owner: 'desktop', canSend: () => true, call,
+        owner: 'desktop', canSend: () => true, isReady: () => true, isEnabled: () => true, call,
         bind: (method, handler) => handlers.set(method, handler), unbind: method => handlers.delete(method),
         send: async (settings, title, message) => sends.push({ settings, title, message }),
         close: () => closed++, onError: () => assert.fail('unexpected delivery failure')
@@ -316,4 +316,69 @@ test('桌面 SMTP 接收器独立发送、确认并在卸载时解绑，浏览�
     assert.equal(closed, 1);
     new DesktopEmailService({ ...host, canSend: () => false }).start();
     assert.equal(handlers.size, 0);
+});
+
+function desktopReceiverFixture() {
+    const calls = [], sends = [], errors = [], handlers = new Map();
+    const state = { ready: true, enabled: true, keys: ['mail-1'], rpcFailure: false, sendFailure: false };
+    const service = new DesktopEmailService({
+        owner: 'desktop', canSend: () => true, isReady: () => state.ready, isEnabled: () => state.enabled,
+        bind: (method, handler) => handlers.set(method, handler), unbind: method => handlers.delete(method),
+        call: async (method, params) => {
+            calls.push({ method, params });
+            if (state.rpcFailure) throw new Error('kernel disconnected');
+            if (method === 'get-smtp-email-events') return state.keys;
+            if (method === 'claim-smtp-email') return { settings: {}, title: '标题', message: '正文' };
+            assert.equal(method, 'finish-smtp-email');
+        },
+        send: async () => { if (state.sendFailure) throw new Error('send failed'); sends.push('sent'); },
+        close: () => {}, onError: stage => errors.push(stage)
+    });
+    return { service, state, calls, sends, errors, handlers };
+}
+
+for (const gate of ['enabled', 'ready']) {
+    test(`SMTP ${gate === 'enabled' ? '关闭' : '内核未就绪'}时不补取、不发送、不报错，恢复后可发送`, async () => {
+        const f = desktopReceiverFixture();
+        f.state[gate] = false;
+        f.service.start(); await f.service.recover();
+        f.handlers.get('reminder-schedule-updated')(); await f.service.recover();
+        assert.deepEqual(f.calls, []);
+        assert.deepEqual(f.sends, []);
+        assert.deepEqual(f.errors, []);
+        f.state[gate] = true;
+        await f.service.recover();
+        assert.equal(f.sends.length, 1);
+        assert.equal(f.calls.at(-1).params.sent, true);
+        f.service.stop();
+    });
+}
+
+test('SMTP 补取返回空结果时不报发送失败，后续补取仍可发送', async () => {
+    const f = desktopReceiverFixture();
+    f.state.keys = undefined;
+    f.service.start(); await f.service.recover();
+    assert.deepEqual(f.sends, []);
+    assert.deepEqual(f.errors, []);
+    f.state.keys = ['mail-1'];
+    await f.service.recover();
+    assert.equal(f.sends.length, 1);
+    f.service.stop();
+});
+
+test('SMTP 区分内核通信失败和实际发送失败，发送失败仍交内核重试', async () => {
+    const f = desktopReceiverFixture();
+    f.state.rpcFailure = true;
+    f.service.start(); await f.service.recover();
+    assert.deepEqual(f.errors, ['recover']);
+    f.state.rpcFailure = false;
+    f.state.sendFailure = true;
+    await f.service.recover();
+    assert.deepEqual(f.errors, ['recover', 'send']);
+    assert.equal(f.calls.at(-1).params.sent, false);
+    f.state.sendFailure = false;
+    await f.service.recover();
+    assert.equal(f.sends.length, 1);
+    assert.equal(f.calls.at(-1).params.sent, true);
+    f.service.stop();
 });
