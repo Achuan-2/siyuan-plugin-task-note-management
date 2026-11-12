@@ -13,7 +13,8 @@ const grouping = {};
 new Function('exports', compile(fs.readFileSync(path.join(root, 'src/utils/reminderGrouping.ts'), 'utf8')))(grouping);
 const { orderRemindersByGroup, normalizeReminderGroupMode } = grouping;
 const source = ts.createSourceFile('ReminderPanel.ts', fs.readFileSync(path.join(root, 'src/components/panel/ReminderPanel.ts'), 'utf8'), ts.ScriptTarget.Latest, true);
-const names = ['getReminderGroup', 'createReminderGroupHeader', 'renderRemindersIteratively', 'isSameNonPrioritySortGroup', 'handleOptimisticSavedReminder'];
+const names = ['getReminderGroup', 'getReminderDisplayGroup', 'getReminderTodayGroup', 'createTodayGroupHeader',
+    'createReminderGroupHeader', 'renderRemindersIteratively', 'isSameNonPrioritySortGroup', 'handleOptimisticSavedReminder'];
 const members = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ReminderPanel').members;
 const methods = members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n');
 
@@ -30,10 +31,11 @@ class Element {
     }
     querySelector(selector) { return this.parts?.get(selector) || null; }
     setAttribute(name, value) { this.attributes[name] = value; }
+    getAttribute(name) { return this.attributes[name]; }
     addEventListener(name, callback) { this.events[name] = callback; }
 }
-const Panel = new Function('i18n', 'getRelativeDateString', 'getLogicalDateString', 'document', 'parseReminderInstanceId', compile(`class Panel { ${methods} }`) + ';return Panel;')(
-    key => key, () => '2026-11-13', () => today, { createElement: () => new Element() }, () => null,
+const Panel = new Function('i18n', 'getRelativeDateString', 'getLogicalDateString', 'document', 'parseReminderInstanceId', 'renderTaskMetadataText', compile(`class Panel { ${methods} }`) + ';return Panel;')(
+    key => key, () => '2026-11-13', () => today, { createElement: () => new Element() }, () => null, value => value,
 );
 function fixture(mode = 'date') {
     const rows = new Map();
@@ -48,6 +50,7 @@ function fixture(mode = 'date') {
         shouldTreatOnlyStartDateAsDeadline: task => !task.startOnly,
         getReminderLogicalDate: (date, time) => time === '01:00' ? '2026-11-11' : date,
         isTodayLikeView: () => false, isTaskCollapsed: () => false,
+        isDailyDessertTaskForDate: task => !!task.isAvailableToday,
         getActiveSortCriteria: () => [{ method: 'priority', order: 'asc' }],
         createReminderRenderIndexes(tasks) {
             return { visible: { byId: new Map(tasks.map(task => [task.id, task])), children: id => tasks.filter(task => task.parentId === id) } };
@@ -60,8 +63,17 @@ function fixture(mode = 'date') {
             return row;
         },
         reconcileReminderElements(elements) { this.elements = elements; },
-        remindersContainer: { querySelectorAll: () => [...rows.values()] },
     });
+    panel.remindersContainer = {
+        querySelector: selector => (panel.elements || []).find(element => selector === `#${element.id}`) || null,
+        querySelectorAll(selector) {
+            const className = selector.match(/^\.([\w-]+)/)?.[1];
+            const attributes = [...selector.matchAll(/\[data-([\w-]+)="([^"]*)"\]/g)];
+            return [...new Set([...rows.values(), ...(panel.elements || [])])].filter(element =>
+                (!className || element.classList.contains(className)) && attributes.every(([, name, value]) =>
+                    element.dataset[name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())] === value));
+        },
+    };
     return { panel, rows };
 }
 const ids = tasks => tasks.map(task => task.id);
@@ -175,4 +187,67 @@ test('分组视图编辑或新建子任务后重算组头，仍自动展开父�
     assert.equal(panel.userExpandedTasks.has('parent'), true);
     assert.equal(panel.collapsedTasks.has('parent'), false);
     assert.equal(panel.optimisticUpdatesCache.get('child').priority, 'high');
+});
+
+function todayFixture(mode = 'priority') {
+    const result = fixture(mode);
+    result.panel.currentTab = 'today';
+    result.panel.isTodayLikeView = () => true;
+    const tasks = [
+        { id: 'daily-high', priority: 'high', isAvailableToday: true, projectId: 'a', categoryId: 'a', date: today },
+        { id: 'today-low', priority: 'low', projectId: 'b', categoryId: 'b', date: today },
+        { id: 'daily-low', priority: 'low', isAvailableToday: true, projectId: 'b', categoryId: 'b', date: today },
+        { id: 'today-high', priority: 'high', projectId: 'a', categoryId: 'a', date: today },
+        { id: 'child', parentId: 'today-low', priority: 'high', isAvailableToday: true },
+    ];
+    result.render = () => {
+        const ordered = orderRemindersByGroup(tasks, task => result.panel.getReminderDisplayGroup(task, today));
+        result.panel.currentRemindersCache = ordered;
+        result.panel.renderRemindersIteratively(ordered, new Map(), today);
+    };
+    return result;
+}
+
+test('今日任务的四种分组均保留今日任务 / 每日可做两级，子任务跟随根任务', () => {
+    for (const mode of ['project', 'category', 'date', 'priority']) {
+        const { panel, rows, render } = todayFixture(mode);
+        render();
+        const headers = panel.elements.filter(element => !element.dataset.reminderId);
+        assert.deepEqual(headers.filter(header => !header.dataset.reminderTodayGroup).map(header => header.dataset.reminderGroup), ['today', 'daily']);
+        assert.deepEqual([...new Set(headers.filter(header => header.dataset.reminderTodayGroup).map(header => header.dataset.reminderTodayGroup))], ['today', 'daily']);
+        assert.equal(rows.get('child').dataset.reminderGroup, 'today');
+        assert.equal(rows.get('child').dataset.reminderSubgroup, rows.get('today-low').dataset.reminderSubgroup);
+        const dailyIndex = panel.elements.findIndex(element => element.dataset.reminderGroup === 'daily' && !element.dataset.reminderId);
+        assert.ok(panel.elements.slice(0, dailyIndex).every(element => element.dataset.reminderId !== 'daily-high'));
+        assert.ok(panel.elements.slice(dailyIndex).every(element => element.dataset.reminderId !== 'today-high'));
+    }
+});
+
+test('同名二级组独立折叠，一级折叠隐藏组头和任务，展开保留二级折叠状态', () => {
+    const { panel, rows, render } = todayFixture();
+    render();
+    const todayHigh = panel.elements.find(element => !element.dataset.reminderId && element.dataset.reminderGroup === 'today/priority:high');
+    todayHigh.events.click();
+    assert.equal(rows.get('today-high').hidden, true);
+    assert.equal(rows.get('daily-high').hidden, false);
+    panel.elements.find(element => element.id === 'today-tasks-section').events.click();
+    assert.equal(rows.get('today-low').hidden, true);
+    assert.equal(rows.get('child').hidden, true);
+    assert.equal(todayHigh.hidden, true);
+    assert.equal(rows.get('daily-high').hidden, false);
+    render();
+    assert.equal(rows.get('today-low').hidden, true);
+    panel.elements.find(element => element.id === 'today-tasks-section').events.click();
+    assert.equal(rows.get('today-high').hidden, true);
+    assert.equal(rows.get('today-low').hidden, false);
+    assert.equal(rows.get('child').hidden, false);
+    assert.equal(panel.elements.find(element => element.dataset.reminderGroup === 'today/priority:high').hidden, false);
+});
+
+test('今日视图禁止跨一级分组拖拽，即使二级分组相同', () => {
+    const { panel, rows, render } = todayFixture();
+    render();
+    assert.equal(panel.isSameNonPrioritySortGroup(panel.currentRemindersCache.find(task => task.id === 'today-high'),
+        panel.currentRemindersCache.find(task => task.id === 'daily-high')), false);
+    assert.equal(rows.get('daily-high').dataset.reminderSubgroup, 'daily/priority:high');
 });

@@ -475,6 +475,11 @@ export class ReminderPanel {
                     .reminder-panel .reminder-section-header:first-child {
                         margin-top: 0;
                     }
+                    .reminder-panel .reminder-section-header--nested {
+                        margin-left: 12px;
+                        padding: 6px 10px;
+                        font-size: 12px;
+                    }
                     .reminder-panel .reminder-section-header__title {
                         min-width: 0;
                         font-weight: 600;
@@ -497,7 +502,8 @@ export class ReminderPanel {
                     .reminder-panel .reminder-section-header[data-collapsed="true"] .reminder-section-header__arrow {
                         transform: rotate(-90deg);
                     }
-                    .reminder-panel .reminder-item.reminder-section-item[hidden] {
+                    .reminder-panel .reminder-item.reminder-section-item[hidden],
+                    .reminder-panel .reminder-section-header[hidden] {
                         display: none !important;
                     }
                     @supports (-webkit-touch-callout: none) {
@@ -1308,7 +1314,7 @@ export class ReminderPanel {
                     visited.add(task.id);
                     task = visible.get(task.parentId);
                 }
-                return this.getReminderGroup(task, getLogicalDateString()).key;
+                return this.getReminderDisplayGroup(task, getLogicalDateString()).key;
             };
             if (groupKey(a) !== groupKey(b)) return false;
         }
@@ -2496,7 +2502,7 @@ export class ReminderPanel {
 
             this.sortReminders(displayReminders);
             if (this.reminderGroupMode && this.reminderGroupMode !== 'none') {
-                displayReminders = orderRemindersByGroup(displayReminders, task => this.getReminderGroup(task, today));
+                displayReminders = orderRemindersByGroup(displayReminders, task => this.getReminderDisplayGroup(task, today));
             }
             this.currentRemindersCache = [...displayReminders];
 
@@ -2800,10 +2806,22 @@ export class ReminderPanel {
         return { key: 'date:future', title: i18n('reminderGroupDueFuture'), order: 3 };
     }
 
+    /** 今日类视图的所选分组始终位于“今日任务 / 每日可做”之内。参数为可见根任务。 */
+    private getReminderDisplayGroup(reminder: any, today: string): ReminderGroup {
+        const group = this.getReminderGroup(reminder, today);
+        if (!this.isTodayLikeView()) return group;
+        const section = this.getReminderTodayGroup(reminder, [reminder], today);
+        return { ...group, key: `${section}/${group.key}`, parent: { key: section, order: section === 'today' ? 0 : 1 } };
+    }
+
     private createReminderGroupHeader(group: ReminderGroup, count: number): HTMLElement {
         const header = document.createElement('div');
         header.className = 'reminder-section-header';
         header.dataset.reminderGroup = group.key;
+        if (group.parent) {
+            header.classList.add('reminder-section-header--nested');
+            header.dataset.reminderTodayGroup = group.parent.key;
+        }
         header.setAttribute('role', 'button');
         header.tabIndex = 0;
         header.innerHTML = `<span class="reminder-section-header__title"></span>
@@ -2813,10 +2831,14 @@ export class ReminderPanel {
         header.querySelector('.reminder-section-header__count')!.textContent = String(count);
         const update = () => {
             const collapsed = this.collapsedReminderGroups.has(group.key);
+            const parentCollapsed = !!group.parent && this.collapsedTodayGroups.has(group.parent.key);
+            header.hidden = parentCollapsed;
             header.dataset.collapsed = String(collapsed);
             header.setAttribute('aria-expanded', String(!collapsed));
             this.remindersContainer.querySelectorAll<HTMLElement>('.reminder-section-item').forEach(item => {
-                if (item.dataset.reminderGroup === group.key) item.hidden = collapsed;
+                if ((item.dataset.reminderSubgroup || item.dataset.reminderGroup) === group.key) {
+                    item.hidden = collapsed || parentCollapsed;
+                }
             });
         };
         update();
@@ -2875,6 +2897,9 @@ export class ReminderPanel {
             header.setAttribute('aria-expanded', String(!shouldCollapse));
             this.remindersContainer
                 .querySelectorAll<HTMLElement>(`.reminder-section-item[data-reminder-group="${group}"]`)
+                .forEach(item => item.hidden = shouldCollapse || this.collapsedReminderGroups.has(item.dataset.reminderSubgroup || ''));
+            this.remindersContainer
+                .querySelectorAll<HTMLElement>(`.reminder-section-header--nested[data-reminder-today-group="${group}"]`)
                 .forEach(item => item.hidden = shouldCollapse);
         };
 
@@ -3003,11 +3028,11 @@ export class ReminderPanel {
             renderQueue.push({ reminder: topLevelReminders[i], level: 0 });
         }
         const isCustomGroupedView = this.reminderGroupMode !== 'none';
-        const isTodayTaskGroupedView = !isCustomGroupedView && this.isTodayLikeView();
+        const isTodayTaskGroupedView = this.isTodayLikeView();
         const isTodayCompletedGroupedView = !isCustomGroupedView && this.currentTab === 'todayCompleted';
         const customGroups = new Map<string, { group: ReminderGroup; count: number }>();
         if (isCustomGroupedView) topLevelReminders.forEach(reminder => {
-            const group = this.getReminderGroup(reminder, today);
+            const group = this.getReminderDisplayGroup(reminder, today);
             const entry = customGroups.get(group.key);
             if (entry) entry.count++;
             else customGroups.set(group.key, { group, count: 1 });
@@ -3034,21 +3059,8 @@ export class ReminderPanel {
                 // 复用卡片时清除上一种分组的可见性，避免切换分组后遗留隐藏状态。
                 element.classList.remove('reminder-section-item');
                 delete element.dataset.reminderGroup;
+                delete element.dataset.reminderSubgroup;
                 element.hidden = false;
-                if (isCustomGroupedView) {
-                    if (level === 0) {
-                        const group = this.getReminderGroup(reminder, today);
-                        if (activeCustomGroup?.key !== group.key) {
-                            activeCustomGroup = group;
-                            elements.push(this.createReminderGroupHeader(group, customGroups.get(group.key)?.count || 0));
-                        }
-                    }
-                    if (activeCustomGroup) {
-                        element.classList.add('reminder-section-item');
-                        element.dataset.reminderGroup = activeCustomGroup.key;
-                        element.hidden = this.collapsedReminderGroups.has(activeCustomGroup.key);
-                    }
-                }
 
                 // 添加到文档片段
 
@@ -3078,6 +3090,23 @@ export class ReminderPanel {
                         element.classList.add('reminder-section-item');
                         element.dataset.reminderGroup = activeGroup;
                         element.hidden = this.collapsedTodayGroups.has(activeGroup);
+                    }
+                }
+
+                // 先插入一级组头，再插入所选维度的二级组头；同名二级组在一级组内独立折叠。
+                if (isCustomGroupedView) {
+                    if (level === 0) {
+                        const group = this.getReminderDisplayGroup(reminder, today);
+                        if (activeCustomGroup?.key !== group.key) {
+                            activeCustomGroup = group;
+                            elements.push(this.createReminderGroupHeader(group, customGroups.get(group.key)?.count || 0));
+                        }
+                    }
+                    if (activeCustomGroup) {
+                        element.classList.add('reminder-section-item');
+                        if (activeCustomGroup.parent) element.dataset.reminderSubgroup = activeCustomGroup.key;
+                        else element.dataset.reminderGroup = activeCustomGroup.key;
+                        element.hidden = element.hidden || this.collapsedReminderGroups.has(activeCustomGroup.key);
                     }
                 }
 
@@ -3556,10 +3585,11 @@ export class ReminderPanel {
                 visited.add(root.id);
                 root = visible.get(root.parentId);
             }
-            const group = this.getReminderGroup(root, today);
+            const group = this.getReminderDisplayGroup(root, today);
             element.classList.add('reminder-section-item');
-            element.dataset.reminderGroup = group.key;
-            element.hidden = this.collapsedReminderGroups.has(group.key);
+            element.dataset.reminderGroup = group.parent?.key || group.key;
+            if (group.parent) element.dataset.reminderSubgroup = group.key;
+            element.hidden = this.collapsedReminderGroups.has(group.key) || (!!group.parent && this.collapsedTodayGroups.has(group.parent.key));
         } else if (this.isTodayLikeView() || this.currentTab === 'todayCompleted') {
             const group = this.isTodayLikeView()
                 ? this.getReminderTodayGroup(reminder, allVisibleReminders, today)

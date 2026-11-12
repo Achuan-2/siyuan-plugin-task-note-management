@@ -4,6 +4,7 @@ export interface ReminderGroup {
     key: string;
     title: string;
     order: number;
+    parent?: { key: 'today' | 'daily'; order: number };
 }
 
 export function normalizeReminderGroupMode(value: unknown): ReminderGroupMode {
@@ -38,5 +39,7 @@ export function orderRemindersByGroup<T extends { id: string; parentId?: string 
         if (!groups.has(group.key)) groups.set(group.key, { group, tasks: [] });
         groups.get(group.key)!.tasks.push(task);
     });
-    return [...groups.values()].sort((a, b) => a.group.order - b.group.order).flatMap(group => group.tasks);
+    return [...groups.values()]
+        .sort((a, b) => (a.group.parent?.order ?? 0) - (b.group.parent?.order ?? 0) || a.group.order - b.group.order)
+        .flatMap(group => group.tasks);
 }

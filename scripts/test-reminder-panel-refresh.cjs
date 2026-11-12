@@ -215,7 +215,7 @@ test('显式分组在分页前排序，父子任务不拆页且分页计数保�
     const { panel, commits } = fixture(async () => copy(data));
     Object.assign(panel, {
         reminderGroupMode: 'priority', isPaginationEnabled: true, itemsPerPage: 2, currentPage: 1,
-        getReminderGroup: item => ({ key: item.priority, title: item.priority, order: item.priority === 'high' ? 0 : 1 }),
+        getReminderDisplayGroup: item => ({ key: item.priority, title: item.priority, order: item.priority === 'high' ? 0 : 1 }),
         renderPaginationControls: () => {},
     });
     await panel.loadReminders();
