@@ -1,4 +1,5 @@
-import { renderTaskMetadataIcon } from "../render/taskMetadataIcons";
+import { renderPomodoroIcons } from "../render/pomodoroIcons";
+import { renderTaskMetadataIcon, setTaskMetadataText } from "../render/taskMetadataIcons";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
@@ -5580,7 +5581,8 @@ export class CalendarView {
         if (props.type === 'pomodoroDailySummary') {
             const summary = document.createElement('div');
             summary.className = 'fc-event-main-frame pomodoro-daily-summary-content';
-            summary.textContent = `🍅 ${event.title}`;
+            summary.innerHTML = renderTaskMetadataIcon('tomato') + ' ';
+            summary.appendChild(document.createTextNode(event.title));
             return { domNodes: [summary] };
         }
 
@@ -5630,7 +5632,11 @@ export class CalendarView {
                 overflow: hidden;
                 text-overflow: clip;
             `;
-            titleEl.textContent = event.title;
+            const phase = props.originalSession?.type;
+            titleEl.innerHTML = props.originalSession?.inProgress
+                ? renderTaskMetadataIcon('hourglass')
+                : renderPomodoroIcons(phase === 'longBreak' ? '🧘' : phase === 'shortBreak' ? '🍵' : '🍅');
+            titleEl.appendChild(document.createTextNode(' ' + event.title.replace(/^(?:🍅|⏳)\s*/u, '')));
             mainFrame.appendChild(titleEl);
 
             if (timeText) {
@@ -5661,7 +5667,7 @@ export class CalendarView {
                     overflow: hidden;
                     text-overflow: clip;
                 `;
-                durationEl.textContent = `⏱ ${durationMinutes} ${i18n("minutes") || "分钟"}`;
+                setTaskMetadataText(durationEl, `⏱ ${durationMinutes} ${i18n("minutes") || "分钟"}`);
                 mainFrame.appendChild(durationEl);
             }
 
@@ -5734,7 +5740,7 @@ export class CalendarView {
             const customIcon = isHabit ? props.icon : null;
             const customColor = isHabit ? props.color : null;
 
-            subIcon.innerHTML = customIcon || (isHabit ? '🌱' : '🗓️');
+            subIcon.innerHTML = customIcon || (isHabit ? '🌱' : renderTaskMetadataIcon('calendar', 10));
             subIcon.classList.add('ariaLabel'); subIcon.setAttribute('aria-label', isHabit
                 ? (i18n("habitPanelTitle") || "习惯")
                 : (i18n("subscribedTaskReadOnly") || "订阅任务（只读）"));
@@ -5764,11 +5770,14 @@ export class CalendarView {
         // 2. 任务标题（与复选框同行）
         const titleEl = document.createElement('div');
         titleEl.className = 'fc-event-title';
+        const titleHtml = isReminderTimeEvent
+            ? renderTaskMetadataIcon('alarm') + ' ' + this.escapeHtml(event.title.replace(/^⏰\s*/u, ''))
+            : event.title;
 
         // 如果有绑定块，将内容包裹在 span 中并添加虚线边框
         if (props.blockId && !props.isSubscribed && !props.isHabit) {
             const textSpan = document.createElement('span');
-            textSpan.innerHTML = event.title;
+            textSpan.innerHTML = titleHtml;
             textSpan.style.display = 'inline-block';
             textSpan.style.boxSizing = 'border-box';
             textSpan.style.paddingBottom = '2px';
@@ -5781,7 +5790,7 @@ export class CalendarView {
             titleEl.appendChild(textSpan);
         } else {
             // 没有绑定块时，直接设置 innerHTML
-            titleEl.innerHTML = event.title;
+            titleEl.innerHTML = titleHtml;
         }
 
         // 实际打卡时间事件在标题前显示本次打卡 emoji，左侧仍保留习惯自身图标
@@ -5800,10 +5809,10 @@ export class CalendarView {
             repeatIcon.className = 'reminder-event-icon';
             repeatIcon.style.flexShrink = '0';
             if (props.isRepeated) {
-                repeatIcon.innerHTML = '🔄';
+                repeatIcon.innerHTML = renderTaskMetadataIcon('repeat');
                 repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', i18n("repeatInstance"));
             } else {
-                repeatIcon.innerHTML = '🔁';
+                repeatIcon.innerHTML = renderTaskMetadataIcon('repeat');
                 repeatIcon.classList.add('ariaLabel'); repeatIcon.setAttribute('aria-label', i18n("repeatSeries"));
             }
             topRow.appendChild(repeatIcon);

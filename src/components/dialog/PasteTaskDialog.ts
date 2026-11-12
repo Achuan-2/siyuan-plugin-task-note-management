@@ -1,3 +1,4 @@
+import { renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { autoDetectDateTimeFromTitle, getLocalDateTimeString } from "../../utils/dateUtils";
@@ -994,7 +995,7 @@ export class PasteTaskDialog {
                 <div style="padding: 8px 12px; border-bottom: 1px solid var(--b3-theme-surface-lighter); display: flex; align-items: center; gap: 8px; margin-left: ${level * 16}px;">
                     <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--b3-theme-on-surface); font-size: 13px;" class="ariaLabel" aria-label="${task.title}">${task.title}</span>
                     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 11px; min-width: 140px; flex-shrink: 0;">
-                        ${dateStr ? `<span style="color: var(--b3-theme-primary);">${dateStr}</span>` : ''}
+                        ${dateStr ? `<span style="color: var(--b3-theme-primary);">${renderTaskMetadataText(dateStr)}</span>` : ''}
                         ${endDateStr ? `<span style="color: var(--b3-theme-info);">${endDateStr}</span>` : ''}
                         ${!dateStr && !endDateStr ? `<span style="opacity: 0.3;">-</span>` : ''}
                     </div>

@@ -1,3 +1,4 @@
+import { setTaskMetadataText, renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
@@ -8069,7 +8070,8 @@ export class ProjectKanbanView {
             'incomplete': '🗓️'
         };
         // 优先使用 kanbanStatuses 中设置的图标，其次使用默认图标
-        groupIcon.textContent = statusConfig?.icon || defaultIcons[status] || '';
+        if (statusConfig?.icon) groupIcon.textContent = statusConfig.icon;
+        else setTaskMetadataText(groupIcon, defaultIcons[status] || '');
         groupTitle.appendChild(groupIcon);
 
         const groupName = document.createElement('span');
@@ -11125,7 +11127,7 @@ export class ProjectKanbanView {
             // Color/Icon
             let iconHtml = '';
             if (icon) {
-                iconHtml = `<span style="margin-right: 6px;">${icon}</span>`;
+                iconHtml = `<span style="margin-right: 6px;">${type === 'date' ? renderTaskMetadataText(icon) : icon}</span>`;
             } else if (color) {
                 iconHtml = `<span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${color}; margin-right: 8px;"></span>`;
             }

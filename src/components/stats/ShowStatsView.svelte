@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { renderTaskMetadataIcon } from "../render/taskMetadataIcons";
+
     import PomodoroStatsTab from "./PomodoroStatsTab.svelte";
     import TaskStatsTab from "./TaskStatsTab.svelte";
     import HabitStatsTab from "./HabitStatsTab.svelte";
@@ -25,11 +27,11 @@
 
 <div class="stats-root">
     <div class="stats-tabs">
-        <button class:active={activeTab === "pomodoro"} on:click={() => switchTab("pomodoro")}>🍅 {i18n('pomodoroStats')}</button>
+        <button class:active={activeTab === "pomodoro"} on:click={() => switchTab("pomodoro")}>{@html renderTaskMetadataIcon('tomato')} {i18n('pomodoroStats')}</button>
         <button class:active={activeTab === "task"} on:click={() => switchTab("task")}>✅ {i18n('taskStats')}</button>
         <button class:active={activeTab === "summary"} on:click={() => switchTab("summary")}>📝 {i18n('taskSummary')}</button>
         <button class:active={activeTab === "project"} on:click={() => switchTab("project")}>🎯 {i18n('projectStats')}</button>
-        <button class:active={activeTab === "habit"} on:click={() => switchTab("habit")}>📅 {i18n('habitStats')}</button>
+        <button class:active={activeTab === "habit"} on:click={() => switchTab("habit")}>{@html renderTaskMetadataIcon('calendar')} {i18n('habitStats')}</button>
     </div>
 
     <div class="stats-content">

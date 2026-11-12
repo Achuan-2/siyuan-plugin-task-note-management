@@ -1,3 +1,5 @@
+import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
+import { renderPomodoroIcons } from "../render/pomodoroIcons";
 /*
  * Copyright (c) 2024 by frostime. All Rights Reserved.
  * @Author       : frostime
@@ -123,7 +125,7 @@ export class PomodoroSessionsDialog {
         await this.loadSessions();
 
         this.dialog = new Dialog({
-            title: this.dialogTitle || ("🍅 " + (i18n("pomodoros") || "番茄钟记录")),
+            title: renderTaskMetadataText(this.dialogTitle || ("🍅 " + (i18n("pomodoros") || "番茄钟记录"))),
             content: `
                 <div class="b3-dialog__content" style="display: flex; flex-direction: column; gap: 12px;">
                     <div class="pomodoro-filters" style="display: flex; justify-content: flex-end; align-items: center;">
@@ -146,7 +148,7 @@ export class PomodoroSessionsDialog {
                         ${i18n("startPomodoro") || "开始番茄钟"}
                     </button>
                     <button id="startCountUpBtn" class="b3-button b3-button--outline">
-                        ⏱️ ${i18n("startCountUp") || "正计时"}
+                        ${renderTaskMetadataIcon('timer')} ${i18n("startCountUp") || "正计时"}
                     </button>
                 </div>
             `,
@@ -346,14 +348,14 @@ export class PomodoroSessionsDialog {
             const count = this.recordManager.calculateSessionCount(session);
 
             if (session.isCountUp) {
-                extraBadges += `<span style="background: var(--b3-theme-secondary); color: var(--b3-theme-on-secondary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">${i18n("pomodoroCountUpBadge")}</span>`;
+                extraBadges += `<span style="background: var(--b3-theme-secondary); color: var(--b3-theme-on-secondary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">${renderTaskMetadataText(i18n("pomodoroCountUpBadge"))}</span>`;
                 if (count > 0) {
-                    extraBadges += `<span style="background: var(--b3-theme-primary-light); color: var(--b3-theme-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">🍅 x${count}</span>`;
+                    extraBadges += `<span style="background: var(--b3-theme-primary-light); color: var(--b3-theme-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">${renderTaskMetadataIcon('tomato')} x${count}</span>`;
                 }
             } else {
                 extraBadges += `<span style="background: var(--b3-theme-primary); color: var(--b3-theme-on-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">${i18n("pomodoroCountDownBadge")}</span>`;
                 if (count > 0) {
-                    extraBadges += `<span style="background: var(--b3-theme-primary-light); color: var(--b3-theme-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">🍅 x${count}</span>`;
+                    extraBadges += `<span style="background: var(--b3-theme-primary-light); color: var(--b3-theme-primary); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 4px;">${renderTaskMetadataIcon('tomato')} x${count}</span>`;
                 }
             }
         }
@@ -376,9 +378,9 @@ export class PomodoroSessionsDialog {
                         ${extraBadges}
                     </div>
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); display: flex; gap: 12px;">
-                        <span>📅 ${dateStr}</span>
-                        <span>🕐 ${startTimeStr} - ${endTimeStr}</span>
-                        <span>⏱️ ${session.inProgress ? i18n("toRecord") : i18n("durationMinutes", { minutes: String(session.duration) })}</span>
+                        <span>${renderTaskMetadataIcon('calendar')} ${dateStr}</span>
+                        <span>${renderTaskMetadataIcon('clock')} ${startTimeStr} - ${endTimeStr}</span>
+                        <span>${renderTaskMetadataIcon('duration')} ${session.inProgress ? i18n("toRecord") : i18n("durationMinutes", { minutes: String(session.duration) })}</span>
                     </div>
                     ${noteHtml}
                 </div>
@@ -397,13 +399,13 @@ export class PomodoroSessionsDialog {
     private getTypeIcon(type: 'work' | 'shortBreak' | 'longBreak'): string {
         switch (type) {
             case 'work':
-                return '🍅';
+                return renderPomodoroIcons('🍅');
             case 'shortBreak':
-                return '☕';
+                return renderPomodoroIcons('🍵');
             case 'longBreak':
-                return '🌴';
+                return renderPomodoroIcons('🧘');
             default:
-                return '⏱️';
+                return renderPomodoroIcons('⏱️');
         }
     }
 
@@ -738,7 +740,7 @@ export class PomodoroSessionsDialog {
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
                         <select id="sessionType" class="b3-select" style="width: 100%;">
-                            <option value="work">${i18n("pomodoroWorkType")}</option>
+                            <option value="work">${i18n("pomodoroWorkType").replace(/^🍅\s*/, '')}</option>
                             <option value="shortBreak">${i18n("pomodoroShortBreakType")}</option>
                             <option value="longBreak">${i18n("pomodoroLongBreakType")}</option>
                         </select>
@@ -923,7 +925,7 @@ export class PomodoroSessionsDialog {
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
                         <select id="editSessionType" class="b3-select" style="width: 100%;">
-                            <option value="work">${i18n("pomodoroWorkType")}</option>
+                            <option value="work">${i18n("pomodoroWorkType").replace(/^🍅\s*/, '')}</option>
                             <option value="shortBreak">${i18n("pomodoroShortBreakType")}</option>
                             <option value="longBreak">${i18n("pomodoroLongBreakType")}</option>
                         </select>

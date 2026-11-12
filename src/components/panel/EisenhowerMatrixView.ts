@@ -1,3 +1,4 @@
+import { renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
@@ -230,7 +231,7 @@ export class EisenhowerMatrixView {
         header.className = 'quadrant-header';
         header.style.backgroundColor = quadrant.color;
         header.innerHTML = `
-            <div class="quadrant-title" style="color: white">${quadrant.title}</div>
+            <div class="quadrant-title" style="color: white">${renderTaskMetadataText(quadrant.title)}</div>
             <button class="b3-button b3-button--outline add-task-btn" data-quadrant="${quadrant.key}">
                 <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                 ${i18n("newTask")}

@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { renderTaskMetadataIcon } from "../render/taskMetadataIcons";
+
 import { onMount, onDestroy } from "svelte";
 
 export let plugin: any;
@@ -149,7 +151,7 @@ class TaskStatsView {
                             ✅ ${i18n("taskStats")}
                         </button>
                         <button class="stats-switch-btn" data-mode="pomodoro">
-                            🍅 ${i18n("pomodoroStats")}
+                            ${renderTaskMetadataIcon('tomato')} ${i18n("pomodoroStats")}
                         </button>
                     </div>
                 `}
@@ -168,7 +170,7 @@ class TaskStatsView {
                         📉 ${i18n("taskTrends")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'timeline' ? 'active' : ''}" data-view="timeline">
-                        ⏰ ${i18n("taskTimeline")}
+                        ${renderTaskMetadataIcon('clock')} ${i18n("taskTimeline")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'heatmap' ? 'active' : ''}" data-view="heatmap">
                         🔥 ${i18n("yearlyHeatmap")}
@@ -222,7 +224,7 @@ class TaskStatsView {
                     </div>
                     
                     <div class="overview-card week">
-                        <div class="card-icon">📅</div>
+                        <div class="card-icon">${renderTaskMetadataIcon('calendar', 28)}</div>
                         <div class="card-content">
                             <div class="card-title">${i18n("weekTask")}</div>
                             <div class="card-value">${weekCount}${i18n("taskCountUnit")}</div>
@@ -356,7 +358,7 @@ class TaskStatsView {
             <div class="timeline-container">
                 <div class="timeline-header">
                     <div class="timeline-title">
-                        <h3>⏰ ${i18n("taskTimeline")}</h3>
+                        <h3>${renderTaskMetadataIcon('clock')} ${i18n("taskTimeline")}</h3>
                         ${dateRangeText ? `<span class="date-range-text">${dateRangeText}</span>` : ''}
                     </div>
                     <div class="time-range-selector">

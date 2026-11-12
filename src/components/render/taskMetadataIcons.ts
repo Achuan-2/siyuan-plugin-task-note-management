@@ -20,27 +20,38 @@ const paths = {
 
 export type TaskMetadataIcon = keyof typeof paths;
 
-export function renderTaskMetadataIcon(name: TaskMetadataIcon): string {
+export function renderTaskMetadataIcon(name: TaskMetadataIcon, size = 14): string {
     // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
     const content = name === 'tomato' || name === 'project' || name === 'duration'
         ? paths[name]
         : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
     const viewBox = name === 'duration' ? '0 0 1024 1024' : '0 0 24 24';
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="14" height="14" aria-hidden="true" focusable="false" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false" style="display:inline-block;width:${size}px;height:${size}px;vertical-align:-2px;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }
 
 const emojiIcons: Record<string, TaskMetadataIcon> = {
-    '📂': 'project', '🏷️': 'tag', '🗓️': 'calendar', '📅': 'calendar',
-    '🔄': 'repeat', '🔁': 'repeat', '🍅': 'tomato', '⏱️': 'duration', '⏱': 'duration',
+    '📂': 'project', '📁': 'project', '🏷': 'tag', '🗓': 'calendar', '📅': 'calendar',
+    '🔄': 'repeat', '🔁': 'repeat', '🍅': 'tomato', '⏱': 'duration',
     '✅': 'check',
-    '🕒': 'clock', '🕐': 'clock', '⏰': 'alarm',
+    '🕒': 'duration', '🕐': 'clock', '⏰': 'alarm',
 };
+const metadataIconPattern = /(📂|📁|🏷️?|🗓️*|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅)/u;
+
+/** 模板和 Svelte 共用：先转义动态文字，只插入固定的可信 SVG。 */
+export function renderTaskMetadataText(text: string): string {
+    return String(text).split(metadataIconPattern).map(part => {
+        const name = emojiIcons[part.replace(/\uFE0F/g, '')];
+        return name ? renderTaskMetadataIcon(name) : part
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }).join('');
+}
 
 /** 保留动态文本为文本节点，只将固定图标替换为可信 SVG。 */
 export function setTaskMetadataText(element: HTMLElement, text: string): void {
     element.replaceChildren();
-    for (const part of text.split(/(📂|🏷️|🗓️|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅)/u)) {
-        const name = emojiIcons[part];
+    for (const part of text.split(metadataIconPattern)) {
+        const name = emojiIcons[part.replace(/\uFE0F/g, '')];
         if (name) element.insertAdjacentHTML('beforeend', renderTaskMetadataIcon(name));
         else element.appendChild(document.createTextNode(part));
     }

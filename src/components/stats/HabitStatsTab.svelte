@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
+
 import { onMount, tick } from "svelte";
 import type { Habit } from "../../utils/habitUtils";
 import { HabitDayDialog } from "../dialog/HabitDayDialog";
@@ -1000,16 +1002,16 @@ $: if (logPage < 1) logPage = 1;
                                     </div>
                                     <div class="habit-meta-row">
                                         <span class="habit-meta-item">
-                                            <span class="habit-meta-icon">🔄</span>
+                                            <span class="habit-meta-icon">{@html renderTaskMetadataIcon('repeat')}</span>
                                             <span>{getFrequencyText(habit.frequency)}</span>
                                         </span>
                                         <span class="habit-meta-item">
-                                            <span class="habit-meta-icon">📅</span>
+                                            <span class="habit-meta-icon">{@html renderTaskMetadataIcon('calendar')}</span>
                                             <span>{getHabitDateRangeText(habit)}</span>
                                         </span>
                                         {#if reminderTimes.length > 0}
                                             <span class="habit-meta-item">
-                                                <span class="habit-meta-icon">⏰</span>
+                                                <span class="habit-meta-icon">{@html renderTaskMetadataIcon('alarm')}</span>
                                                 <span>{reminderTimes.map(t => formatHabitReminderTimeDisplay(t)).join(', ')}</span>
                                             </span>
                                         {/if}
@@ -1031,11 +1033,11 @@ $: if (logPage < 1) logPage = 1;
                                     {#if stats.totalPomodoro > 0 || stats.totalPomodoroMinutes > 0}
                                         <div class="pomodoro-row">
                                             <div class="pomodoro-item">
-                                                <span class="pomodoro-label">{i18n('habitTodayPomodoroLabel')}</span>
+                                                <span class="pomodoro-label">{@html renderTaskMetadataText(i18n('habitTodayPomodoroLabel'))}</span>
                                                 <span class="pomodoro-value">{stats.todayPomodoro}（{formatMinutes(stats.todayPomodoroMinutes)}）</span>
                                             </div>
                                             <div class="pomodoro-item">
-                                                <span class="pomodoro-label">{i18n('habitTotalPomodoroLabel')}</span>
+                                                <span class="pomodoro-label">{@html renderTaskMetadataText(i18n('habitTotalPomodoroLabel'))}</span>
                                                 <span class="pomodoro-value">{stats.totalPomodoro}（{formatMinutes(stats.totalPomodoroMinutes)}）</span>
                                             </div>
                                         </div>

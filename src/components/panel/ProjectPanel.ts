@@ -1,3 +1,4 @@
+import { setTaskMetadataText } from "../render/taskMetadataIcons";
 import { showMessage, confirm, Menu, Dialog, getAllModels, platformUtils, openEmoji, getFrontend } from "siyuan";
 import { getLastStatsMode } from "../stats/statsMode";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
@@ -1268,7 +1269,7 @@ export class ProjectPanel {
         // 时间信息
         const timeEl = document.createElement('div');
         timeEl.className = 'project-item__time';
-        timeEl.textContent = this.formatProjectTime(project.startDate, project.endDate, today);
+        setTaskMetadataText(timeEl, this.formatProjectTime(project.startDate, project.endDate, today));
         timeContainer.appendChild(timeEl);
 
 
@@ -1311,7 +1312,7 @@ export class ProjectPanel {
         // 添加番茄钟总数显示
         const pomodoroCountEl = document.createElement('span');
         pomodoroCountEl.className = 'project-count project-count--pomodoro';
-        pomodoroCountEl.textContent = i18n("projectPomodoroLoading");
+        setTaskMetadataText(pomodoroCountEl, i18n("projectPomodoroLoading"));
         pomodoroCountEl.style.cssText = `
             font-size: 12px;
             color: var(--b3-theme-on-surface);
@@ -1508,7 +1509,7 @@ export class ProjectPanel {
                     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
                 };
                 const focusText = totalFocus > 0 ? ` ⏱ ${formatMinutesToString(totalFocus)}` : '';
-                pomodoroEl.textContent = i18n("projectPomodoroTotal", { count: String(totalPomodoro), focus: String(focusText) });
+                setTaskMetadataText(pomodoroEl, i18n("projectPomodoroTotal", { count: String(totalPomodoro), focus: String(focusText) }));
             }
 
             // 计算进度： done / (sum of non-completed statuses + done)
@@ -1528,7 +1529,7 @@ export class ProjectPanel {
                 <span class="project-count project-count--long-term">${i18n("longTerm") || '长期'}: ?</span>
                 <span class="project-count project-count--done">${i18n("done") || '已完成'}: ?</span>
             `;
-            if (pomodoroEl) pomodoroEl.textContent = i18n("projectPomodoroUnknown");
+            if (pomodoroEl) setTaskMetadataText(pomodoroEl, i18n("projectPomodoroUnknown"));
             if (progressBarInner && progressText) {
                 progressBarInner.style.width = `0%`;
                 progressText.textContent = `0%`;
@@ -3844,7 +3845,7 @@ export class ProjectPanel {
         if (dateText) {
             const dateEl = document.createElement('span');
             dateEl.className = 'project-list-meta-date';
-            dateEl.textContent = dateText;
+            setTaskMetadataText(dateEl, dateText);
             dateEl.style.cssText = `
                 color: var(--b3-theme-on-surface);
                 opacity: 0.7;

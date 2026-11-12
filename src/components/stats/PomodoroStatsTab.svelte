@@ -1,4 +1,7 @@
 ﻿<script lang="ts">
+    import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
+import { renderPomodoroIcons } from "../render/pomodoroIcons";
+
 import { onMount, onDestroy } from "svelte";
 
 export let plugin: any;
@@ -80,7 +83,7 @@ class PomodoroStatsView {
         }
 
         this.dialog = new Dialog({
-            title: "🍅 " + i18n("pomodoroStats"),
+            title: renderTaskMetadataText("🍅 " + i18n("pomodoroStats")),
             content: this.createContent(),
             width: "90vw",
             height: "85vh",
@@ -140,7 +143,7 @@ class PomodoroStatsView {
                             ✅ ${i18n("taskStats")}
                         </button>
                         <button class="stats-switch-btn active" data-mode="pomodoro">
-                            🍅 ${i18n("pomodoroStats")}
+                            ${renderTaskMetadataIcon('tomato')} ${i18n("pomodoroStats")}
                         </button>
                     </div>
                 `}
@@ -159,7 +162,7 @@ class PomodoroStatsView {
                         📉 ${i18n("focusTrends")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'timeline' ? 'active' : ''}" data-view="timeline">
-                        ⏰ ${i18n("focusTimeline")}
+                        ${renderTaskMetadataIcon('clock')} ${i18n("focusTimeline")}
                     </button>
                     <button class="nav-btn ${this.currentView === 'heatmap' ? 'active' : ''}" data-view="heatmap">
                         🔥 ${i18n("yearlyHeatmap")}
@@ -210,7 +213,7 @@ class PomodoroStatsView {
                     </div>
                     
                     <div class="overview-card week">
-                        <div class="card-icon">📅</div>
+                        <div class="card-icon">${renderTaskMetadataIcon('calendar', 28)}</div>
                         <div class="card-content">
                             <div class="card-title">${i18n("weekFocus")}</div>
                             <div class="card-value">${this.recordManager.formatTime(weekTime)}</div>
@@ -335,7 +338,7 @@ class PomodoroStatsView {
             <div class="timeline-container">
                 <div class="timeline-header">
                     <div class="timeline-title">
-                        <h3>⏰ ${i18n("focusTimeline")}</h3>
+                        <h3>${renderTaskMetadataIcon('clock')} ${i18n("focusTimeline")}</h3>
                         ${dateRangeText ? `<span class="date-range-text">${dateRangeText}</span>` : ''}
                     </div>
                     <div class="time-range-selector">
@@ -468,7 +471,7 @@ class PomodoroStatsView {
         return `
             <div class="record-item ${session.type}">
                 <div class="record-icon">
-                    ${session.type === 'work' ? '🍅' : (session.type === 'longBreak' ? '🧘' : '☕')}
+                    ${renderPomodoroIcons(session.type === 'work' ? '🍅' : (session.type === 'longBreak' ? '🧘' : '🍵'))}
                 </div>
                 <div class="record-content">
                     <div class="record-title">${session.eventTitle}</div>

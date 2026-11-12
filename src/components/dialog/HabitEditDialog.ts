@@ -1,3 +1,4 @@
+import { setTaskMetadataText } from "../render/taskMetadataIcons";
 import { Dialog, showMessage, platformUtils, openEmoji } from "siyuan";
 import { getBlockByID, getBlockDOM } from "../../api";
 import type { Habit } from "../../utils/habitUtils";
@@ -293,8 +294,8 @@ export class HabitEditDialog {
         checkInButtonTypeSelect.className = 'b3-select';
         checkInButtonTypeSelect.style.cssText = 'min-width: 120px;';
         checkInButtonTypeSelect.innerHTML = `
-            <option value="pomodoro">🍅 ${i18n("pomodoroTimerLabel")}</option>
-            <option value="countup">${i18n("pomodoroCountUpBadge")}</option>
+            <option value="pomodoro">${i18n("pomodoroTimerLabel")}</option>
+            <option value="countup">${i18n("pomodoroCountUpBadge").replace(/^⏱️?\s*/, '')}</option>
         `;
         const initialButtonType = this.habit?.checkInButtonType || 'pomodoro';
         checkInButtonTypeSelect.value = initialButtonType;
@@ -881,7 +882,7 @@ export class HabitEditDialog {
             const timeStr = totalMinutes > 0 ? ` (${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m)` : '';
 
             if (count > 0 || totalMinutes > 0) {
-                textEl.textContent = `${i18n("viewPomodoros")} ${count}🍅${timeStr}`;
+                setTaskMetadataText(textEl, `${i18n("viewPomodoros")} ${count}🍅${timeStr}`);
             } else {
                 textEl.textContent = i18n("viewPomodoros");
             }

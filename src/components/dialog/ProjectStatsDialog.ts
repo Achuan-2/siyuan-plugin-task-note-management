@@ -1,3 +1,4 @@
+import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { Dialog } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { ProjectKanbanView } from "../panel/ProjectKanbanView";
@@ -105,12 +106,12 @@ function renderStatsPanelHtml(totalTasks: number, totalPomodoro: number, focusTi
             </div>
             <!-- Card 2: Total Pomodoros -->
             <div style="background:var(--b3-theme-surface-lighter); padding:14px; border-radius:10px; border:1px solid var(--b3-border-color); display:flex; flex-direction:column; gap:4px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">${i18n("projectPomodoroCountCard")}</div>
+                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">${renderTaskMetadataText(i18n("projectPomodoroCountCard"))}</div>
                 <div style="font-size:24px; font-weight:bold; color:#e74c3c;">${totalPomodoro}</div>
             </div>
             <!-- Card 3: Total Focus Time -->
             <div style="background:var(--b3-theme-surface-lighter); padding:14px; border-radius:10px; border:1px solid var(--b3-border-color); display:flex; flex-direction:column; gap:4px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
-                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">${i18n("projectFocusTimeCard")}</div>
+                <div style="font-size:11px; opacity:0.7; display:flex; align-items:center; gap:4px;">${renderTaskMetadataText(i18n("projectFocusTimeCard"))}</div>
                 <div style="font-size:18px; font-weight:bold; color:#28a745; line-height:28px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${focusTimeStr}">${focusTimeStr}</div>
             </div>
         </div>
@@ -197,7 +198,7 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
             const statusInfoMap = new Map<string, { name: string, icon: string }>();
 
             statusInfoMap.set('doing', { name: i18n("doing") || '进行中', icon: '🏃' });
-            statusInfoMap.set('short_term', { name: i18n("shortTerm") || '短期', icon: '📅' });
+            statusInfoMap.set('short_term', { name: i18n("shortTerm") || '短期', icon: renderTaskMetadataIcon('calendar') });
             statusInfoMap.set('long_term', { name: i18n("longTerm") || '长期', icon: '⏳' });
             statusInfoMap.set('completed', { name: i18n("done") || '已完成', icon: '✅' });
             statusInfoMap.set('abandoned', { name: i18n("abandoned") || '放弃', icon: '❌' });
@@ -315,7 +316,7 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
                                 ${pDone} / ${pTotal}
                             </td>
                             <td style="padding:10px 6px; text-align:center; color:#e74c3c; font-weight:500;">
-                                🍅 ${pPomo}
+                                ${renderTaskMetadataIcon('tomato')} ${pPomo}
                             </td>
                             <td style="padding:10px 6px; text-align:right; color:#28a745; font-size:12px; font-weight:500;">
                                 ${pFoc > 0 ? i18n('durationMinutesNoSpace', { minutes: String(pFoc) }) : '-'}

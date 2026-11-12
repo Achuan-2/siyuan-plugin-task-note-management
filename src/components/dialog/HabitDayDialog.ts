@@ -1,3 +1,4 @@
+import { setTaskMetadataText } from "../render/taskMetadataIcons";
 import { Dialog, showMessage, confirm } from "siyuan";
 import type { Habit, HabitEmojiConfig as HabitCheckInEmoji } from "../../utils/habitUtils";
 import { isHabitActiveOnDate, isHabitCheckInDayComplete, shouldCheckInOnDate, POMODORO_PER_SESSION_AUTO_CHECKIN_MEANING } from "../../utils/habitUtils";
@@ -458,7 +459,7 @@ export class HabitDayDialog {
         header.style.cssText = "display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;";
         const title = document.createElement("div");
         title.style.cssText = "font-weight:600;";
-        title.textContent = i18n("habitDayPomodoroTitle");
+        setTaskMetadataText(title, i18n("habitDayPomodoroTitle"));
         const addBtn = document.createElement("button");
         addBtn.className = "b3-button b3-button--outline";
         addBtn.textContent = i18n("addPomodoro") || "补录番茄钟";
@@ -499,7 +500,7 @@ export class HabitDayDialog {
                 right.style.cssText = "display:flex; align-items:center; gap:6px;";
 
                 const value = document.createElement("span");
-                value.textContent = `🍅 ${count}（${this.formatMinutes(session.duration || 0)}）`;
+                setTaskMetadataText(value, `🍅 ${count}（${this.formatMinutes(session.duration || 0)}）`);
                 value.style.cssText = "font-weight:600;";
 
                 const editBtn = document.createElement("button");

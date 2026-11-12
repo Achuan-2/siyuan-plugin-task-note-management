@@ -15,7 +15,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { SubtasksDialog } from "./SubtasksDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
-import { setTaskMetadataText } from "../render/taskMetadataIcons";
+import { setTaskMetadataText, renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
 import { Plugin, NodeSelection } from "@milkdown/prose/state";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
@@ -930,9 +930,9 @@ export class QuickReminderDialog {
                         ${priorityIcon} ${reminder.title}
                     </div>
                     <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); display: flex; align-items: center; gap: 8px;">
-                        ${dateTimeStr ? `<span>🕐 ${dateTimeStr}</span>` : ''}
+                        ${dateTimeStr ? `<span>${renderTaskMetadataIcon('clock')} ${dateTimeStr}</span>` : ''}
                         ${categoryStr}
-                        ${reminder.repeat ? `<span>🔄 ${getRepeatDescription(reminder.repeat)}</span>` : ''}
+                        ${reminder.repeat ? `<span>${renderTaskMetadataIcon('repeat')} ${getRepeatDescription(reminder.repeat)}</span>` : ''}
                     </div>
                 </div>
                 <div style="display: flex; gap: 4px;">
@@ -2681,7 +2681,7 @@ export class QuickReminderDialog {
                     previewText += i18n("detectedTaskTitle", { title: String(currentParseResult.cleanTitle) });
                 }
 
-                nlPreview.innerText = previewText;
+                setTaskMetadataText(nlPreview, previewText);
                 nlPreview.className = 'nl-preview nl-preview--success';
                 nlConfirmBtn.disabled = false;
             } else {
@@ -3395,7 +3395,7 @@ export class QuickReminderDialog {
                                 <label class="b3-checkbox">
                                     <input type="checkbox" class="b3-switch" id="quickHideInCalendar">
                                     <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">${i18n("hideInCalendar")}</span>
+                                    <span class="b3-checkbox__label">${renderTaskMetadataText(i18n("hideInCalendar"))}</span>
                                 </label>
                                 <label class="b3-checkbox">
                                     <input type="checkbox" class="b3-switch" id="quickPinned">

@@ -1,3 +1,4 @@
+import { renderTaskMetadataText } from "../render/taskMetadataIcons";
 ﻿import { Dialog } from "siyuan";
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { i18n } from "../../pluginInstance";
@@ -234,7 +235,7 @@ export class SortMenuDialog {
                 opacity: ${isSelected ? '0.5' : '1'};
                 cursor: ${isSelected ? 'not-allowed' : 'pointer'};
             `;
-            btn.innerHTML = `<span>${method.icon}</span><span>${method.label()}</span>`;
+            btn.innerHTML = `<span>${renderTaskMetadataText(method.icon)}</span><span>${method.label()}</span>`;
             
             if (!isSelected) {
                 btn.addEventListener('click', () => {

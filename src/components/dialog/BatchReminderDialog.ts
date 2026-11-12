@@ -1,3 +1,4 @@
+import { setTaskMetadataText, renderTaskMetadataText, renderTaskMetadataIcon } from "../render/taskMetadataIcons";
 import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { updateBindBlockAtrrs, getBlockByID } from "../../api";
@@ -566,8 +567,8 @@ class SmartBatchDialog {
                             <div class="block-title">${setting?.cleanTitle || data.content}</div>
                             <div class="block-meta">
                                 <div class="block-datetime">
-                                    <span class="block-date">${dateDisplay}${setting?.endDate ? ` ➡️ ${new Date(setting.endDate + 'T00:00:00').toLocaleDateString(getLocaleTag())}` : ''}</span>
-                                    <span class="block-time">${timeDisplay}${setting?.hasEndTime && setting?.endTime ? ` - ${setting.endTime}` : ''}</span>
+                                    <span class="block-date">${renderTaskMetadataIcon('calendar')} ${dateDisplay}${setting?.endDate ? ` ➡️ ${new Date(setting.endDate + 'T00:00:00').toLocaleDateString(getLocaleTag())}` : ''}</span>
+                                    <span class="block-time">${renderTaskMetadataIcon('alarm')} ${timeDisplay}${setting?.hasEndTime && setting?.endTime ? ` - ${setting.endTime}` : ''}</span>
                                 </div>
                                 <div class="block-attributes">
                                     <span class="block-category">${categoryDisplay}</span>
@@ -1012,7 +1013,7 @@ class SmartBatchDialog {
                     }
                 }
 
-                nlPreview.textContent = previewText;
+                setTaskMetadataText(nlPreview, previewText);
                 nlPreview.className = 'nl-preview nl-preview--success';
                 nlConfirmBtn.disabled = selectedCount === 0;
             } else {
@@ -1568,8 +1569,8 @@ class SmartBatchDialog {
         const blockStatus = blockItem.querySelector('.block-project-status .block-status') as HTMLElement;
         const blockMilestone = blockItem.querySelector('.block-milestone') as HTMLElement;
 
-        if (blockDate) blockDate.textContent = dateDisplay;
-        if (blockTime) blockTime.textContent = timeDisplay;
+        if (blockDate) setTaskMetadataText(blockDate, `📅 ${dateDisplay}`);
+        if (blockTime) setTaskMetadataText(blockTime, `⏰ ${timeDisplay}`);
         if (blockCategory) blockCategory.innerHTML = this.getCategoryDisplay(setting.categoryId);
         if (blockPriority) blockPriority.innerHTML = this.getPriorityDisplay(setting.priority);
         if (blockProject) blockProject.innerHTML = await this.getProjectDisplay(setting.projectId, setting.customGroupId);
@@ -2139,7 +2140,7 @@ class BlockEditDialog {
                     }
                 }
 
-                nlPreview.innerHTML = `<span style="color: var(--b3-theme-primary);">✅ ${previewText}</span>`;
+                nlPreview.innerHTML = `<span style="color: var(--b3-theme-primary);">${renderTaskMetadataText(`✅ ${previewText}`)}</span>`;
                 nlConfirmBtn.disabled = false;
             } else {
                 nlPreview.innerHTML = `<span style="color: var(--b3-theme-error);">${i18n("dateParseFailedMessage")}</span>`;

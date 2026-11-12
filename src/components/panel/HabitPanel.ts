@@ -1,3 +1,4 @@
+import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siyuan";
 import { openBlock, pushMsg } from "../../api";
 import { getLocalDateString, getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../../utils/dateUtils";
@@ -1373,7 +1374,7 @@ export class HabitPanel {
         const timeText = habit.endDate
             ? `${habit.startDate} ~ ${habit.endDate}`
             : `${habit.startDate} ${i18n("timeStart") || '起'}`;
-        freqTimeItem.innerHTML = `<span class="habit-card__info-icon">🔄</span><span class="habit-card__info-text">${this.getFrequencyText(habit.frequency)} · ${timeText}</span>`;
+        freqTimeItem.innerHTML = `<span class="habit-card__info-icon">${renderTaskMetadataIcon('repeat')}</span><span class="habit-card__info-text">${this.getFrequencyText(habit.frequency)} · ${timeText}</span>`;
         infoGrid.appendChild(freqTimeItem);
 
         // 提醒时间（支持多个）- 已结束和已放弃的习惯不显示
@@ -1385,7 +1386,7 @@ export class HabitPanel {
                 const reminderItem = document.createElement('div');
                 reminderItem.className = 'habit-card__info-item habit-card__info-item--full';
                 const displayTimes = timesList.map(t => formatHabitReminderTimeDisplay(t));
-                reminderItem.innerHTML = `<span class="habit-card__info-icon">⏰</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
+                reminderItem.innerHTML = `<span class="habit-card__info-icon">${renderTaskMetadataIcon('alarm')}</span><span class="habit-card__info-text">${displayTimes.join(', ')}</span>`;
                 infoGrid.appendChild(reminderItem);
             }
         }
@@ -1404,13 +1405,13 @@ export class HabitPanel {
             pomodoroSection.style.color = 'var(--b3-theme-on-surface-light)';
             pomodoroSection.innerHTML = `
                 <div class="ariaLabel" aria-label="${i18n('pomodoroTodayCountTooltip', { count: String(pomodoroStats.todayCount) })}" style="white-space:nowrap; opacity:0.95;">
-                    <span>${i18n("todayPomodoroWithIcon")}${pomodoroStats.todayCount}</span>
-                    <span style="margin-left:4px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}</span>
+                    <span>${renderTaskMetadataText(i18n("todayPomodoroWithIcon"))}${pomodoroStats.todayCount}</span>
+                    <span style="margin-left:4px; opacity:0.9;">${renderTaskMetadataIcon('duration')} ${this.formatPomodoroFocusTime(pomodoroStats.todayFocusMinutes)}</span>
                 </div>
                 <span aria-hidden="true" style="flex:1 1 0; min-width:0;"></span>
                 <div class="ariaLabel" aria-label="${i18n('pomodoroTotalCountTooltip', { count: String(pomodoroStats.totalCount) })}" style="white-space:nowrap;">
-                    <span>${i18n("seriesPomodoroWithIcon")}${pomodoroStats.totalCount}</span>
-                    <span style="margin-left:4px; opacity:0.9;">⏱ ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}</span>
+                    <span>${renderTaskMetadataText(i18n("seriesPomodoroWithIcon"))}${pomodoroStats.totalCount}</span>
+                    <span style="margin-left:4px; opacity:0.9;">${renderTaskMetadataIcon('duration')} ${this.formatPomodoroFocusTime(pomodoroStats.totalFocusMinutes)}</span>
                 </div>
             `;
             card.appendChild(pomodoroSection);
@@ -1510,12 +1511,12 @@ export class HabitPanel {
 
             if (isPomodoroGoal && buttonType === 'countup') {
                 // 正计时按钮
-                checkInBtn.innerHTML = `<span>⏱️</span><span>${i18n("countUpLabel")}</span>`;
+                checkInBtn.innerHTML = `<span>${renderTaskMetadataIcon('timer')}</span><span>${i18n("countUpLabel")}</span>`;
                 checkInBtn.classList.add('ariaLabel');
                 checkInBtn.setAttribute('aria-label', i18n("startCountUp"));
             } else if (isPomodoroGoal && buttonType === 'pomodoro') {
                 // 番茄钟按钮
-                checkInBtn.innerHTML = `<span>🍅</span><span>${i18n("pomodoroTimerLabel")}</span>`;
+                checkInBtn.innerHTML = `<span>${renderTaskMetadataIcon('tomato')}</span><span>${i18n("pomodoroTimerLabel")}</span>`;
                 checkInBtn.classList.add('ariaLabel');
                 checkInBtn.setAttribute('aria-label', i18n("startPomodoro"));
             } else {
@@ -1571,7 +1572,7 @@ export class HabitPanel {
                 const timerBtn = document.createElement('button');
                 timerBtn.className = 'habit-card__checkin-btn';
                 const countUp = habit.checkInButtonType === 'countup';
-                timerBtn.innerHTML = countUp ? `<span>⏱️</span><span>${i18n("countUpLabel")}</span>` : `<span>🍅</span><span>${i18n("pomodoroTimerLabel")}</span>`;
+                timerBtn.innerHTML = countUp ? `<span>${renderTaskMetadataIcon('timer')}</span><span>${i18n("countUpLabel")}</span>` : `<span>${renderTaskMetadataIcon('tomato')}</span><span>${i18n("pomodoroTimerLabel")}</span>`;
                 timerBtn.addEventListener('click', event => {
                     event.preventDefault();
                     event.stopPropagation();

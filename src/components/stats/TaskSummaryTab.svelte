@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { renderTaskMetadataText } from "../render/taskMetadataIcons";
+
     import { onMount, tick } from "svelte";
     import { i18n } from "../../pluginInstance";
     import { getLocalDateString, getLogicalDateString, getLocaleTag } from "../../utils/dateUtils";
@@ -1805,7 +1807,7 @@
             </div>
             {#if showPomodoro}
                 <div class="info-card">
-                    <div class="info-label">{i18n("pomodoroFocusCard")}</div>
+                    <div class="info-label">{@html renderTaskMetadataText(i18n("pomodoroFocusCard"))}</div>
                     <div class="info-value">
                         {i18n("pomodoroStatsValue")
                             .replace("${count}", stats.pomodoro.totalCount.toString())
@@ -1832,9 +1834,9 @@
 
                     {#if dateGroup.pomodoroStats && (dateGroup.pomodoroStats.count > 0 || dateGroup.pomodoroStats.minutes > 0)}
                         <div class="summary-stat-row">
-                            {i18n("focusStatLine")
+                            {@html renderTaskMetadataText(i18n("focusStatLine")
                                 .replace("${count}", dateGroup.pomodoroStats.count.toString())
-                                .replace("${duration}", formatDuration(dateGroup.pomodoroStats.minutes))}
+                                .replace("${duration}", formatDuration(dateGroup.pomodoroStats.minutes)))}
                         </div>
                     {/if}
 
@@ -1888,7 +1890,7 @@
                                                     <span class="task-title">
                                                         {task.title}
                                                         {#if task.repeatLabel}
-                                                            <span class="task-meta">({task.repeatLabel})</span>
+                                                            <span class="task-meta">({@html renderTaskMetadataText(task.repeatLabel)})</span>
                                                         {/if}
                                                         {#if getDisplayTimeForDate(task, dateGroup.date)}
                                                             <span class="task-meta">{getDisplayTimeForDate(task, dateGroup.date)}</span>
@@ -1897,7 +1899,7 @@
                                                             <span class="task-meta">({i18n("estimatedTime").replace("${duration}", task.estimatedPomodoroDuration.toString())})</span>
                                                         {/if}
                                                         {#if getPomodoroStr(task, dateGroup.date)}
-                                                            <span class="task-meta">{getPomodoroStr(task, dateGroup.date)}</span>
+                                                            <span class="task-meta">{@html renderTaskMetadataText(getPomodoroStr(task, dateGroup.date))}</span>
                                                         {/if}
                                                         {#if task.completed && task.completedTime}
                                                             <span class="task-meta">{formatCompletedTime(task.completedTime, dateGroup.date)}</span>
@@ -1927,7 +1929,7 @@
                                                     <span class="task-title">
                                                         {task.title}
                                                         {#if task.repeatLabel}
-                                                            <span class="task-meta">({task.repeatLabel})</span>
+                                                            <span class="task-meta">({@html renderTaskMetadataText(task.repeatLabel)})</span>
                                                         {/if}
                                                         {#if getDisplayTimeForDate(task, dateGroup.date)}
                                                             <span class="task-meta">{getDisplayTimeForDate(task, dateGroup.date)}</span>
@@ -1936,7 +1938,7 @@
                                                             <span class="task-meta">({i18n("estimatedTime").replace("${duration}", task.estimatedPomodoroDuration.toString())})</span>
                                                         {/if}
                                                         {#if getPomodoroStr(task, dateGroup.date)}
-                                                            <span class="task-meta">{getPomodoroStr(task, dateGroup.date)}</span>
+                                                            <span class="task-meta">{@html renderTaskMetadataText(getPomodoroStr(task, dateGroup.date))}</span>
                                                         {/if}
                                                         {#if task.completed && task.completedTime}
                                                             <span class="task-meta">{formatCompletedTime(task.completedTime, dateGroup.date)}</span>
