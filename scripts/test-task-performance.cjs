@@ -257,7 +257,7 @@ test('5000 条独立任务只读一次本地任务和当天会话，不逐任务
 function panelClass(renderTask) {
     const relative = 'src/components/panel/ReminderPanel.ts';
     const source = ts.createSourceFile(relative, fs.readFileSync(path.join(root, relative), 'utf8'), ts.ScriptTarget.Latest, true);
-    const names = ['completedSubtaskCollapse', 'isTaskCollapsed', 'renderRemindersIteratively', 'getReminderElementSignature', 'getReminderBadgeVisibility', 'preprocessAsyncData',
+    const names = ['reminderGroupMode', 'completedSubtaskCollapse', 'isTaskCollapsed', 'renderRemindersIteratively', 'getReminderElementSignature', 'getReminderBadgeVisibility', 'preprocessAsyncData',
         'createReminderRenderIndexes', 'serializeReminderRenderState', 'getReminderSharedRenderVersion', 'createReminderElementOptimized'];
     const members = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ReminderPanel').members;
     const code = ts.transpileModule(`class Panel { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} }`, {
@@ -341,12 +341,12 @@ test('侧栏共用本轮索引，保持深度优先顺序、折叠和隐藏父�
         isTodayLikeView: () => false, currentTab: 'all', isTaskCollapsed: id => id === 'child',
         remindersContainer: { querySelectorAll: () => [] }, isTaskCardDocumentTitleEnabled: () => false,
         createReminderElementOptimized: (task, _cache, _today, level, _visible, indexes) => {
-            contexts.add(indexes); return `${task.id}:${level}`;
+            contexts.add(indexes); return { id: `${task.id}:${level}`, classList: { remove() {} }, dataset: {} };
         },
         reconcileReminderElements: elements => { rendered = elements; },
     });
     panel.renderRemindersIteratively(tasks, new Map(), today);
-    assert.deepEqual(rendered, ['root:0', 'child:1', 'other:0', 'orphan:0']);
+    assert.deepEqual(rendered.map(element => element.id), ['root:0', 'child:1', 'other:0', 'orphan:0']);
     assert.equal(contexts.size, 1);
     assert.equal([...contexts][0].all.byId.size, tasks.length);
 });
@@ -370,7 +370,7 @@ test('5000 张复用卡片只扫描一次 DOM 并序列化一次公共设置与�
     const Panel = panelClass();
     const panel = new Panel();
     const tasks = Array.from({ length: 5000 }, (_, i) => ({ id: `task-${i}`, title: `任务${i}` }));
-    const nodes = tasks.map(task => ({ dataset: { reminderId: task.id } }));
+    const nodes = tasks.map(task => ({ dataset: { reminderId: task.id }, classList: { remove() {} } }));
     let domScans = 0, settingsReads = 0, holidayReads = 0, reused = 0;
     Object.assign(panel, {
         allRemindersMap: new Map(tasks.map(t => [t.id, t])), currentRemindersCache: tasks,
@@ -436,8 +436,8 @@ function boardRenderingClass(renderTask) {
     const code = ts.transpileModule(`class Board { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} reloadCollapseState() ${reloadCollapseBlock} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
-    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'TaskRenderer', 'getLogicalDateString', code + '; return Board;')(
-        TaskHierarchyIndex, CompletedSubtaskCollapseState, { render: renderTask }, () => today,
+    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'TaskRenderer', 'getLogicalDateString', 'getFrontend', code + '; return Board;')(
+        TaskHierarchyIndex, CompletedSubtaskCollapseState, { render: renderTask }, () => today, () => 'desktop',
     );
 }
 

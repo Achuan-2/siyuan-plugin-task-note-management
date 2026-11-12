@@ -3242,10 +3242,10 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickMilestoneGroup" style="display: none;">
-                            <label class="b3-form__label">${this.renderSettingLabel('flag', i18n("milestone"))}</label>
+                            <label class="b3-form__label">🚩 ${i18n("milestone")}</label>
                             <div class="custom-select" id="quickMilestoneSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
-                                    <svg id="quickMilestoneSelectedIcon" aria-hidden="true" style="display: none; position: absolute; z-index: 1; left: 8px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; pointer-events: none;"><use xlink:href="#iconTNMilestone"></use></svg>
+                                    <span id="quickMilestoneSelectedIcon" aria-hidden="true" style="display: none; position: absolute; z-index: 1; left: 8px; top: 50%; transform: translateY(-50%); pointer-events: none;"></span>
                                     <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
                                     <input type="hidden" id="quickMilestoneSelector">
                                 </div>
@@ -6770,7 +6770,7 @@ export class QuickReminderDialog {
         const searchInputText = this.dialog.element.querySelector('#quickMilestoneSearchInput') as HTMLInputElement;
         const hiddenInput = this.dialog.element.querySelector('#quickMilestoneSelector') as HTMLInputElement;
         const dropdownEl = this.dialog.element.querySelector('#quickMilestoneDropdown') as HTMLElement;
-        const selectedIcon = this.dialog.element.querySelector('#quickMilestoneSelectedIcon') as SVGSVGElement;
+        const selectedIcon = this.dialog.element.querySelector('#quickMilestoneSelectedIcon') as HTMLElement;
 
         if (!milestoneGroup || !searchInputText || !hiddenInput || !dropdownEl) return;
 
@@ -6806,20 +6806,24 @@ export class QuickReminderDialog {
                 dropdownEl.parentNode?.replaceChild(dropdown, dropdownEl);
 
                 dropdown.replaceChildren();
-                const appendOption = (value: string, label: string, iconId: string) => {
+                const appendOption = (value: string, label: string, emoji: string) => {
                     const item = document.createElement('div');
                     item.className = 'b3-menu__item';
                     item.dataset.value = value;
                     item.dataset.label = label;
-                    item.innerHTML = `<svg class="b3-menu__icon" aria-hidden="true"><use xlink:href="#${iconId}"></use></svg>`;
+                    item.dataset.icon = emoji;
+                    const icon = document.createElement('span');
+                    icon.className = 'b3-menu__icon';
+                    icon.textContent = emoji;
+                    item.appendChild(icon);
                     const name = document.createElement('span');
                     name.className = 'b3-menu__label';
                     name.textContent = label;
                     item.appendChild(name);
                     dropdown.appendChild(item);
                 };
-                appendOption('', i18n('noMilestone'), 'iconTNSkip');
-                milestones.forEach(m => appendOption(m.id, m.name, 'iconTNMilestone'));
+                appendOption('', i18n('noMilestone'), '🚫');
+                milestones.forEach(m => appendOption(m.id, m.name, m.icon || '🚩'));
                 milestoneGroup.style.display = 'block';
 
                 const setSelectedIconVisible = (visible: boolean) => {
@@ -6831,6 +6835,7 @@ export class QuickReminderDialog {
                     const item = Array.from(dropdown.querySelectorAll<HTMLElement>('.b3-menu__item[data-value]'))
                         .find(option => option.dataset.value === currentId);
                     searchInput.value = currentId ? (item?.dataset.label || '') : '';
+                    if (selectedIcon) selectedIcon.textContent = currentId ? (item?.dataset.icon || '') : '';
                     setSelectedIconVisible(!!currentId && !!item);
                 };
 

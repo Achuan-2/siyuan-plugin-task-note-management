@@ -1573,7 +1573,10 @@ export class TaskRenderer {
                     milestoneEl.style.textDecoration = 'underline dotted';
                 }
 
-                milestoneEl.innerHTML = '<svg aria-hidden="true" style="width: 12px; height: 12px; flex-shrink: 0;"><use xlink:href="#iconTNMilestone"></use></svg>';
+                const milestoneIcon = document.createElement('span');
+                milestoneIcon.textContent = milestone.icon || '🚩';
+                milestoneIcon.style.flexShrink = '0';
+                milestoneEl.appendChild(milestoneIcon);
                 const milestoneName = document.createElement('span');
                 milestoneName.style.fontWeight = '500';
                 milestoneName.textContent = milestone.name;

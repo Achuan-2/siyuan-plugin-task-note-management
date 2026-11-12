@@ -2118,7 +2118,7 @@ export class ProjectKanbanView {
             const optionsContainer = document.createElement('div');
             menu.appendChild(optionsContainer);
 
-            const appendOption = (name: string, iconId: string, milestoneId?: string, archived = false) => {
+            const appendOption = (name: string, emoji: string, milestoneId?: string, archived = false) => {
                 const label = document.createElement('label');
                 label.style.cssText = 'display: flex; align-items: center; padding: 6px 8px; cursor: pointer; border-radius: 4px; transition: background 0.2s;';
                 label.onmouseenter = () => label.style.backgroundColor = 'var(--b3-theme-surface-lighter)';
@@ -2147,12 +2147,10 @@ export class ProjectKanbanView {
                     if (!multiSelectCheckbox.checked) closePopup();
                 });
 
-                const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                const icon = document.createElement('span');
                 icon.style.cssText = 'width: 16px; height: 16px; flex-shrink: 0; margin-right: 6px;';
                 icon.setAttribute('aria-hidden', 'true');
-                const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-                use.setAttribute('href', `#${iconId}`);
-                icon.appendChild(use);
+                icon.textContent = emoji;
                 const nameEl = document.createElement('span');
                 nameEl.textContent = name;
                 nameEl.style.cssText = 'flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
@@ -2168,7 +2166,7 @@ export class ProjectKanbanView {
             const renderOptions = () => {
                 optionsContainer.replaceChildren();
                 clearBtn.style.display = multiSelectCheckbox.checked ? '' : 'none';
-                if (!multiSelectCheckbox.checked) appendOption(i18n('allTasks'), 'iconTNTodoList');
+                if (!multiSelectCheckbox.checked) appendOption(i18n('allTasks'), '📋');
                 milestonesToShow.forEach(section => {
                     // 状态视图按分组显示里程碑，“无里程碑”不显示分组标题。
                     if (this.kanbanMode === 'status' && section.milestones.length > 0 && section.title !== (i18n('noMilestone') || '无里程碑')) {
@@ -2196,8 +2194,8 @@ export class ProjectKanbanView {
                     }
 
                     section.milestones.forEach(ms => {
-                        const iconId = ms.id === '__no_milestone__' ? 'iconTNSkip' : 'iconTNMilestone';
-                        appendOption(ms.name, iconId, ms.id, ms.archived);
+                        const emoji = ms.id === '__no_milestone__' ? '🚫' : (ms.icon || '🚩');
+                        appendOption(ms.name, emoji, ms.id, ms.archived);
                     });
                 });
             };
@@ -10106,8 +10104,7 @@ export class ProjectKanbanView {
 
                     availableMilestones.forEach(ms => {
                         milestoneMenuItems.push({
-                            icon: "iconTNMilestone",
-                            label: ms.name,
+                            label: `${ms.icon || '🚩'} ${ms.name}`,
                             current: currentMilestoneId === ms.id,
                             click: () => this.setTaskMilestone(task, ms.id)
                         });
