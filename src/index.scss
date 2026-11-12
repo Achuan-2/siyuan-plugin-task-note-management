@@ -1564,6 +1564,10 @@
     min-width: 0;
 }
 
+.reminder-item__time-container:empty {
+    display: none !important; // 渲染器的内联 flex 样式不应让空时间行占据间距。
+}
+
 .reminder-item__pin-badge {
     font-size: 14px;
     line-height: 1;
@@ -1722,7 +1726,7 @@
 .reminder-item__title {
     font-weight: 500;
     cursor: pointer;
-    margin-bottom: 4px;
+    margin-bottom: 0;
     color: var(--b3-theme-on-background);
     text-decoration: none;
 
