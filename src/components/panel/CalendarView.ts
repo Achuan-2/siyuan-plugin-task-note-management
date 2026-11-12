@@ -1,3 +1,4 @@
+import { renderTaskMetadataIcon } from "../render/taskMetadataIcons";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
@@ -10458,7 +10459,7 @@ export class CalendarView {
             // Title
             htmlParts.push(
                 `<div style="font-weight: 600; color: var(--b3-theme-on-surface); margin-bottom: 8px; font-size: 14px; text-align: left; width: 100%;">`,
-                `🍅 ${this.escapeHtml(title)}`,
+                `${renderTaskMetadataIcon('tomato')} ${this.escapeHtml(title)}`,
                 `</div>`
             );
 
@@ -10468,7 +10469,7 @@ export class CalendarView {
                 const endTime = calendarEvent.end.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                    `<span style="opacity: 0.7;">🕐</span>`,
+                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('clock')}</span>`,
                     `<span>${startTime} - ${endTime} (${reminder.duration}m)</span>`,
                     `</div>`
                 );
@@ -10504,7 +10505,7 @@ export class CalendarView {
             // Title
             htmlParts.push(
                 `<div style="font-weight: 600; color: var(--b3-theme-success); margin-bottom: 8px; font-size: 14px; text-align: left; width: 100%;">`,
-                `✅ ${this.escapeHtml(title)}`,
+                `${renderTaskMetadataIcon('check')} ${this.escapeHtml(title)}`,
                 `</div>`
             );
 
@@ -10512,7 +10513,7 @@ export class CalendarView {
             if (reminder.parentId && reminder.parentTitle) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                    `<span style="opacity: 0.7;">↪️</span>`,
+                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('parent')}</span>`,
                     `<span style="font-size: 13px;">${i18n("parentTask") || '父任务'}: ${this.escapeHtml(reminder.parentTitle)}</span>`,
                     `</div>`
                 );
@@ -10525,7 +10526,7 @@ export class CalendarView {
                 const formattedDate = completedDate.toLocaleDateString(getLocaleTag(), { month: 'short', day: 'numeric' });
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                    `<span style="opacity: 0.7;">✓</span>`,
+                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('check')}</span>`,
                     `<span>${i18n("completedAt") || "完成于"} ${formattedDate} ${formattedTime}</span>`,
                     `</div>`
                 );
@@ -10544,7 +10545,7 @@ export class CalendarView {
                 visibleSubtasks.forEach(item => {
                     htmlParts.push(
                         `<div style="display: flex; align-items: flex-start; gap: 6px; color: var(--b3-theme-on-surface); padding-left: ${item.depth * 16}px;">`,
-                        `<span>${item.completed ? '✅' : '⬜'}</span>`,
+                        `<span>${item.completed ? renderTaskMetadataIcon('check') : renderTaskMetadataIcon('unchecked')}</span>`,
                         `<span style="${item.completed ? 'opacity: 0.7; text-decoration: line-through;' : ''}">${this.escapeHtml(item.title)}</span>`,
                         `</div>`
                     );
@@ -10575,7 +10576,7 @@ export class CalendarView {
             if (realtimeDateTime) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                    `<span style="opacity: 0.7;">⏰</span>`,
+                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('alarm')}</span>`,
                     `<span>${this.escapeHtml(realtimeDateTime)}</span>`,
                     `</div>`
                 );
@@ -10584,7 +10585,7 @@ export class CalendarView {
                 if (dateText) {
                     htmlParts.push(
                         `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                        `<span style="opacity: 0.7;">📅</span>`,
+                        `<span style="opacity: 0.7;">${renderTaskMetadataIcon('calendar')}</span>`,
                         `<span>${this.escapeHtml(dateText)}</span>`,
                         `</div>`
                     );
@@ -10595,7 +10596,7 @@ export class CalendarView {
                         : reminder.time;
                     htmlParts.push(
                         `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                        `<span style="opacity: 0.7;">⏰</span>`,
+                        `<span style="opacity: 0.7;">${renderTaskMetadataIcon('alarm')}</span>`,
                         `<span>${this.escapeHtml(timeText)}</span>`,
                         `</div>`
                     );
@@ -10603,7 +10604,7 @@ export class CalendarView {
             }
             htmlParts.push(
                 `<div style="color: ${reminder.completed ? 'var(--b3-theme-success)' : 'var(--b3-theme-on-surface-light)'}; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                `<span style="opacity: 0.8;">${reminder.completed ? '✅' : '⏳'}</span>`,
+                `<span style="opacity: 0.8;">${reminder.completed ? renderTaskMetadataIcon('check') : renderTaskMetadataIcon('hourglass')}</span>`,
                 `<span>${(() => {
                     const statusText = reminder.completed ? (i18n("completed") || "已完成") : (i18n("uncompleted") || "未完成");
                     if (reminder.goalType === 'either') {
@@ -10650,7 +10651,7 @@ export class CalendarView {
                 // 如果有项目，显示项目名
                 const project = this.projectManager.getProjectById(reminder.projectId);
                 if (project) {
-                    labelIcon = '📂';
+                    labelIcon = renderTaskMetadataIcon('project');
                     labelText = project.name;
 
                     // 如果有自定义分组，显示"项目-自定义分组"
@@ -10668,7 +10669,7 @@ export class CalendarView {
                 }
             } else if (reminder.docTitle && reminder.docId && reminder.blockId && reminder.docId !== reminder.blockId) {
                 // 如果没有项目，且绑定块是块而不是文档，显示文档名
-                labelIcon = '📄';
+                labelIcon = renderTaskMetadataIcon('document');
                 labelText = reminder.docTitle;
             }
 
@@ -10707,7 +10708,7 @@ export class CalendarView {
             if (dateTimeInfo) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                    `<span style="opacity: 0.7;">🕐</span>`,
+                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('clock')}</span>`,
                     `<span>${dateTimeInfo}</span>`,
                     `</div>`
                 );
@@ -10717,7 +10718,7 @@ export class CalendarView {
             if (reminder.parentId && reminder.parentTitle) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">`,
-                    `<span style="opacity: 0.7;">↪️</span>`,
+                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('parent')}</span>`,
                     `<span style="font-size: 13px;">${i18n("parentTask") || '父任务'}: ${this.escapeHtml(reminder.parentTitle)}</span>`,
                     `</div>`
                 );
@@ -10741,7 +10742,7 @@ export class CalendarView {
                 const categoryIds = reminder.categoryId.split(',');
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">`,
-                    `<span style="opacity: 0.7;">🏷️</span>`
+                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('tag')}</span>`
                 );
 
                 categoryIds.forEach(id => {
@@ -10767,7 +10768,7 @@ export class CalendarView {
             if (reminder.isRepeated) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface-light); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; font-size: 12px;">`,
-                    `<span>🔄</span>`,
+                    `<span>${renderTaskMetadataIcon('repeat')}</span>`,
                     `<span>${i18n("repeatInstance")}</span>`,
                     `</div>`
                 );
@@ -10776,7 +10777,7 @@ export class CalendarView {
                 if (repeatDescription) {
                     htmlParts.push(
                         `<div style="color: var(--b3-theme-on-surface-light); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; font-size: 12px;">`,
-                        `<span>🔁</span>`,
+                        `<span>${renderTaskMetadataIcon('repeat')}</span>`,
                         `<span>${repeatDescription}</span>`,
                         `</div>`
                     );
@@ -10820,7 +10821,7 @@ export class CalendarView {
 
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-success); margin-top: 6px; display: flex; align-items: center; gap: 4px; font-size: 12px;">`,
-                    `<span>✅</span>`,
+                    `<span>${renderTaskMetadataIcon('check')}</span>`,
                     `<span>${i18n("completed")}</span>`
                 );
 
@@ -10845,7 +10846,7 @@ export class CalendarView {
                 visibleSubtasks.forEach(item => {
                     htmlParts.push(
                         `<div style="display: flex; align-items: flex-start; gap: 6px; color: var(--b3-theme-on-surface); padding-left: ${item.depth * 16}px;">`,
-                        `<span>${item.completed ? '✅' : '⬜'}</span>`,
+                        `<span>${item.completed ? renderTaskMetadataIcon('check') : renderTaskMetadataIcon('unchecked')}</span>`,
                         `<span style="${item.completed ? 'opacity: 0.7; text-decoration: line-through;' : ''}">${this.escapeHtml(item.title)}</span>`,
                         `</div>`
                     );
@@ -11052,15 +11053,15 @@ export class CalendarView {
      */
     private formatPriorityInfo(priority: string): string {
         const priorityMap = {
-            'high': { label: i18n("high"), icon: '🔴', color: '#e74c3c' },
-            'medium': { label: i18n("medium"), icon: '🟡', color: '#f39c12' },
-            'low': { label: i18n("low"), icon: '🔵', color: '#3498db' }
+            'high': { label: i18n("high"), color: '#e74c3c' },
+            'medium': { label: i18n("medium"), color: '#f39c12' },
+            'low': { label: i18n("low"), color: '#3498db' }
         };
 
         const priorityInfo = priorityMap[priority];
         if (!priorityInfo) return '';
 
-        return `<span style="opacity: 0.7;">${priorityInfo.icon}</span>
+        return `<span style="color: ${priorityInfo.color};">${renderTaskMetadataIcon('flag')}</span>
                 <span style="color: ${priorityInfo.color};">${priorityInfo.label}</span>`;
     }
 

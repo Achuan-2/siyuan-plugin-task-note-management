@@ -5,6 +5,7 @@
  * 供侧边栏面板、看板视图、四象限视图等各模块统一调用，以保证整体插件中任务 UI 和交互逻辑的一致性。
  */
 import { colorWithOpacity } from "../../utils/uiUtils";
+import { renderTaskMetadataIcon, setTaskMetadataText } from "./taskMetadataIcons";
 import type { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { updateBindBlockAtrrs } from "../../api";
 import { getLuteInstance } from "../../utils/luteSingleton";
@@ -227,7 +228,7 @@ export class TaskRenderer {
         `;
 
         const docIcon = document.createElement('span');
-        docIcon.textContent = '📄';
+        docIcon.innerHTML = renderTaskMetadataIcon('document');
         docIcon.style.fontSize = '10px';
 
         const docTitleLink = document.createElement('span');
@@ -1119,7 +1120,7 @@ export class TaskRenderer {
         if (isPinned) {
             const pinBadge = document.createElement('span');
             pinBadge.className = 'reminder-item__pin-badge';
-            pinBadge.textContent = '📌';
+            pinBadge.innerHTML = renderTaskMetadataIcon('pin');
             titleRow.appendChild(pinBadge);
         }
 
@@ -1178,7 +1179,7 @@ export class TaskRenderer {
         if (task.repeat?.enabled || task.isRepeatInstance) {
             const repeatIcon = document.createElement('span');
             repeatIcon.className = 'reminder-repeat-icon';
-            repeatIcon.textContent = '🔄';
+            repeatIcon.innerHTML = renderTaskMetadataIcon('repeat');
             repeatIcon.classList.add('ariaLabel');
             repeatIcon.setAttribute('aria-label', task.repeat?.enabled ? getRepeatDescription(task.repeat) : (i18n("repeatInstance") || "周期事件实例"));
             timeContainer.appendChild(repeatIcon);
@@ -1192,7 +1193,7 @@ export class TaskRenderer {
             const displayTime = task.date ? task.time : (task.endTime || task.time);
             const timeText = this.formatReminderTime(displayDate, displayTime, today, task.endDate, task.endTime, task, context);
             const hasNoDate = !task.date && !task.endDate;
-            timeEl.textContent = (hasNoDate ? '' : '🗓️') + timeText;
+            setTaskMetadataText(timeEl, (hasNoDate ? '' : '🗓️ ') + timeText);
 
             const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
             if (isEditable) {
@@ -1257,33 +1258,33 @@ export class TaskRenderer {
                 const repeatingFocus = totalRepeatingFocusTime || 0;
                 const instanceCount = pomodoroCount || 0;
 
-                const repeatingFocusText = repeatingFocus > 0 ? ` ⏱ ${this.formatMinutesToString(repeatingFocus)}` : '';
-                const instanceFocusText = focusTime > 0 ? ` ⏱ ${this.formatMinutesToString(focusTime)}` : '';
+                const repeatingFocusText = repeatingFocus > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(repeatingFocus)}` : '';
+                const instanceFocusText = focusTime > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(focusTime)}` : '';
                 const instanceEstimatedText = task.estimatedPomodoroDuration
                     ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro') || "预计番茄"}'>（${i18n('estimated') || "预计"}：${task.estimatedPomodoroDuration}）</span>`
                     : '';
 
                 totalLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;">
                     <div class="ariaLabel" aria-label="${i18n('seriesTotalTomatoTitle') || "系列累计番茄钟: "}${repeatingTotal}">
-                        <span>${i18n('series') || "系列"}: 🍅 ${repeatingTotal}</span>
+                        <span>${i18n('series') || "系列"}: ${renderTaskMetadataIcon('tomato')} ${repeatingTotal}</span>
                         <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
                     </div>
                     <div class="ariaLabel" aria-label="${i18n('instanceTomatoTitle') || "本实例番茄钟: "}${instanceCount}" style="margin-top:4px; opacity:0.95;">
-                        <span>${i18n('currentInstance') || "本次"}: 🍅 ${instanceCount}</span>
+                        <span>${i18n('currentInstance') || "本次"}: ${renderTaskMetadataIcon('tomato')} ${instanceCount}</span>
                         <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}${instanceEstimatedText}</span>
                     </div>
                  </div>`;
             } else {
-                const formattedTotalTomato = `🍅 ${pomodoroCount || 0}`;
-                const totalFocusText = focusTime > 0 ? ` ⏱ ${this.formatMinutesToString(focusTime)}` : '';
+                const formattedTotalTomato = `${renderTaskMetadataIcon('tomato')} ${pomodoroCount || 0}`;
+                const totalFocusText = focusTime > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(focusTime)}` : '';
                 totalLine = (pomodoroCount > 0 || focusTime > 0)
                     ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;"><span class="ariaLabel" aria-label="${i18n('totalCompletedPomodoroTitle') || "完成的番茄钟数量: "}${pomodoroCount || 0}">${i18n('total') || "总共"}: ${formattedTotalTomato}</span><span class="ariaLabel" aria-label="${i18n('totalFocusDurationTitle') || "总专注时长: "}${focusTime || 0} ${i18n('minutes') || "分钟"}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span></div>`
                     : '';
 
                 const hasHistoricalData = (pomodoroCount > todayPomodoroCount) || (focusTime > todayFocusTime);
-                const todayFocusText = todayFocusTime > 0 ? ` ⏱ ${this.formatMinutesToString(todayFocusTime)}` : '';
+                const todayFocusText = todayFocusTime > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(todayFocusTime)}` : '';
                 todayLine = hasHistoricalData && (todayPomodoroCount > 0 || todayFocusTime > 0)
-                    ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='${i18n('todayCompletedPomodoroTitle') || "今日完成番茄钟: "}${todayPomodoroCount}'>${i18n('today') || "今日"}: 🍅 ${todayPomodoroCount}</span><span class="ariaLabel" aria-label='${i18n('todayFocusTimeTitle') || "今日专注时长: "}${todayFocusTime} ${i18n('minutes') || "分钟"}' style='margin-left:8px'>${todayFocusText}</span></div>`
+                    ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='${i18n('todayCompletedPomodoroTitle') || "今日完成番茄钟: "}${todayPomodoroCount}'>${i18n('today') || "今日"}: ${renderTaskMetadataIcon('tomato')} ${todayPomodoroCount}</span><span class="ariaLabel" aria-label='${i18n('todayFocusTimeTitle') || "今日专注时长: "}${todayFocusTime} ${i18n('minutes') || "分钟"}' style='margin-left:8px'>${todayFocusText}</span></div>`
                     : '';
             }
 
@@ -1322,7 +1323,8 @@ export class TaskRenderer {
                     const timeOnly = formattedTime.includes(' ') ? formattedTime.substring(formattedTime.indexOf(' ') + 1) : formattedTime;
                     completedEl.textContent = i18n('todayCompletedWithTime', { time: timeOnly }) || `今日完成于 ${timeOnly}`;
                 } else {
-                    completedEl.textContent = `✅ ${formattedTime}`;
+                    completedEl.innerHTML = renderTaskMetadataIcon('check') + ' ';
+                    completedEl.appendChild(document.createTextNode(formattedTime));
                 }
                 completedEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
                 infoEl.appendChild(completedEl);
@@ -1427,7 +1429,8 @@ export class TaskRenderer {
 
 
                 const nameSpan = document.createElement('span');
-                nameSpan.textContent = `📂${i18n("project") || "项目"}：${displayProjectName}`;
+                nameSpan.innerHTML = renderTaskMetadataIcon('project') + ' ';
+                nameSpan.appendChild(document.createTextNode(`${i18n("project") || "项目"}：${displayProjectName}`));
                 nameSpan.style.cssText = `
                     text-decoration: underline;
                     text-decoration-style: dotted;
@@ -1689,7 +1692,8 @@ export class TaskRenderer {
                     padding: 1px 4px;
                     font-weight: 500;
                 `;
-                tagEl.textContent = `#${tag}`;
+                tagEl.innerHTML = renderTaskMetadataIcon('tag') + ' ';
+                tagEl.appendChild(document.createTextNode(tag));
                 tagsContainer.appendChild(tagEl);
             });
             infoEl.appendChild(tagsContainer);
@@ -1720,7 +1724,8 @@ export class TaskRenderer {
                             const tagEl = document.createElement('span');
                             tagEl.className = 'reminder-item__tag tn-project-tag';
                             applyProjectTagColor(tagEl, tag.color);
-                            tagEl.textContent = `#${tag.name}`;
+                            tagEl.innerHTML = renderTaskMetadataIcon('tag') + ' ';
+                            tagEl.appendChild(document.createTextNode(tag.name));
                             tagEl.classList.add('ariaLabel');
                             tagEl.setAttribute('aria-label', tag.name);
                             tagsContainer.appendChild(tagEl);

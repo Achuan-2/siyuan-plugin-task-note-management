@@ -15,6 +15,7 @@ import { BlockBindingDialog } from "./BlockBindingDialog";
 import { SubtasksDialog } from "./SubtasksDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
+import { setTaskMetadataText } from "../render/taskMetadataIcons";
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
 import { Plugin, NodeSelection } from "@milkdown/prose/state";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
@@ -2501,7 +2502,7 @@ export class QuickReminderDialog {
                 const seriesTimeStr = seriesMinutes > 0 ? `(${Math.floor(seriesMinutes / 60)}h${seriesMinutes % 60}m)` : '';
 
                 if (instanceCount > 0 || seriesCount > 0) {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${instanceCount}🍅${instanceTimeStr} / ${i18n('seriesLabel')} ${seriesCount}🍅${seriesTimeStr}`;
+                    setTaskMetadataText(pomodorosCountText, `${i18n("viewPomodoros")} ${instanceCount}🍅${instanceTimeStr} / ${i18n('seriesLabel')} ${seriesCount}🍅${seriesTimeStr}`);
                 } else {
                     pomodorosCountText.textContent = `${i18n("viewPomodoros")}`;
                 }
@@ -2513,7 +2514,7 @@ export class QuickReminderDialog {
                 const seriesTimeStr = seriesMinutes > 0 ? ` (${Math.floor(seriesMinutes / 60)}h${seriesMinutes % 60}m)` : '';
 
                 if (seriesCount > 0 || seriesMinutes > 0) {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${seriesCount}🍅${seriesTimeStr}`;
+                    setTaskMetadataText(pomodorosCountText, `${i18n("viewPomodoros")} ${seriesCount}🍅${seriesTimeStr}`);
                 } else {
                     pomodorosCountText.textContent = `${i18n("viewPomodoros")}`;
                 }
@@ -2525,7 +2526,7 @@ export class QuickReminderDialog {
                 const timeStr = totalMinutes > 0 ? ` (${Math.floor(totalMinutes / 60)}h${totalMinutes % 60}m)` : '';
 
                 if (count > 0 || totalMinutes > 0) {
-                    pomodorosCountText.textContent = `${i18n("viewPomodoros")} ${count}🍅${timeStr}`;
+                    setTaskMetadataText(pomodorosCountText, `${i18n("viewPomodoros")} ${count}🍅${timeStr}`);
                 } else {
                     pomodorosCountText.textContent = `${i18n("viewPomodoros")}`;
                 }

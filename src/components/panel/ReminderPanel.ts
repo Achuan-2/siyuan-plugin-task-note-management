@@ -1,3 +1,4 @@
+import { renderTaskMetadataIcon } from "../render/taskMetadataIcons";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
@@ -2189,12 +2190,12 @@ export class ReminderPanel {
                                     if (hours > 0) return `${hours}h ${mins}m`;
                                     return `${mins}m`;
                                 };
-                                const totalFocusText = focusTimeMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusTimeMinutes)}` : '';
-                                const todayFocusText = (todayFocusMinutes > 0 || totalCount > 0) ? ` ⏱ ${formatMinutesToString(todayFocusMinutes)}` : '';
-                                const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTotalTooltip', { count: String(totalCount) })}">🍅 ${totalCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTotalTooltip', { minutes: String(focusTimeMinutes) })}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
-                                const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTodayTooltip', { count: String(todayCount) })}">${i18n("todayPomodoroWithIcon")}${todayCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTodayTooltip', { minutes: String(todayFocusMinutes) })}" style="margin-left:8px">${todayFocusText}</span></div>` : '';
+                                const totalFocusText = focusTimeMinutes > 0 ? ` ${renderTaskMetadataIcon('timer')} ${formatMinutesToString(focusTimeMinutes)}` : '';
+                                const todayFocusText = (todayFocusMinutes > 0 || totalCount > 0) ? ` ${renderTaskMetadataIcon('timer')} ${formatMinutesToString(todayFocusMinutes)}` : '';
+                                const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTotalTooltip', { count: String(totalCount) })}">${renderTaskMetadataIcon('tomato')} ${totalCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTotalTooltip', { minutes: String(focusTimeMinutes) })}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
+                                const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTodayTooltip', { count: String(todayCount) })}">${i18n("todayPomodoroWithIcon").replace("🍅", renderTaskMetadataIcon("tomato"))}${todayCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTodayTooltip', { minutes: String(todayFocusMinutes) })}" style="margin-left:8px">${todayFocusText}</span></div>` : '';
 
-                                const focusTimeText = focusTimeMinutes > 0 ? ` ⏱ ${formatMinutesToString(focusTimeMinutes)}` : '';
+                                const focusTimeText = focusTimeMinutes > 0 ? ` ${renderTaskMetadataIcon('timer')} ${formatMinutesToString(focusTimeMinutes)}` : '';
                                 pomEl.innerHTML = `${totalLine}${todayLine}`;
                             }
                         }
@@ -3411,9 +3412,9 @@ export class ReminderPanel {
         const todayCount = cachedData.todayPomodoroCount || 0;
         const totalFocus = cachedData.focusTime || 0;
         const todayFocus = cachedData.todayFocusTime || 0;
-        const formattedTotalTomato = `🍅 ${totalCount}`;
-        const totalFocusText = totalFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(totalFocus)}` : '';
-        const todayFocusText = (todayFocus > 0 || totalCount > 0) ? ` 🕒 ${this.formatPomodoroMinutes(todayFocus)}` : '';
+        const formattedTotalTomato = `${renderTaskMetadataIcon('tomato')} ${totalCount}`;
+        const totalFocusText = totalFocus > 0 ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(totalFocus)}` : '';
+        const todayFocusText = (todayFocus > 0 || totalCount > 0) ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(todayFocus)}` : '';
         const estimatedLine = reminder.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro')}'>${i18n('estimated')}: ${reminder.estimatedPomodoroDuration}</span>` : '';
 
         let totalLine = '';
@@ -3422,16 +3423,16 @@ export class ReminderPanel {
         if (reminder.isRepeatInstance) {
             const repeatingTotal = cachedData.totalRepeatingPomodoroCount || 0;
             const repeatingFocus = cachedData.totalRepeatingFocusTime || 0;
-            const repeatingFocusText = repeatingFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(repeatingFocus)}` : '';
-            const instanceFocusText = totalFocus > 0 ? ` 🕒 ${this.formatPomodoroMinutes(totalFocus)}` : '';
+            const repeatingFocusText = repeatingFocus > 0 ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(repeatingFocus)}` : '';
+            const instanceFocusText = totalFocus > 0 ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(totalFocus)}` : '';
 
             totalLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;">
                 <div class="ariaLabel" aria-label="${i18n('seriesTotalTomatoTitle')}${repeatingTotal}">
-                    <span>${i18n('series')}: 🍅 ${repeatingTotal}</span>
+                    <span>${i18n('series')}: ${renderTaskMetadataIcon('tomato')} ${repeatingTotal}</span>
                     <span style="margin-left:8px; opacity:0.9;">${repeatingFocusText}</span>
                 </div>
                 <div class="ariaLabel" aria-label="${i18n('instanceTomatoTitle')}${totalCount}" style="margin-top:4px; opacity:0.95;">
-                    <span>${i18n('currentInstance')}: 🍅 ${totalCount}</span>
+                    <span>${i18n('currentInstance')}: ${renderTaskMetadataIcon('tomato')} ${totalCount}</span>
                     <span style="margin-left:8px; opacity:0.9;">${instanceFocusText}</span>
                 </div>
              </div>`;
@@ -3442,7 +3443,7 @@ export class ReminderPanel {
 
             const hasHistoricalData = (totalCount > todayCount) || (totalFocus > todayFocus);
             todayLine = hasHistoricalData && (todayCount > 0 || todayFocus > 0)
-                ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='${i18n('todayCompletedPomodoroTitle')}${todayCount}'>${i18n('today')}: 🍅 ${todayCount}</span><span class="ariaLabel" aria-label='${i18n('todayFocusTimeTitle')}${todayFocus} ${i18n('minutes')}' style='margin-left:8px'>${todayFocusText}</span></div>`
+                ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='${i18n('todayCompletedPomodoroTitle')}${todayCount}'>${i18n('today')}: ${renderTaskMetadataIcon('tomato')} ${todayCount}</span><span class="ariaLabel" aria-label='${i18n('todayFocusTimeTitle')}${todayFocus} ${i18n('minutes')}' style='margin-left:8px'>${todayFocusText}</span></div>`
                 : '';
         }
 
