@@ -2073,28 +2073,28 @@ export class ProjectPanel {
         if (project.blockId) {
             // 复制块引用
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconCopy",
                 label: i18n("copyBlockRef") || "复制块引用",
                 click: () => this.copyProjectRef(project)
             });
         } else {
             // 绑定到块
             menu.addItem({
-                iconHTML: "🔗",
+                icon: "iconLink",
                 label: i18n("bindToBlock") || "绑定到块",
                 submenu: [
                     {
-                        iconHTML: "🔗",
+                        icon: "iconLink",
                         label: i18n("bindToBlock") || "绑定到块",
                         click: () => this.showBindToBlockDialog(project, 'bind')
                     },
                     {
-                        iconHTML: "📑",
+                        icon: "iconH1",
                         label: i18n("newHeading") || "新建标题",
                         click: () => this.showBindToBlockDialog(project, 'heading')
                     },
                     {
-                        iconHTML: "📄",
+                        icon: "iconFile",
                         label: i18n("newDocument") || "新建文档",
                         click: () => this.showBindToBlockDialog(project, 'document')
                     }
@@ -2104,14 +2104,14 @@ export class ProjectPanel {
 
         // 编辑项目
         menu.addItem({
-            iconHTML: "📝",
+            icon: "iconEdit",
             label: i18n("edit") || "编辑项目",
             click: () => this.editProject(project)
         });
 
         // 合并到其他项目
         menu.addItem({
-            iconHTML: "🔀",
+            icon: "iconTNMerge",
             label: i18n("mergeProject") || "合并到其他项目",
             click: () => this.showMergeDialog(project)
         });
@@ -2119,16 +2119,16 @@ export class ProjectPanel {
         // 设置优先级子菜单
         const createPriorityMenuItems = () => {
             const priorities = [
-                { key: 'high', label: i18n("highPriority") || '高', icon: '🔴' },
-                { key: 'medium', label: i18n("mediumPriority") || '中', icon: '🟡' },
-                { key: 'low', label: i18n("lowPriority") || '低', icon: '🔵' },
-                { key: 'none', label: i18n("noPriority") || '无', icon: '⚫' }
+                { key: 'high', label: i18n("highPriority") || '高', icon: 'iconTNPriorityHigh' },
+                { key: 'medium', label: i18n("mediumPriority") || '中', icon: 'iconTNPriorityMedium' },
+                { key: 'low', label: i18n("lowPriority") || '低', icon: 'iconTNPriorityLow' },
+                { key: 'none', label: i18n("noPriority") || '无', icon: 'iconTNPriorityNone' }
             ];
 
             const currentPriority = project.priority || 'none';
 
             return priorities.map(priority => ({
-                iconHTML: priority.icon,
+                icon: priority.icon,
                 label: priority.label,
                 current: currentPriority === priority.key,
                 click: () => {
@@ -2138,7 +2138,7 @@ export class ProjectPanel {
         };
 
         menu.addItem({
-            iconHTML: "🎯",
+            icon: "iconTNPriority",
             label: i18n("setPriority") || "设置优先级",
             submenu: createPriorityMenuItems()
         });
@@ -2151,7 +2151,7 @@ export class ProjectPanel {
             const menuItems = [];
 
             menuItems.push({
-                iconHTML: "❌",
+                icon: "iconClose",
                 label: i18n("noCategory") || "无分类",
                 current: !currentCategoryId,
                 click: () => {
@@ -2161,7 +2161,7 @@ export class ProjectPanel {
 
             categories.forEach(category => {
                 menuItems.push({
-                    iconHTML: category.icon || "📁",
+                    icon: "iconTags",
                     label: category.name,
                     current: currentCategoryId === category.id,
                     click: () => {
@@ -2174,7 +2174,7 @@ export class ProjectPanel {
         };
 
         menu.addItem({
-            iconHTML: "🏷️",
+            icon: "iconTags",
             label: i18n("setCategory") || "设置分类",
             submenu: createCategoryMenuItems()
         });
@@ -2188,7 +2188,7 @@ export class ProjectPanel {
             const menuItems = [];
 
             menuItems.push({
-                iconHTML: "❌",
+                icon: "iconClose",
                 label: i18n("noFolder") || "无文件夹",
                 current: currentFolderId === '',
                 click: () => {
@@ -2217,7 +2217,7 @@ export class ProjectPanel {
                 return (childrenByParent.get(parentId) || []).map((folder: any) => {
                     const childItems = createNestedFolderItems(folder.id);
                     const item: any = {
-                        iconHTML: folder.icon || "📁",
+                        icon: "iconFolder",
                         label: folder.name,
                         current: currentFolderId === folder.id
                     };
@@ -2225,7 +2225,7 @@ export class ProjectPanel {
                     if (childItems.length > 0) {
                         item.submenu = [
                             {
-                                iconHTML: folder.icon || "📁",
+                                icon: "iconFolder",
                                 label: i18n("selectThisFolder"),
                                 current: currentFolderId === folder.id,
                                 click: () => {
@@ -2251,7 +2251,7 @@ export class ProjectPanel {
         };
 
         menu.addItem({
-            iconHTML: "📁",
+            icon: "iconFolder",
             label: i18n("setFolder") || "设置文件夹",
             submenu: createFolderMenuItems()
         });
@@ -2260,9 +2260,14 @@ export class ProjectPanel {
         const createStatusMenuItems = () => {
             const statuses = this.statusManager.getStatuses();
             const currentStatus = project.status || 'active';
+            const statusIcons: Record<string, string> = {
+                active: 'iconClock',
+                someday: 'iconLight',
+                archived: 'iconInbox'
+            };
 
             return statuses.map(status => ({
-                iconHTML: status.icon || '📝',
+                icon: status.isArchived ? 'iconInbox' : (statusIcons[status.id] || 'iconTNStatus'),
                 label: status.name,
                 current: currentStatus === status.id,
                 click: () => {
@@ -2272,7 +2277,7 @@ export class ProjectPanel {
         };
 
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconTNStatus",
             label: i18n("setStatus") || "设置状态",
             submenu: createStatusMenuItems()
         });
@@ -2281,7 +2286,7 @@ export class ProjectPanel {
 
         // 删除项目
         menu.addItem({
-            iconHTML: "🗑️",
+            icon: "iconTrashcan",
             label: i18n("deleteProject") || "删除项目",
             click: () => this.deleteProject(project)
         });
@@ -3978,7 +3983,7 @@ export class ProjectPanel {
                 click: () => this.openFolderKanban(node)
             });
             menu.addItem({
-                iconHTML: "📊",
+                icon: "iconTNStatistic",
                 label: i18n("viewStatsMenuItem") || "查看统计",
                 click: () => showFolderStatsDialog(this.plugin, folder, node, this.reminderDataCache)
             });

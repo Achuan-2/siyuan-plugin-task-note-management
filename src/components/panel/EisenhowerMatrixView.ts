@@ -1,3 +1,4 @@
+import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { getFile, putFile, openBlock, getBlockByID, removeFile } from "../../api";
@@ -1896,7 +1897,7 @@ export class EisenhowerMatrixView {
 
         menu.addItem({
             label: i18n('editTask'),
-            iconHTML: '📝',
+            icon: 'iconEdit',
             click: () => {
                 this.showTaskEditDialog(task);
             }
@@ -1999,7 +2000,7 @@ export class EisenhowerMatrixView {
         // 无项目选项
         menu.addItem({
             label: i18n('noProject'),
-            icon: task.projectId ? 'iconRemove' : 'iconCheck',
+            icon: task.projectId ? 'iconClose' : 'iconCheck',
             click: async () => {
                 await this.updateTaskProject(task.id, null);
                 showMessage(i18n('projectUpdated'));
@@ -2748,7 +2749,7 @@ export class EisenhowerMatrixView {
 
         if (task.isSubscribed) {
             menu.addItem({
-                iconHTML: "ℹ️",
+                icon: "iconInfo",
                 label: i18n("subscribedTaskReadonly"),
                 disabled: true
             });
@@ -2756,13 +2757,13 @@ export class EisenhowerMatrixView {
 
             if (task.blockId) {
                 menu.addItem({
-                    iconHTML: "🔗",
+                    icon: "iconOpen",
                     label: i18n("openBoundBlock"),
                     click: () => this.openTaskBlock(task.blockId!)
                 });
 
                 menu.addItem({
-                    iconHTML: "📋",
+                    icon: "iconCopy",
                     label: i18n("copyBlockRef"),
                     click: () => this.copyBlockRef(task)
                 });
@@ -2771,7 +2772,7 @@ export class EisenhowerMatrixView {
             // 番茄钟功能对订阅任务仍然可用
             const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
             menu.addItem({
-                iconHTML: "🍅",
+                icon: "iconTNPomodoro",
                 label: i18n("startPomodoro"),
                 ...(pomodoroDirectStart
                     ? { click: () => this.startPomodoro(task) }
@@ -2779,7 +2780,7 @@ export class EisenhowerMatrixView {
             });
 
             menu.addItem({
-                iconHTML: "⏱️",
+                icon: "iconTNStopwatch",
                 label: i18n("startCountUp"),
                 click: () => this.startPomodoroCountUp(task)
             });
@@ -2791,12 +2792,12 @@ export class EisenhowerMatrixView {
         if (task.isRepeatInstance || task.repeat?.enabled) {
             // 周期事件（包括实例和原始事件） - 显示修改此实例和修改所有实例
             menu.addItem({
-                iconHTML: "📝",
+                icon: "iconEdit",
                 label: i18n("modifyThisInstance"),
                 click: () => this.editInstanceReminder(task)
             });
             menu.addItem({
-                iconHTML: "🔄",
+                icon: "iconRefresh",
                 label: i18n("modifyAllInstances"),
                 click: () => this.showTaskEditDialog(task)
             });
@@ -2804,13 +2805,13 @@ export class EisenhowerMatrixView {
             // 普通任务
             menu.addItem({
                 label: i18n('editTask'),
-                iconHTML: "📝",
+                icon: "iconEdit",
                 click: () => this.showTaskEditDialog(task)
             });
         }
         // 创建子任务选项
         menu.addItem({
-            iconHTML: "➕",
+            icon: "iconAdd",
             label: i18n("createSubtask"),
             click: () => this.showCreateTaskDialog(task.quadrant, task)
         });
@@ -2819,7 +2820,7 @@ export class EisenhowerMatrixView {
         // 置顶任务
         const isPinned = !!task.pinned;
         menu.addItem({
-            iconHTML: isPinned ? "📍" : "📌",
+            icon: isPinned ? "iconUnpin" : "iconPin",
             label: isPinned ? (i18n("unpinTask") || "取消置顶任务") : (i18n("pinTask") || "置顶任务"),
             click: () => this.setTaskPinned(task, !isPinned)
         });
@@ -2829,34 +2830,34 @@ export class EisenhowerMatrixView {
         // 绑定块功能
         if (task.blockId) {
             menu.addItem({
-                iconHTML: "🔗",
+                icon: "iconLink",
                 label: i18n("openBoundBlock"),
                 click: () => this.openTaskBlock(task.blockId!)
             });
 
             menu.addItem({
-                iconHTML: "📋",
+                icon: "iconCopy",
                 label: i18n("copyBlockRef"),
                 click: () => this.copyBlockRef(task)
             });
 
         } else {
             menu.addItem({
-                iconHTML: "🔗",
+                icon: "iconLink",
                 label: i18n("bindToBlock"),
                 submenu: [
                     {
-                        iconHTML: "🔗",
+                        icon: "iconLink",
                         label: i18n("bindToBlock"),
                         click: () => this.showBindToBlockDialog(task, 'bind')
                     },
                     {
-                        iconHTML: "📑",
+                        icon: "iconH1",
                         label: i18n("newHeading"),
                         click: () => this.showBindToBlockDialog(task, 'heading')
                     },
                     {
-                        iconHTML: "📄",
+                        icon: "iconFile",
                         label: i18n("newDocument"),
                         click: () => this.showBindToBlockDialog(task, 'document')
                     }
@@ -2869,16 +2870,16 @@ export class EisenhowerMatrixView {
         // 设置优先级子菜单
         const createPriorityMenuItems = () => {
             const priorities = [
-                { key: 'high', label: i18n("highPriority"), icon: '🔴' },
-                { key: 'medium', label: i18n("mediumPriority"), icon: '🟡' },
-                { key: 'low', label: i18n("lowPriority"), icon: '🔵' },
-                { key: 'none', label: i18n("noPriority"), icon: '⚫' }
+                { key: 'high', label: i18n("highPriority"), icon: 'iconTNPriorityHigh' },
+                { key: 'medium', label: i18n("mediumPriority"), icon: 'iconTNPriorityMedium' },
+                { key: 'low', label: i18n("lowPriority"), icon: 'iconTNPriorityLow' },
+                { key: 'none', label: i18n("noPriority"), icon: 'iconTNPriorityNone' }
             ];
 
             const currentPriority = task.priority || 'none';
 
             return priorities.map(priority => ({
-                iconHTML: priority.icon,
+                icon: priority.icon,
                 label: priority.label,
                 current: currentPriority === priority.key,
                 click: () => {
@@ -2888,7 +2889,7 @@ export class EisenhowerMatrixView {
         };
 
         menu.addItem({
-            iconHTML: "🎯",
+            icon: "iconTNPriority",
             label: i18n("setPriority"),
             submenu: createPriorityMenuItems()
         });
@@ -2896,15 +2897,15 @@ export class EisenhowerMatrixView {
         // 设置看板状态子菜单
         const createKanbanStatusMenuItems = () => {
             // 使用固定的状态列表（doing, short_term, long_term）
+            const statusColors = new Map(this.projectManager.getDefaultKanbanStatuses().map(status => [status.id, status.color]));
             const statuses: Array<{
                 key: string;
                 label: string;
-                icon: string;
                 kanbanStatus: string;
             }> = [
-                    { key: 'doing', label: i18n('doing'), icon: '⏳', kanbanStatus: 'doing' },
-                    { key: 'short_term', label: i18n('shortTerm'), icon: '📋', kanbanStatus: 'short_term' },
-                    { key: 'long_term', label: i18n('longTerm'), icon: '🤔', kanbanStatus: 'long_term' }
+                    { key: 'doing', label: i18n('doing'), kanbanStatus: 'doing' },
+                    { key: 'short_term', label: i18n('shortTerm'), kanbanStatus: 'short_term' },
+                    { key: 'long_term', label: i18n('longTerm'), kanbanStatus: 'long_term' }
                 ];
 
             const currentKanbanStatus = task.extendedProps?.kanbanStatus || 'short_term';
@@ -2913,7 +2914,7 @@ export class EisenhowerMatrixView {
                 const isCurrent = currentKanbanStatus === status.kanbanStatus;
 
                 return {
-                    iconHTML: status.icon,
+                    iconHTML: createStatusMenuIcon(statusColors.get(status.kanbanStatus)),
                     label: status.label,
                     current: isCurrent,
                     click: () => {
@@ -2924,7 +2925,7 @@ export class EisenhowerMatrixView {
         };
 
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconTNStatus",
             label: i18n("setStatus"),
             submenu: createKanbanStatusMenuItems()
         });
@@ -2933,7 +2934,7 @@ export class EisenhowerMatrixView {
 
         const pomodoroDirectStart2 = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n("startPomodoro"),
             ...(pomodoroDirectStart2
                 ? { click: () => this.startPomodoro(task) }
@@ -2941,7 +2942,7 @@ export class EisenhowerMatrixView {
         });
 
         menu.addItem({
-            iconHTML: "⏱️",
+            icon: "iconTNStopwatch",
             label: i18n("startStopwatch"),
             click: () => this.startPomodoroCountUp(task)
         });
@@ -2955,12 +2956,12 @@ export class EisenhowerMatrixView {
         if (task.isRepeatInstance || task.repeat?.enabled) {
             // 周期事件（包括实例和原始事件） - 显示删除此实例和删除所有实例
             menu.addItem({
-                iconHTML: "🗑️",
+                icon: "iconTrashcan",
                 label: i18n("deleteThisInstance"),
                 click: () => this.deleteInstanceOnly(task)
             });
             menu.addItem({
-                iconHTML: "🗑️",
+                icon: "iconTrashcan",
                 label: i18n('deleteAllInstances'),
                 click: async () => await this.deleteTask(task)
             });
@@ -2968,7 +2969,7 @@ export class EisenhowerMatrixView {
             // 普通任务
             menu.addItem({
                 label: i18n('deleteTask'),
-                iconHTML: "🗑️",
+                icon: "iconTrashcan",
                 click: async () => {
                     await this.deleteTask(task);
                 }

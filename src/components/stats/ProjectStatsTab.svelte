@@ -458,7 +458,7 @@
             },
         });
         menu.addItem({
-            iconHTML: "📝",
+            icon: "iconEdit",
             label: i18n("edit") || "编辑项目",
             click: () => {
                 const dialog = new ProjectDialog(project.id, plugin);

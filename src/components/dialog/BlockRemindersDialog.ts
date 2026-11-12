@@ -371,7 +371,7 @@ export class BlockRemindersDialog {
         const menu = new Menu("blockReminderActionMenu");
 
         menu.addItem({
-            iconHTML: "📝",
+            icon: "iconEdit",
             label: i18n("edit") || "编辑",
             click: () => {
                 void this.openEditDialog(reminder);
@@ -379,7 +379,7 @@ export class BlockRemindersDialog {
         });
 
         menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n("startPomodoro") || "开始番茄钟",
             ...(this.plugin?.settings?.pomodoroDirectStart
                 ? { click: () => this.startReminderTimer(reminder) }
@@ -392,12 +392,12 @@ export class BlockRemindersDialog {
                 })
         });
         menu.addItem({
-            iconHTML: "⏱️",
+            icon: "iconTNStopwatch",
             label: i18n("startCountUp") || "开始正计时",
             click: () => this.startReminderTimer(reminder, true)
         });
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconTNStatistic",
             label: i18n("viewPomodoros") || "查看番茄钟",
             click: async () => {
                 const { PomodoroSessionsDialog } = await import("./PomodoroSessionsDialog");
@@ -407,7 +407,7 @@ export class BlockRemindersDialog {
         menu.addSeparator();
 
         menu.addItem({
-            iconHTML: "🗑️",
+            icon: "iconTrashcan",
             label: i18n("delete") || "删除",
             click: () => {
                 void this.deleteReminder(reminder);

@@ -1866,19 +1866,19 @@ export class HabitPanel {
 
         const pomodoroDirectStart = this.plugin?.settings?.pomodoroDirectStart;
         menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n("startPomodoro") || "开始番茄钟",
             ...(pomodoroDirectStart
                 ? { click: () => this.startPomodoro(habit) }
                 : { submenu: this.createPomodoroStartSubmenu(habit) })
         });
         menu.addItem({
-            iconHTML: "⏱️",
+            icon: "iconTNStopwatch",
             label: i18n("startCountUp") || "开始正向计时",
             click: () => this.startPomodoroCountUp(habit)
         });
         menu.addItem({
-            iconHTML: "📊",
+            icon: "iconTNStatistic",
             label: i18n("viewPomodoros") || "查看番茄钟",
             click: () => this.showPomodoroSessions(habit)
         });
@@ -1888,7 +1888,7 @@ export class HabitPanel {
         // 查看统计
         menu.addItem({
             label: i18n("viewStatsMenuItem"),
-            icon: "iconSparkles",
+            icon: "iconTNStatistic",
             click: () => {
                 this.showHabitStats(habit);
             }

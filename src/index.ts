@@ -3347,7 +3347,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 添加设置时间提醒菜单项
         detail.menu.addItem({
-            iconHTML: "⏰",
+            icon: "iconTNNotification",
             label: documentIds.length > 1 ?
                 i18n("batchSetReminderBlocks", { count: documentIds.length.toString() }) :
                 i18n("setTimeReminder"),
@@ -3392,7 +3392,7 @@ export default class ReminderPlugin extends Plugin {
         // 添加查看文档所有提醒菜单项（只处理第一个选中的文档）
         if (documentIds.length === 1) {
             detail.menu.addItem({
-                iconHTML: "📋",
+                icon: "iconTNTodoList",
                 label: i18n("viewDocumentAllReminders"),
                 click: () => {
                     const documentReminderDialog = new DocumentReminderDialog(documentIds[0], this);
@@ -3404,7 +3404,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 添加设置为项目笔记菜单项（只处理第一个选中的文档）
         detail.menu.addItem({
-            iconHTML: "📂",
+            icon: "iconTNProject",
             label: i18n("projectManagement"),
             click: async () => {
                 const projectData = await this.loadProjectData();
@@ -3441,7 +3441,7 @@ export default class ReminderPlugin extends Plugin {
         const documentId = detail.protyle.block.rootID;
 
         detail.menu.addItem({
-            iconHTML: "⏰",
+            icon: "iconTNNotification",
             label: i18n("setTimeReminder"),
             click: async () => {
                 if (documentId) {
@@ -3474,7 +3474,7 @@ export default class ReminderPlugin extends Plugin {
 
         const pomodoroDirectStart = this.settings?.pomodoroDirectStart;
         detail.menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n("startPomodoro") || "开始番茄钟",
             ...(pomodoroDirectStart
                 ? { click: () => this.startPomodoroForBlock(documentId) }
@@ -3483,7 +3483,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 添加文档提醒查看功能
         detail.menu.addItem({
-            iconHTML: "📋",
+            icon: "iconTNTodoList",
             label: i18n("documentReminderManagement"),
             click: () => {
                 if (documentId) {
@@ -3495,7 +3495,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 添加项目笔记设置功能
         detail.menu.addItem({
-            iconHTML: "📂",
+            icon: "iconTNProject",
             label: i18n("projectManagement"),
             click: async () => {
                 if (documentId) {
@@ -3544,7 +3544,7 @@ export default class ReminderPlugin extends Plugin {
         if (blockElements.length === 1) {
             const blockElement = blockElements[0];
             detail.menu.addItem({
-                iconHTML: "⏰",
+                icon: "iconTNNotification",
                 label: i18n("setTimeReminder"),
                 click: () => {
                     const blockId = blockElement.getAttribute("data-node-id");
@@ -3565,7 +3565,7 @@ export default class ReminderPlugin extends Plugin {
             // 只有存在嵌套子项时，才显示“识别子任务”选项
             if (hierarchicalCount > flatCount) {
                 detail.menu.addItem({
-                    iconHTML: "⏰",
+                    icon: "iconTNNotification",
                     label: i18n("batchTasksWithSubtasks", { count: String(hierarchicalCount) }),
                     click: async () => {
                         await this.handleHierarchicalBatchCreateFromSelection(blockElements);
@@ -3574,7 +3574,7 @@ export default class ReminderPlugin extends Plugin {
             }
 
             detail.menu.addItem({
-                iconHTML: "⏰",
+                icon: "iconTNNotification",
                 label: i18n("batchTasksWithoutSubtasks", { count: String(flatCount) }),
                 click: async () => {
                     await this.handleFlatBatchCreateFromSelection(blockElements);
@@ -3583,7 +3583,7 @@ export default class ReminderPlugin extends Plugin {
         } else if (blockElements.length > 1) {
             // 3. 不包含列表相关的普通多选，显示默认的批量设置
             detail.menu.addItem({
-                iconHTML: "⏰",
+                icon: "iconTNNotification",
                 label: i18n("batchSetReminderBlocks", { count: blockElements.length.toString() }),
                 click: () => {
                     const blockIds = blockElements
@@ -3605,7 +3605,7 @@ export default class ReminderPlugin extends Plugin {
             if (blockId) {
                 const pomodoroDirectStart = this.settings?.pomodoroDirectStart;
                 detail.menu.addItem({
-                    iconHTML: "🍅",
+                    icon: "iconTNPomodoro",
                     label: i18n("startPomodoro") || "开始番茄钟",
                     ...(pomodoroDirectStart
                         ? { click: () => this.startPomodoroForBlock(blockId) }
@@ -3615,7 +3615,7 @@ export default class ReminderPlugin extends Plugin {
 
             if (blockId && blockElement.hasAttribute("custom-bind-reminders")) {
                 detail.menu.addItem({
-                    iconHTML: "📋",
+                    icon: "iconTNTodoList",
                     label: i18n("viewBoundTasks"),
                     click: async () => {
                         const { BlockRemindersDialog } = await import("./components/dialog/BlockRemindersDialog");
@@ -3738,7 +3738,7 @@ export default class ReminderPlugin extends Plugin {
             return readDatabaseTaskSources(detail, request);
         };
         detail.menu.addItem({
-            iconHTML: "⏰",
+            icon: "iconTNNotification",
             label: ids.length === 1 ? i18n("setTimeReminder")
                 : i18n("batchSetReminderBlocks", { count: ids.length.toString() }),
             click: async () => {
@@ -3793,7 +3793,7 @@ export default class ReminderPlugin extends Plugin {
             }
         };
         detail.menu.addItem({
-            iconHTML: "🍅",
+            icon: "iconTNPomodoro",
             label: i18n("startPomodoro") || "开始番茄钟",
             ...(this.settings?.pomodoroDirectStart ? { click: () => startPomodoro() } : {
                 submenu: createSharedPomodoroStartSubmenu({

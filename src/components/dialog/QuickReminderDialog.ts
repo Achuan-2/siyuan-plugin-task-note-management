@@ -396,7 +396,7 @@ export class QuickReminderDialog {
     private async showImageContextMenu(e: MouseEvent, src: string) {
         const menu = new Menu("imageContextMenu");
         menu.addItem({
-            iconHTML: "📋",
+            icon: "iconCopy",
             label: i18n("copy") || "复制图片",
             click: async () => {
                 try {
