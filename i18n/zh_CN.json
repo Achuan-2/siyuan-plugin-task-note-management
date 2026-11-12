@@ -2924,6 +2924,8 @@
     "completedTasksToBottom": "已完成任务移到底部",
     "completedTasksToTop": "已完成任务移到顶部",
     "taskListSortFailed": "任务列表排序失败，请稍后重试。",
+    "sortAndGrouping": "排序和分组",
+    "reminderSorting": "排序",
     "reminderGrouping": "分组",
     "reminderGroupDefault": "默认",
     "reminderGroupProject": "按项目",

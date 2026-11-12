@@ -36,12 +36,10 @@ export class SortMenuDialog {
 
     public show() {
         const dialog = new Dialog({
-            title: i18n("sortBy") || "排序方式",
+            title: this.options.grouping ? i18n('sortAndGrouping') : (i18n("sortBy") || "排序方式"),
             content: `<div class="sort-menu-dialog" style="padding: 16px; min-width: 320px;">
-                ${this.options.grouping ? `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-                    <span>${i18n('reminderGrouping')}</span>
-                    <button class="b3-button b3-button--outline sort-menu-grouping"></button>
-                </div>` : ''}
+                <section class="sort-menu-sorting-section">
+                ${this.options.grouping ? `<h3 style="margin: 0 0 12px; font-size: 14px; font-weight: 600;">${i18n('reminderSorting')}</h3>` : ''}
                 <div class="sort-menu-mode" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--b3-theme-border);">
                     <span style="font-size: 13px; color: var(--b3-theme-on-surface);">${i18n("multiSelectSortMode") || "多选排序模式"}</span>
                     <label  style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -73,6 +71,11 @@ export class SortMenuDialog {
                         <!-- 可用的排序选项将显示在这里 -->
                     </div>
                 </div>
+                </section>
+                ${this.options.grouping ? `<section class="sort-menu-grouping-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--b3-theme-border);">
+                    <h3 style="margin: 0 0 12px; font-size: 14px; font-weight: 600;">${i18n('reminderGrouping')}</h3>
+                    <button class="b3-button b3-button--outline sort-menu-grouping"></button>
+                </section>` : ''}
                 <div class="sort-menu-actions" style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px;">
                     <button class="b3-button b3-button--cancel sort-menu-cancel">${i18n("close") || "关闭"}</button>
                 </div>
