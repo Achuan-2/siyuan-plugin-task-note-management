@@ -13,7 +13,7 @@ const content = process.env.QUICK_REMINDER_SOURCE_REF
     : fs.readFileSync(path.join(root, relative), 'utf8');
 const source = ts.createSourceFile(relative, content, ts.ScriptTarget.Latest, true);
 const names = ['renderStatusSelector', 'updateKanbanStatusSelector',
-    'normalizeGroupVisibleStatusIds', 'filterKanbanStatusesBySelectedGroup'];
+    'normalizeGroupVisibleStatusIds', 'filterKanbanStatusesBySelectedGroup', 'saveReminder'];
 const methods = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'QuickReminderDialog')
     .members.filter(node => names.includes(node.name?.getText(source)))
     .map(node => node.getText(source)).join('\n');
@@ -116,3 +116,33 @@ test('编辑任务保留自定义状态，已完成任务优先选中已完成',
     await completed.initialize(projectStatuses);
     assert.equal(completed.selected(), 'completed');
 });
+
+for (const milestoneId of ['filtered-milestone', 'another-milestone', '']) {
+    test(`新建任务立即回调携带当前里程碑选择：${milestoneId || '无里程碑'}`, async () => {
+        const { dialog } = fixture();
+        const fields = {
+            '#quickReminderTitle': { value: 'new task' },
+            '#quickReminderDate': { value: '' },
+            '#quickReminderEndDate': { value: '' },
+            '#quickProjectSelector': { value: 'project' },
+            '#quickMilestoneSelector': { value: milestoneId },
+        };
+        let saved, closed = false;
+        Object.assign(dialog, {
+            mode: 'quick', skipSave: true, defaultMilestoneId: 'filtered-milestone',
+            selectedCategoryIds: [], selectedTagIds: [], customTimes: [],
+            repeatConfig: { enabled: false }, currentKanbanStatuses: projectStatuses,
+            dialog: { element: { querySelector: selector => fields[selector] || null } },
+            getEstimatedPomodoroDurationValue() {}, getCustomProgressValue() {},
+            validateCustomReminderTimes: () => true,
+            applyStartDateOnlyOverdueOverride() {}, applyReminderSkipDateOverrides() {},
+            onSaved: task => { saved = task; },
+            destroyDialog: () => { closed = true; },
+        });
+        // 执行真实保存方法至立即回调阶段，不等待任何后台落盘或看板刷新。
+        await dialog.saveReminder();
+        assert.equal(saved.projectId, 'project');
+        assert.equal(saved.milestoneId, milestoneId || undefined);
+        assert.equal(closed, true);
+    });
+}

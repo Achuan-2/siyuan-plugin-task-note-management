@@ -7350,6 +7350,7 @@ export class QuickReminderDialog {
                 linkedHabitAutoCheckInOptionKey: linkedHabitAutoCheckInOptionKey,
                 linkedHabitAutoCheckInEmoji: linkedHabitAutoCheckInEmoji,
                 customGroupId: customGroupId,
+                milestoneId: milestoneId,
                 tagIds: tagIds.length > 0 ? tagIds : undefined,
                 createdAt: nowStr,
                 createdTime: nowStr, // 补齐 sorting 字段
