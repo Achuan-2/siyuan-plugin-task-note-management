@@ -57,11 +57,11 @@ export class ProjectSelectorPopup {
     private projectManager: ProjectManager;
     private folderManager: ProjectFolderManager;
     
-    private currentTab: 'status' | 'folder';
+    private statusFilter: string = 'all';
     private searchQuery: string = '';
     private collapsedFolders: Set<string> = new Set();
     
-    private tabsContainer!: HTMLElement;
+    private statusSelect!: HTMLSelectElement;
     private listContainer!: HTMLElement;
     private innerSearchInput?: HTMLInputElement;
     
@@ -85,9 +85,6 @@ export class ProjectSelectorPopup {
         
         this.projectManager = ProjectManager.getInstance(this.plugin);
         this.folderManager = ProjectFolderManager.getInstance(this.plugin);
-        
-        const defaultView = this.plugin.settings?.defaultProjectSelectorViewMode || 'status';
-        this.currentTab = defaultView;
     }
     
     public async initialize() {
@@ -124,29 +121,22 @@ export class ProjectSelectorPopup {
             this.innerSearchInput = searchField;
         }
         
-        const tabsWrap = document.createElement('div');
-        tabsWrap.className = 'project-selector-tabs';
-        tabsWrap.style.cssText = 'display: flex; border-bottom: 1px solid var(--b3-border-color);';
-        
-        const statusTabBtn = document.createElement('button');
-        statusTabBtn.className = `b3-button b3-button--text tab-btn ${this.currentTab === 'status' ? 'active' : ''}`;
-        statusTabBtn.style.cssText = 'flex: 1; padding: 4px; font-size: 12px;';
-        statusTabBtn.textContent = i18n('projectSelectorViewModeStatus') || '状态';
-        statusTabBtn.dataset.tab = 'status';
-        
-        const folderTabBtn = document.createElement('button');
-        folderTabBtn.className = `b3-button b3-button--text tab-btn ${this.currentTab === 'folder' ? 'active' : ''}`;
-        folderTabBtn.style.cssText = 'flex: 1; padding: 4px; font-size: 12px;';
-        folderTabBtn.textContent = i18n('projectSelectorViewModeFolder') || '文件夹';
-        folderTabBtn.dataset.tab = 'folder';
-        
-        tabsWrap.appendChild(statusTabBtn);
-        tabsWrap.appendChild(folderTabBtn);
-        this.container.appendChild(tabsWrap);
-        this.tabsContainer = tabsWrap;
-        
-        this.updateTabStyles();
-        
+        const statusWrap = document.createElement('div');
+        statusWrap.style.cssText = 'padding: 4px 8px; border-bottom: 1px solid var(--b3-border-color);';
+
+        this.statusSelect = document.createElement('select');
+        this.statusSelect.className = 'b3-select project-selector-status-filter';
+        this.statusSelect.style.cssText = 'width: 100%; box-sizing: border-box;';
+        this.statusSelect.setAttribute('aria-label', i18n('projectStatus') || '项目状态');
+        this.statusSelect.add(new Option(i18n('allProjects') || '全部项目', 'all'));
+        this.projectManager.getStatusManager().getStatuses().forEach(status => {
+            if (this.excludeArchived && status.isArchived) return;
+            this.statusSelect.add(new Option(status.name, status.id));
+        });
+        this.statusSelect.value = this.statusFilter;
+        statusWrap.appendChild(this.statusSelect);
+        this.container.appendChild(statusWrap);
+
         if (this.isMultiSelect) {
             const bulkWrap = document.createElement('div');
             bulkWrap.className = 'project-selector-bulk-actions';
@@ -174,24 +164,6 @@ export class ProjectSelectorPopup {
         this.listContainer = listWrap;
     }
     
-    private updateTabStyles() {
-        const btns = this.tabsContainer.querySelectorAll('button');
-        btns.forEach((btn: HTMLButtonElement) => {
-            const isTabActive = btn.dataset.tab === this.currentTab;
-            if (isTabActive) {
-                btn.style.setProperty('color', 'var(--b3-theme-primary)', 'important');
-                btn.style.setProperty('font-weight', 'bold', 'important');
-                btn.style.setProperty('border-bottom', '2px solid var(--b3-theme-primary)', 'important');
-                btn.style.setProperty('border-radius', '0', 'important');
-            } else {
-                btn.style.removeProperty('color');
-                btn.style.removeProperty('font-weight');
-                btn.style.removeProperty('border-bottom');
-                btn.style.removeProperty('border-radius');
-            }
-        });
-    }
-    
     public renderList() {
         this.listContainer.innerHTML = '';
         
@@ -201,6 +173,7 @@ export class ProjectSelectorPopup {
         
         const filteredProjects = projects.filter(project => {
             if (allowedProjectIdSet && !allowedProjectIdSet.has(project.id)) return false;
+            if (this.statusFilter !== 'all' && project.status !== this.statusFilter) return false;
             if (this.excludeArchived) {
                 const projectStatus = project.status || 'doing';
                 const statusInfo = statuses.find(s => s.id === projectStatus);
@@ -212,198 +185,10 @@ export class ProjectSelectorPopup {
         
         const terms = this.searchQuery.toLowerCase().split(/\s+/).filter(t => t);
         
-        // Both status and folder view are tree lists now!
         this.listContainer.classList.add('project-document-tree');
-        
-        if (this.currentTab === 'status') {
-            this.renderStatusView(filteredProjects, terms);
-        } else {
-            this.renderFolderView(filteredProjects, terms);
-        }
+        this.renderFolderView(filteredProjects, terms);
     }
-    
-    private renderStatusView(projects: Project[], terms: string[]) {
-        const statuses = this.projectManager.getStatusManager().getStatuses();
-        const projectsByStatus: Record<string, Project[]> = {};
-        
-        statuses.forEach(s => {
-            projectsByStatus[s.id] = [];
-        });
-        projectsByStatus['uncategorized'] = [];
-        
-        projects.forEach(p => {
-            const statusId = p.status || 'doing';
-            if (projectsByStatus[statusId]) {
-                projectsByStatus[statusId].push(p);
-            } else {
-                projectsByStatus['uncategorized'].push(p);
-            }
-        });
-        
-        const matchesSearch = (p: Project) => {
-            if (terms.length === 0) return true;
-            const name = p.name.toLowerCase();
-            return terms.every(t => name.includes(t));
-        };
-        
-        if (this.includeNoProject && (terms.length === 0 || (i18n('noProject') || '无项目').toLowerCase().includes(terms[0]))) {
-            const noProjId = this.isMultiSelect ? 'none' : '';
-            const checked = this.isMultiSelect ? (this.selectedIds.has('all') || this.selectedIds.has(noProjId)) : (this.selectedId === noProjId);
-            
-            const noProjectEl = document.createElement('div');
-            noProjectEl.className = 'project-item project-item--list';
-            noProjectEl.dataset.value = noProjId;
-            noProjectEl.dataset.label = i18n('noProject') || '无项目';
-            noProjectEl.style.paddingLeft = `${this.getDocumentTreeIndent(0)}px`;
-            noProjectEl.innerHTML = `
-                <div class="project-item__content" style="padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; width: 100%; cursor: pointer;">
-                    ${this.isMultiSelect ? `<input type="checkbox" class="project-selector-checkbox" style="margin-right: 8px;" ${checked ? 'checked' : ''}>` : ''}
-                    <span class="project-item__title" style="flex: 1;">🚫 ${i18n('noProject') || '无项目'}</span>
-                </div>
-            `;
-            this.listContainer.appendChild(noProjectEl);
-        }
-        
-        statuses.forEach(status => {
-            const groupProjects = projectsByStatus[status.id] || [];
-            const matchingProjects = groupProjects.filter(matchesSearch);
-            
-            if (matchingProjects.length > 0) {
-                this.sortProjects(matchingProjects);
-                
-                const collapseKey = `status-${status.id}`;
-                if (terms.length > 0) {
-                    this.collapsedFolders.delete(collapseKey);
-                }
-                
-                const groupEl = this.createStatusGroupElement(status.id, status.name, status.icon || '📂', matchingProjects, 0);
-                this.listContainer.appendChild(groupEl);
-            }
-        });
-        
-        const uncategorizedProjects = projectsByStatus['uncategorized'] || [];
-        const matchingUncategorized = uncategorizedProjects.filter(matchesSearch);
-        if (matchingUncategorized.length > 0) {
-            this.sortProjects(matchingUncategorized);
-            
-            const collapseKey = `status-uncategorized`;
-            if (terms.length > 0) {
-                this.collapsedFolders.delete(collapseKey);
-            }
-            
-            const groupEl = this.createStatusGroupElement('uncategorized', i18n('uncategorized') || '未分类', '📂', matchingUncategorized, 0);
-            this.listContainer.appendChild(groupEl);
-        }
-    }
-    
-    private createStatusGroupElement(statusId: string, name: string, icon: string, statusProjects: Project[], depth: number): HTMLElement {
-        const collapseKey = `status-${statusId}`;
-        const isCollapsed = this.collapsedFolders.has(collapseKey);
-        const hasChildren = statusProjects.length > 0;
-        
-        const groupEl = document.createElement('div');
-        groupEl.className = 'project-folder-group project-folder-group--tree';
-        if (isCollapsed) {
-            groupEl.classList.add('collapsed');
-        }
-        groupEl.dataset.folderId = statusId;
-        
-        const headerEl = document.createElement('div');
-        headerEl.className = 'project-folder-header';
-        headerEl.style.cssText = `
-            display: flex;
-            align-items: center;
-            padding: 4px 8px 4px ${this.getDocumentTreeIndent(depth)}px;
-            cursor: pointer;
-            border-radius: 4px;
-            user-select: none;
-            transition: background-color 0.2s ease;
-            min-height: 30px;
-        `;
-        this.applyDocumentTreeGuides(headerEl, depth);
-        
-        const chevronEl = document.createElement('span');
-        chevronEl.className = 'project-folder-chevron';
-        chevronEl.style.cursor = 'pointer';
-        if (!hasChildren) {
-            chevronEl.classList.add('project-folder-chevron--empty');
-        }
-        chevronEl.innerHTML = isCollapsed
-            ? '<svg style="width:12px;height:12px;margin-right:6px;transform:rotate(-90deg);transition:transform 0.2s;"><use xlink:href="#iconDown"></use></svg>'
-            : '<svg style="width:12px;height:12px;margin-right:6px;transition:transform 0.2s;"><use xlink:href="#iconDown"></use></svg>';
-            
-        const iconEl = document.createElement('span');
-        iconEl.className = 'project-folder-icon';
-        iconEl.textContent = icon;
-        iconEl.style.marginRight = '6px';
-        
-        const nameEl = document.createElement('span');
-        nameEl.className = 'project-folder-name';
-        nameEl.textContent = name;
-        nameEl.style.flex = '1';
-        
-        const countEl = document.createElement('span');
-        countEl.className = 'project-folder-count';
-        countEl.textContent = `(${statusProjects.length})`;
-        countEl.style.cssText = 'font-size:12px;opacity:0.6;margin-right:8px;';
-        
-        headerEl.appendChild(chevronEl);
-        
-        if (this.isMultiSelect && hasChildren) {
-            const isAllChecked = statusProjects.every(p => this.selectedIds.has('all') || this.selectedIds.has(p.id));
-            const statusCheckbox = document.createElement('input');
-            statusCheckbox.type = 'checkbox';
-            statusCheckbox.className = 'status-selector-checkbox';
-            statusCheckbox.style.marginRight = '6px';
-            statusCheckbox.checked = isAllChecked;
-            statusCheckbox.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const checked = statusCheckbox.checked;
-                this.handleGroupCheckboxChange(statusProjects.map(p => p.id), checked);
-            });
-            headerEl.appendChild(statusCheckbox);
-        }
-        
-        headerEl.appendChild(iconEl);
-        headerEl.appendChild(nameEl);
-        headerEl.appendChild(countEl);
-        
-        const childrenEl = document.createElement('div');
-        childrenEl.className = 'project-folder-children';
-        childrenEl.style.cssText = `
-            display: ${isCollapsed ? 'none' : 'flex'};
-            flex-direction: column;
-            gap: 0;
-        `;
-        
-        statusProjects.forEach(p => {
-            const childEl = this.createProjectListElement(p, depth + 1);
-            childrenEl.appendChild(childEl);
-        });
-        
-        const toggleCollapsed = (e: MouseEvent) => {
-            e.stopPropagation();
-            if (!hasChildren) return;
-            if (this.collapsedFolders.has(collapseKey)) {
-                this.collapsedFolders.delete(collapseKey);
-                groupEl.classList.remove('collapsed');
-                chevronEl.querySelector('svg').style.transform = 'rotate(0deg)';
-                childrenEl.style.display = 'flex';
-            } else {
-                this.collapsedFolders.add(collapseKey);
-                groupEl.classList.add('collapsed');
-                chevronEl.querySelector('svg').style.transform = 'rotate(-90deg)';
-                childrenEl.style.display = 'none';
-            }
-        };
-        
-        headerEl.addEventListener('click', toggleCollapsed);
-        
-        groupEl.appendChild(headerEl);
-        groupEl.appendChild(childrenEl);
-        return groupEl;
-    }
-    
+
     private renderFolderView(projects: Project[], terms: string[]) {
         const folders = this.folderManager.getFolders();
         const validFolderIds = new Set(folders.map(f => f.id));
@@ -439,7 +224,8 @@ export class ProjectSelectorPopup {
                         children,
                         totalProjectCount: folderProjects.length + children.reduce((sum, child) => sum + child.totalProjectCount, 0)
                     };
-                });
+                })
+                .filter(node => node.totalProjectCount > 0);
         };
         
         const folderTree = buildNodeTree('', 0);
@@ -663,16 +449,18 @@ export class ProjectSelectorPopup {
     }
     
     private bindEvents() {
-        this.tabsContainer.addEventListener('click', (e) => {
-            const btn = (e.target as HTMLElement).closest('.tab-btn') as HTMLButtonElement;
-            if (btn) {
-                e.stopPropagation();
-                this.currentTab = btn.dataset.tab as 'status' | 'folder';
-                this.updateTabStyles();
-                this.renderList();
+        this.statusSelect.addEventListener('change', () => {
+            this.statusFilter = this.statusSelect.value;
+            this.renderList();
+        });
+        // Keep the popup open when focus moves between search and the native status select.
+        this.statusSelect.addEventListener('blur', (e) => {
+            const nextTarget = e.relatedTarget as Node | null;
+            if (this.searchInput && nextTarget !== this.searchInput && !this.container.contains(nextTarget)) {
+                this.hide();
             }
         });
-        
+
         if (this.isMultiSelect) {
             const bulkWrap = this.container.querySelector('.project-selector-bulk-actions');
             if (bulkWrap) {
@@ -681,20 +469,12 @@ export class ProjectSelectorPopup {
                 
                 selectAllBtn?.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.selectedIds = new Set(['all']);
-                    this.renderList();
-                    if (this.onChange) {
-                        this.onChange(new Set(this.selectedIds));
-                    }
+                    this.handleGroupCheckboxChange(this.getVisibleProjectIds(), true);
                 });
                 
                 deselectAllBtn?.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.selectedIds = new Set();
-                    this.renderList();
-                    if (this.onChange) {
-                        this.onChange(new Set(this.selectedIds));
-                    }
+                    this.handleGroupCheckboxChange(this.getVisibleProjectIds(), false);
                 });
             }
         }
@@ -702,7 +482,9 @@ export class ProjectSelectorPopup {
         if (this.searchInput) {
             this.searchInput.addEventListener('focus', () => this.show());
             this.searchInput.addEventListener('click', () => this.show());
-            this.searchInput.addEventListener('blur', () => this.hide());
+            this.searchInput.addEventListener('blur', (e) => {
+                if (!this.container.contains(e.relatedTarget as Node | null)) this.hide();
+            });
             this.searchInput.addEventListener('input', () => {
                 this.showQuery(this.searchInput.value);
             });
@@ -716,7 +498,7 @@ export class ProjectSelectorPopup {
         
         this.container.addEventListener('mousedown', (e) => {
             if (e.button === 0) {
-                if (e.target === this.innerSearchInput) return;
+                if (e.target === this.innerSearchInput || e.target === this.statusSelect) return;
                 e.preventDefault();
             }
         });
@@ -869,6 +651,11 @@ export class ProjectSelectorPopup {
             ids = ids.concat(this.getAllProjectIdsInFolder(child));
         });
         return ids;
+    }
+
+    private getVisibleProjectIds(): string[] {
+        return Array.from(this.listContainer.querySelectorAll<HTMLElement>('.project-item[data-value]'))
+            .map(item => item.dataset.value);
     }
     
     private handleGroupCheckboxChange(projectIds: string[], checked: boolean) {
