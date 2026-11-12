@@ -26,7 +26,7 @@ export function renderTaskMetadataIcon(name: TaskMetadataIcon, size = 14): strin
         ? paths[name]
         : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
     const viewBox = name === 'duration' ? '0 0 1024 1024' : '0 0 24 24';
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false" style="display:inline-block;width:${size}px;height:${size}px;vertical-align:-2px;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false" style="display:inline-block;width:${size}px;height:${size}px;vertical-align:-2px;flex-shrink:0;float:none;margin:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }
 
 const emojiIcons: Record<string, TaskMetadataIcon> = {

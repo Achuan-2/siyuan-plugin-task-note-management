@@ -2,7 +2,7 @@ import { showMessage } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { ProjectManager, type MilestoneDateDisplayInfo } from "../dataManager/projectManager";
-import { setTaskMetadataText } from "./taskMetadataIcons";
+import { renderTaskMetadataIcon, setTaskMetadataText } from "./taskMetadataIcons";
 
 const PROJECT_KANBAN_TAB_TYPE = "TN_project_kanban_tab";
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
@@ -1879,8 +1879,24 @@ export class TaskNoteDOMManager {
             textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
             btn.appendChild(textEl);
         }
-        if (textEl.dataset.taskMetadataText !== text || !textEl.querySelector('.task-metadata-icon')) {
-            setTaskMetadataText(textEl, text);
+        if (textEl.dataset.taskMetadataText !== text || !textEl.querySelector('.block-pomodoro-summary__duration')) {
+            textEl.style.cssText = "display:inline-flex;align-items:center;gap:8px;min-width:0;font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;";
+            const countEl = document.createElement("span");
+            countEl.className = "block-pomodoro-summary__count";
+            countEl.style.cssText = "display:inline-flex;align-items:center;gap:3px;flex-shrink:0;";
+            countEl.innerHTML = renderTaskMetadataIcon('tomato');
+            countEl.appendChild(document.createTextNode(String(Math.max(0, totalCount))));
+
+            const durationEl = document.createElement("span");
+            durationEl.className = "block-pomodoro-summary__duration";
+            durationEl.style.cssText = "display:inline-flex;align-items:center;gap:3px;min-width:0;";
+            durationEl.innerHTML = renderTaskMetadataIcon('duration');
+            const durationText = document.createElement("span");
+            durationText.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+            durationText.textContent = this.formatPomodoroDuration(totalMinutes);
+            durationEl.appendChild(durationText);
+
+            textEl.replaceChildren(countEl, durationEl);
             textEl.dataset.taskMetadataText = text;
         }
         btn.classList.add("ariaLabel");
