@@ -1653,13 +1653,13 @@
     }
 
     .reminder-task-checkbox:checked {
-        background: var(--b3-theme-primary);
-        border-color: var(--b3-theme-primary);
+        background: #4caf50;
+        border-color: #4caf50 !important;
     }
 
     .reminder-task-checkbox:checked::before {
         transform: scale(1);
-        box-shadow: inset 1em 1em var(--b3-theme-surface);
+        box-shadow: inset 1em 1em #fff;
     }
 
     .reminder-task-checkbox--abandoned {
