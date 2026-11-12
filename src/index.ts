@@ -1931,11 +1931,12 @@ export default class ReminderPlugin extends Plugin {
 
     // 重写 openSetting 方法
     async openSetting(initialGroup: string = '') {
+        const isMobile = getFrontend().endsWith('mobile');
         let dialog = new Dialog({
             title: i18n("settingsPanel"),
             content: `<div id="SettingPanel" style="height: 100%;"></div>`,
             width: "min(900px, 95%)",
-            height: "80vh",
+            height: isMobile ? "90vh" : "80vh",
             destroyCallback: () => {
                 pannel.$destroy();
             }
