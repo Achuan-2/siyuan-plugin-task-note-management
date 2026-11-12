@@ -549,10 +549,12 @@ export class MobileTaskShortcut {
         this.tabDragCleanup?.();
         const lifecycle = new ViewLifecycle();
         let pointerId: number | null = null;
+        let touchId: number | null = null;
         let timer: number | null = null;
         let dragged: HTMLElement | null = null;
+        let preview: HTMLElement | null = null;
         let dragging = false;
-        let suppressClick = false;
+        let suppressClickUntil = 0;
         let startX = 0;
         let startY = 0;
         let startOrder: TabId[] = [];
@@ -570,8 +572,9 @@ export class MobileTaskShortcut {
             clearTimer();
             const capturedPointer = pointerId;
             pointerId = null;
+            touchId = null;
             if (dragging) {
-                suppressClick = true;
+                suppressClickUntil = Date.now() + 400;
                 if (cancelled) {
                     startOrder.forEach(id => {
                         const button = this.tabButtons.get(id);
@@ -586,6 +589,8 @@ export class MobileTaskShortcut {
                     }
                 }
             }
+            preview?.remove();
+            preview = null;
             dragged?.classList.remove("mobile-task-shortcut-tab--dragging");
             dragged = null;
             dragging = false;
@@ -594,52 +599,124 @@ export class MobileTaskShortcut {
             }
         };
 
-        lifecycle.listen(tabsContainer, "pointerdown", (event: PointerEvent) => {
-            if (pointerId !== null || !event.isPrimary) {
-                finish(true);
-                return;
-            }
-            if (event.button !== 0) return;
-            const button = (event.target as Element).closest<HTMLElement>(".mobile-task-shortcut-tab");
-            if (!button || !tabsContainer.contains(button)) return;
-            suppressClick = false;
-            pointerId = event.pointerId;
+        const begin = (target: EventTarget | null, clientX: number, clientY: number) => {
+            const button = target instanceof Element ? target.closest<HTMLElement>(".mobile-task-shortcut-tab") : null;
+            if (!button || !tabsContainer.contains(button)) return false;
+            suppressClickUntil = 0;
             dragged = button;
-            startX = event.clientX;
-            startY = event.clientY;
+            startX = clientX;
+            startY = clientY;
             startOrder = readOrder();
             timer = lifecycle.timeout(() => {
                 timer = null;
+                if (!button.isConnected || !tabsContainer.contains(button)) {
+                    finish(true);
+                    return;
+                }
                 dragging = true;
                 button.classList.add("mobile-task-shortcut-tab--dragging");
+                // 与任务卡片保持一致：淡化原位置，并显示跟随手指的浮动标题。
+                preview = document.createElement("div");
+                preview.className = "reminder-touch-drag-preview";
+                preview.textContent = button.textContent?.trim() || "";
+                preview.style.width = `${button.getBoundingClientRect().width}px`;
+                preview.style.left = `${startX}px`;
+                preview.style.top = `${startY}px`;
+                document.body.appendChild(preview);
                 if (pointerId !== null) tabsContainer.setPointerCapture(pointerId);
-            }, 500);
-        });
-        lifecycle.listen(document, "pointermove", (event: PointerEvent) => {
-            if (event.pointerId !== pointerId) return;
+            }, 460);
+            return true;
+        };
+        const move = (clientX: number, clientY: number) => {
             if (!dragging) {
-                if (Math.hypot(event.clientX - startX, event.clientY - startY) > 8) {
-                    suppressClick = true;
+                if (Math.abs(clientX - startX) > 5 || Math.abs(clientY - startY) > 5) {
                     finish(true);
                 }
                 return;
             }
-            event.preventDefault();
+            if (!dragged?.isConnected || !tabsContainer.contains(dragged)) {
+                finish(true);
+                return;
+            }
+            preview!.style.left = `${clientX}px`;
+            preview!.style.top = `${clientY}px`;
             const rect = tabsContainer.getBoundingClientRect();
-            if (event.clientY < rect.top - 24 || event.clientY > rect.bottom + 24) return;
+            if (clientY < rect.top - 24 || clientY > rect.bottom + 24) return;
             const next = Array.from(tabsContainer.children).find(node => {
                 if (node === dragged) return false;
                 const bounds = node.getBoundingClientRect();
-                return event.clientX < bounds.left + bounds.width / 2;
+                return clientX < bounds.left + bounds.width / 2;
             });
-            tabsContainer.insertBefore(dragged!, next || null);
-            syncPanels();
-        }, { passive: false });
+            if (dragged.nextElementSibling !== (next || null)) {
+                tabsContainer.insertBefore(dragged, next || null);
+                syncPanels();
+            }
+        };
+        const consume = (event: Event) => {
+            if (event.cancelable) event.preventDefault();
+            event.stopImmediatePropagation();
+        };
+
+        // 移动端沿用任务长按的 TouchEvent 路径，在捕获阶段阻止宿主把拖动识别为滑动。
+        lifecycle.listen(tabsContainer, "touchstart", (event: TouchEvent) => {
+            finish(true);
+            if (event.touches.length !== 1) return;
+            const touch = event.touches[0];
+            if (begin(event.target, touch.clientX, touch.clientY)) touchId = touch.identifier;
+        }, { passive: true });
+        lifecycle.listen(document, "touchstart", (event: TouchEvent) => {
+            if (touchId !== null && event.touches.length !== 1) finish(true);
+        }, { capture: true, passive: true });
+        lifecycle.listen(document, "touchmove", (event: TouchEvent) => {
+            if (touchId === null) return;
+            const touch = Array.from(event.touches).find(point => point.identifier === touchId);
+            if (event.touches.length !== 1 || !touch) {
+                finish(true);
+                return;
+            }
+            if (dragging) consume(event);
+            move(touch.clientX, touch.clientY);
+        }, { capture: true, passive: false });
+        lifecycle.listen(document, "touchend", (event: TouchEvent) => {
+            if (touchId === null) return;
+            const touch = Array.from(event.changedTouches).find(point => point.identifier === touchId);
+            if (!touch || event.touches.length !== 0) {
+                finish(true);
+                return;
+            }
+            if (dragging) {
+                consume(event);
+                move(touch.clientX, touch.clientY);
+            }
+            finish(false);
+        }, { capture: true, passive: false });
+        lifecycle.listen(document, "touchcancel", () => finish(true), true);
+
+        // 保留鼠标/手写笔调试入口；触摸仅由上面的监听处理，避免重复启动。
+        lifecycle.listen(tabsContainer, "pointerdown", (event: PointerEvent) => {
+            if (event.pointerType === "touch") return;
+            if (pointerId !== null || !event.isPrimary) {
+                finish(true);
+                return;
+            }
+            if (touchId !== null || event.button !== 0) return;
+            if (begin(event.target, event.clientX, event.clientY)) pointerId = event.pointerId;
+        });
+        lifecycle.listen(document, "pointermove", (event: PointerEvent) => {
+            if (event.pointerId !== pointerId) return;
+            if (dragging) consume(event);
+            move(event.clientX, event.clientY);
+        }, { capture: true, passive: false });
         lifecycle.listen(document, "pointerdown", (event: PointerEvent) => {
             if (pointerId !== null && event.pointerId !== pointerId) finish(true);
         });
         lifecycle.listen(document, "pointerup", (event: PointerEvent) => {
-            if (event.pointerId === pointerId) finish(false);
+            if (event.pointerId !== pointerId) return;
+            if (dragging) {
+                consume(event);
+                move(event.clientX, event.clientY);
+            }
+            finish(false);
         });
         lifecycle.listen(document, "pointercancel", (event: PointerEvent) => {
             if (event.pointerId === pointerId) finish(true);
@@ -648,10 +725,7 @@ export class MobileTaskShortcut {
             if (event.pointerId === pointerId) finish(true);
         });
         lifecycle.listen(tabsContainer, "click", (event: MouseEvent) => {
-            if (!suppressClick || event.detail === 0) return;
-            suppressClick = false;
-            event.preventDefault();
-            event.stopImmediatePropagation();
+            if (Date.now() < suppressClickUntil) consume(event);
         }, true);
         lifecycle.listen(tabsContainer, "contextmenu", (event: Event) => event.preventDefault());
         lifecycle.listen(window, "blur", () => finish(true));
