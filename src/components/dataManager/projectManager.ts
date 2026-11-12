@@ -59,6 +59,7 @@ export interface Project {
     sortRule?: string;
     sortOrder?: 'asc' | 'desc';
     milestones?: Milestone[];
+    tags?: Array<{ id: string; name: string; color: string }>;
     priority?: 'high' | 'medium' | 'low' | 'none';
     sort?: number;
     startDate?: string;
@@ -782,6 +783,12 @@ export class ProjectManager {
             if (projectData[projectId]) {
                 projectData[projectId].tags = tags;
                 await this.plugin.saveProjectData(projectData);
+                const cachedProject = this.getProjectById(projectId);
+                if (cachedProject) cachedProject.tags = tags;
+                // 标签名称、颜色变化不会修改任务本身，需要通知已打开的看板重绘。
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('projectUpdated', { detail: { projectId } }));
+                }
             }
         } catch (error) {
             console.error("Failed to set project tags:", error);

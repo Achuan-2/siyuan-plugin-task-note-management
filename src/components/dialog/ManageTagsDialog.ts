@@ -3,7 +3,7 @@ import { i18n } from "../../pluginInstance";
 import { generateRandomColor } from "../../utils/uiUtils";
 import { saveReminders } from "../../utils/icsSubscription";
 
-export async function showManageTagsDialog(view: any) {
+export async function showManageTagsDialog(view: any, projectId: string = view.projectId) {
     const dialog = new Dialog({
         title: i18n('manageProjectTags'),
         content: `
@@ -44,7 +44,7 @@ export async function showManageTagsDialog(view: any) {
     const loadAndDisplayTags = async () => {
         try {
             const projectManager = view.projectManager;
-            const projectTags = await projectManager.getProjectTags(view.projectId);
+            const projectTags = await projectManager.getProjectTags(projectId);
 
             tagsContainer.innerHTML = '';
 
@@ -107,13 +107,12 @@ export async function showManageTagsDialog(view: any) {
     const deleteTag = async (tagNameToDelete: string) => {
         try {
             const projectManager = view.projectManager;
-            const projectTags = await projectManager.getProjectTags(view.projectId);
+            const projectTags = await projectManager.getProjectTags(projectId);
 
             const updatedTags = projectTags.filter(tag => tag.name !== tagNameToDelete);
-            await projectManager.setProjectTags(view.projectId, updatedTags);
+            await projectManager.setProjectTags(projectId, updatedTags);
 
             await loadAndDisplayTags();
-            await view.loadProject();
             showMessage(i18n('tagDeleted'));
         } catch (error) {
             console.error("Failed to delete tag", error);
@@ -126,14 +125,13 @@ export async function showManageTagsDialog(view: any) {
         showTagEditDialog(existingTag, async (updatedTag) => {
             try {
                 const projectManager = view.projectManager;
-                const projectTags = await projectManager.getProjectTags(view.projectId);
+                const projectTags = await projectManager.getProjectTags(projectId);
 
                 const index = projectTags.findIndex(t => t.id === existingTag.id);
                 if (index !== -1) {
                     projectTags[index] = updatedTag;
-                    await projectManager.setProjectTags(view.projectId, projectTags);
+                    await projectManager.setProjectTags(projectId, projectTags);
                     await loadAndDisplayTags();
-                    await view.loadProject();
                     showMessage(i18n('tagUpdated'));
                 }
             } catch (error) {
@@ -144,7 +142,7 @@ export async function showManageTagsDialog(view: any) {
     };
 
     // 新建/编辑标签对话框
-    const showTagEditDialog = (existingTag: { id: string, name: string, color: string } | null, onSave: (tag: { id: string, name: string, color: string }) => void) => {
+    const showTagEditDialog = (existingTag: { id: string, name: string, color: string } | null, onSave: (tag: { id: string, name: string, color: string }) => Promise<void>) => {
         const isEdit = existingTag !== null;
         const defaultColor = existingTag?.color || generateRandomColor();
         const defaultName = existingTag?.name || '';
@@ -201,7 +199,7 @@ export async function showManageTagsDialog(view: any) {
             if (!isEdit || tagName !== existingTag.name) {
                 const { ProjectManager } = await import('../dataManager/projectManager');
                 const projectManager = ProjectManager.getInstance(view.plugin);
-                const projectTags = await projectManager.getProjectTags(view.projectId);
+                const projectTags = await projectManager.getProjectTags(projectId);
 
                 if (projectTags.some(t => t.name === tagName)) {
                     showMessage(i18n('tagAlreadyExists'));
@@ -210,7 +208,7 @@ export async function showManageTagsDialog(view: any) {
             }
 
             const tagId = isEdit ? existingTag.id : `tag_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            onSave({ id: tagId, name: tagName, color: tagColor });
+            await onSave({ id: tagId, name: tagName, color: tagColor });
             tagDialog.destroy();
         });
     };
@@ -219,7 +217,7 @@ export async function showManageTagsDialog(view: any) {
     syncTagsBtn.addEventListener('click', async () => {
         try {
             const projectManager = view.projectManager;
-            const currentTags = await projectManager.getProjectTags(view.projectId);
+            const currentTags = await projectManager.getProjectTags(projectId);
 
             if (currentTags.length === 0) {
                 showMessage(i18n('noTags'));
@@ -228,7 +226,7 @@ export async function showManageTagsDialog(view: any) {
 
             const projectData = await view.plugin.loadProjectData() || {};
             const otherProjects = Object.entries(projectData)
-                .filter(([key]) => !key.startsWith('_') && key !== view.projectId)
+                .filter(([key]) => !key.startsWith('_') && key !== projectId)
                 .map(([id, project]: [string, any]) => ({
                     id,
                     name: project.title || i18n('unnamedProject')
@@ -326,7 +324,7 @@ export async function showManageTagsDialog(view: any) {
     pasteTagsBtn.addEventListener('click', async () => {
         try {
             const projectManager = view.projectManager;
-            const projectTags = await projectManager.getProjectTags(view.projectId);
+            const projectTags = await projectManager.getProjectTags(projectId);
             const existingTagNames = new Set(projectTags.map(t => t.name));
 
             const pasteDialog = new Dialog({
@@ -383,9 +381,8 @@ export async function showManageTagsDialog(view: any) {
                     });
                 }
 
-                await projectManager.setProjectTags(view.projectId, projectTags);
+                await projectManager.setProjectTags(projectId, projectTags);
                 await loadAndDisplayTags();
-                await view.loadProject();
                 showMessage(i18n('batchTagsCreated'));
                 pasteDialog.destroy();
             });
@@ -400,13 +397,12 @@ export async function showManageTagsDialog(view: any) {
         showTagEditDialog(null, async (newTag) => {
             try {
                 const projectManager = view.projectManager;
-                const projectTags = await projectManager.getProjectTags(view.projectId);
+                const projectTags = await projectManager.getProjectTags(projectId);
 
                 projectTags.push(newTag);
-                await projectManager.setProjectTags(view.projectId, projectTags);
+                await projectManager.setProjectTags(projectId, projectTags);
 
                 await loadAndDisplayTags();
-                await view.loadProject();
                 showMessage(i18n('tagCreated'));
             } catch (error) {
                 console.error("Failed to create tag", error);

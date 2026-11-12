@@ -182,13 +182,14 @@ test('看板通知阶段只排队，不在防抖前重复读取，仍忽略自�
     const Board = new Function('window', 'document', compiled + '; return Board;')(
         { addEventListener: (name, handler) => handlers.set(name, handler) }, { addEventListener: () => {} },
     );
-    let preloads = 0, queued = 0;
+    let preloads = 0, queued = 0, projectLoads = 0;
     const delays = [];
     const board = Object.assign(new Board(), {
         lifecycle: { listen: (_target, name, handler) => handlers.set(name, handler) },
         kanbanInstanceId: 'self', categoryManager: { initialize: async () => {} },
-        loadProject: async () => {}, loadKanbanMode: async () => {}, loadKanbanSortConfig: async () => {},
+        loadProject: async () => { projectLoads++; }, loadKanbanMode: async () => {}, loadKanbanSortConfig: async () => {},
         initUI: () => {}, loadTasks: async () => {}, checkVip: () => {},
+        syncDisplaySettingsCheckboxes() {},
         isProjectInCurrentView: id => id === 'A', reminderData: { old: {} },
         getReminders: async () => { preloads++; }, queueLoadTasks: delay => { queued++; delays.push(delay); return Promise.resolve(); },
     });
@@ -202,6 +203,86 @@ test('看板通知阶段只排队，不在防抖前重复读取，仍忽略自�
     assert.equal(board.reminderData, null);
     notify({ taskUndo: true });
     assert.deepEqual(delays, [undefined, undefined, 0]);
+    // 标签定义更新走项目通知，相关看板加载配置并重绘任务，无关项目不刷新。
+    await handlers.get('projectUpdated')({ detail: { projectId: 'B' } });
+    assert.equal(projectLoads, 1);
+    assert.equal(queued, 3);
+    await handlers.get('projectUpdated')({ detail: { projectId: 'A' } });
+    assert.equal(projectLoads, 2);
+    assert.equal(queued, 4);
+});
+
+test('设置标签子菜单保留标签勾选操作，并在底部提供编辑入口；空项目也能编辑标签', () => {
+    const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', ['buildTaskTagMenuItems'])} }`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    const Board = new Function('i18n', compiled + ';return Board;')(key => key);
+    const calls = [];
+    const board = Object.assign(new Board(), {
+        buildTagMenuItemHTML: (tag, selected) => `${tag.name}:${selected}`,
+        toggleTaskTag: (task, id) => calls.push([task.id, id]),
+        getTaskRealProjectId: task => task.projectId,
+        showManageTagsDialog: projectId => calls.push(['edit', projectId]),
+    });
+    const menu = board.buildTaskTagMenuItems({ id: 'task', projectId: 'A', tagIds: ['one'] }, [{ id: 'one', name: 'label' }]);
+    assert.equal(menu[0].label, 'label:true');
+    assert.equal(menu[1].type, 'separator');
+    assert.equal(menu[2].label, 'editTag');
+    menu[0].click();
+    menu[2].click();
+    assert.deepEqual(calls, [['task', 'one'], ['edit', 'A']]);
+    const emptyMenu = board.buildTaskTagMenuItems({}, []);
+    assert.equal(emptyMenu.length, 1);
+    assert.equal(emptyMenu[0].label, 'editTag');
+});
+
+function projectTagsFixture() {
+    const state = { data: { A: { title: 'A', tags: [{ id: 'tag', name: 'old', color: '#111111' }] }, B: { title: 'B' } }, events: [], fail: false };
+    const compiled = ts.transpileModule(`class Manager { ${extract('src/components/dataManager/projectManager.ts', 'ProjectManager', [
+        'setProjectTags', 'getProjectById', 'saveProjects',
+    ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const Manager = new Function('window', 'CustomEvent', 'console', compiled + ';return Manager;')(
+        { dispatchEvent: event => { state.events.push({ event, persisted: clone(state.data) }); } },
+        class CustomEvent { constructor(type, options) { this.type = type; this.detail = options?.detail; } },
+        { error() {} },
+    );
+    const manager = Object.assign(new Manager(), {
+        projects: Object.entries(clone(state.data)).map(([id, project]) => ({ ...project, id })),
+        plugin: {
+            loadProjectData: async () => clone(state.data),
+            saveProjectData: async data => {
+                if (state.fail) throw new Error('write failed');
+                state.data = clone(data);
+            },
+        },
+    });
+    return { state, manager };
+}
+
+test('编辑项目标签名称和颜色后，保存成功才通知对应项目看板刷新，并同步管理器缓存', async () => {
+    const { state, manager } = projectTagsFixture();
+    const tags = [{ id: 'tag', name: 'new name', color: '#ff0000' }];
+    await manager.setProjectTags('A', tags);
+    assert.deepEqual(state.events.map(({ event }) => [event.type, event.detail]), [['projectUpdated', { projectId: 'A' }]]);
+    assert.deepEqual(state.events[0].persisted.A.tags, tags);
+    assert.deepEqual(manager.getProjectById('A').tags, tags);
+    assert.deepEqual(state.data.B, { title: 'B' });
+    await manager.saveProjects();
+    assert.deepEqual(state.data.A.tags, tags);
+    await manager.setProjectTags('A', []);
+    assert.deepEqual(state.events.at(-1).event.detail, { projectId: 'A' });
+    assert.deepEqual(state.data.A.tags, []);
+});
+
+test('标签保存失败或项目不存在时不发送成功通知，也不覆盖项目缓存', async () => {
+    const { state, manager } = projectTagsFixture();
+    const original = clone(manager.getProjectById('A').tags);
+    state.fail = true;
+    await assert.rejects(manager.setProjectTags('A', []), /write failed/);
+    assert.equal(state.events.length, 0);
+    assert.deepEqual(manager.getProjectById('A').tags, original);
+    await manager.setProjectTags('missing', []);
+    assert.equal(state.events.length, 0);
 });
 
 function task(id, projectId, kanbanStatus = 'doing') {

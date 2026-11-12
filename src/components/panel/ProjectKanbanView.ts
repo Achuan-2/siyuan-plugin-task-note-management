@@ -1128,8 +1128,8 @@ export class ProjectKanbanView {
         showManageKanbanStatusesDialog(this);
     }
 
-    public async showManageTagsDialog() {
-        showManageTagsDialog(this);
+    public async showManageTagsDialog(projectId: string = this.projectId) {
+        await showManageTagsDialog(this, projectId);
     }
 
     public async showManageMilestonesDialog(groupId?: string) {
@@ -3123,7 +3123,7 @@ export class ProjectKanbanView {
 
             // 获取标签名称用于显示
             const projectManager = this.projectManager;
-            const projectTags = await projectManager.getProjectTags(this.projectId);
+            const projectTags = await projectManager.getProjectTags(this.getTaskRealProjectId(task) || this.projectId);
             const tag = projectTags.find(t => t.id === tagId);
             const tagName = tag?.name || tagId;
 
@@ -5513,6 +5513,21 @@ export class ProjectKanbanView {
         const div = document.createElement('div');
         div.textContent = typeof value === 'string' ? value : '';
         return div.innerHTML;
+    }
+
+    private buildTaskTagMenuItems(task: any, projectTags: any[]): import('siyuan').IMenu[] {
+        const items: import('siyuan').IMenu[] = projectTags.map(tag => ({
+            iconHTML: '',
+            label: this.buildTagMenuItemHTML(tag, (task.tagIds || []).includes(tag.id)),
+            click: () => this.toggleTaskTag(task, tag.id)
+        }));
+        if (items.length > 0) items.push({ type: 'separator' });
+        items.push({
+            icon: 'iconEdit',
+            label: i18n('editTag'),
+            click: () => this.showManageTagsDialog(this.getTaskRealProjectId(task) || this.projectId)
+        });
+        return items;
     }
 
     private buildTagMenuItemHTML(tag: any, isSelected: boolean): string {
@@ -10013,30 +10028,14 @@ export class ProjectKanbanView {
             } catch (error) {
                 console.error("Failed to load group information:", error);
             }
-            // 设置标签子菜单（仅在项目有标签时显示）
+            // 设置标签子菜单始终保留编辑入口，也可用于创建首个标签。
             try {
-                const projectTags = await this.projectManager.getProjectTags(this.projectId);
-
-                if (projectTags.length > 0) {
-                    const tagMenuItems = [];
-                    const currentTagIds = task.tagIds || [];
-
-                    projectTags.forEach((tag: any) => {
-                        const isSelected = currentTagIds.includes(tag.id);
-
-                        tagMenuItems.push({
-                            iconHTML: "",
-                            label: this.buildTagMenuItemHTML(tag, isSelected),
-                            click: () => this.toggleTaskTag(task, tag.id)
-                        });
-                    });
-
-                    menu.addItem({
-                        icon: "iconTags",
-                        label: i18n('setTags'),
-                        submenu: tagMenuItems
-                    });
-                }
+                const projectTags = await this.projectManager.getProjectTags(this.getTaskRealProjectId(task) || this.projectId);
+                menu.addItem({
+                    icon: "iconTags",
+                    label: i18n('setTags'),
+                    submenu: this.buildTaskTagMenuItems(task, projectTags)
+                });
             } catch (error) {
                 console.error("Failed to load project tags:", error);
             }
