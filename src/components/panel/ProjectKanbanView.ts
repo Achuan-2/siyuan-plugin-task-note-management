@@ -8629,7 +8629,21 @@ export class ProjectKanbanView {
         const groupId = this.getTaskListGroupId(container);
         const expandedTasks = this.augmentTasksWithDescendants(currentTasks, groupId);
 
+        // 先在脱离文档的容器中生成卡片，避免创建卡片时读取布局导致空列表提前生效。
+        const fragmentHost = document.createElement('div');
+        const columnStatus = this.getTaskListStatus(container);
+        this.renderTasksInColumn(fragmentHost, expandedTasks, columnStatus);
+
+        // 局部刷新不经过 renderKanban；独立保存各级滚动容器，避免覆盖整页刷新中的快照。
+        // 分组内状态看板的任务列表本身也可滚动，不能只保存最外层的列。
+        const scrollPositions: Array<{ element: HTMLElement; top: number; left: number }> = [];
+        for (let element: HTMLElement | null = container; element; element = element.parentElement) {
+            scrollPositions.push({ element, top: element.scrollTop, left: element.scrollLeft });
+            if (element === this.container) break;
+        }
+
         const oldHeight = container.offsetHeight;
+        const oldMinHeight = container.style.minHeight;
         if (oldHeight > 0) {
             container.style.minHeight = `${oldHeight}px`;
         }
@@ -8639,24 +8653,24 @@ export class ProjectKanbanView {
             return !el.dataset.taskId;
         }) || null;
 
-        Array.from(container.children).forEach(child => {
-            const el = child as HTMLElement;
-            if (el.dataset.taskId) {
-                el.remove();
-            }
-        });
-
-        const fragmentHost = document.createElement('div');
-        const columnStatus = this.getTaskListStatus(container);
-        this.renderTasksInColumn(fragmentHost, expandedTasks, columnStatus);
-        Array.from(fragmentHost.childNodes).forEach(node => {
-            container.insertBefore(node, anchor);
-        });
-
-        if (oldHeight > 0) {
-            this.lifecycle.frame(() => {
-                container.style.minHeight = '';
+        try {
+            Array.from(container.children).forEach(child => {
+                const el = child as HTMLElement;
+                if (el.dataset.taskId) {
+                    el.remove();
+                }
             });
+
+            Array.from(fragmentHost.childNodes).forEach(node => {
+                container.insertBefore(node, anchor);
+            });
+        } finally {
+            // 在同一帧内解除占位再恢复位置，避免下一帧收缩高度后再次触发滚动调整。
+            container.style.minHeight = oldMinHeight;
+            for (const { element, top, left } of scrollPositions) {
+                element.scrollTop = top;
+                element.scrollLeft = left;
+            }
         }
     }
 
