@@ -1911,9 +1911,9 @@ export class ProjectKanbanView {
             let milestoneFilterBtn = rightContainer.querySelector('.milestone-filter-btn') as HTMLButtonElement;
             if (!milestoneFilterBtn) {
                 milestoneFilterBtn = document.createElement('button');
-                milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
+                milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn';
                 milestoneFilterBtn.classList.add('ariaLabel'); milestoneFilterBtn.setAttribute('aria-label', i18n('filterMilestone'));
-                milestoneFilterBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconTNMilestone"></use></svg>';
+                milestoneFilterBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTNMilestone"></use></svg>';
                 milestoneFilterBtn.dataset.groupId = groupId;
                 milestoneFilterBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -7445,9 +7445,9 @@ export class ProjectKanbanView {
 
                 if (hasMilestonesInThisStatus) {
                     const milestoneFilterBtn = document.createElement('button');
-                    milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn b3-button--small';
+                    milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn';
                     milestoneFilterBtn.classList.add('ariaLabel'); milestoneFilterBtn.setAttribute('aria-label', i18n('filterMilestone'));
-                    milestoneFilterBtn.innerHTML = '<svg class="b3-button__icon" style="margin-right: 0;"><use xlink:href="#iconTNMilestone"></use></svg>';
+                    milestoneFilterBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTNMilestone"></use></svg>';
                     milestoneFilterBtn.dataset.groupId = status;
                     milestoneFilterBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
