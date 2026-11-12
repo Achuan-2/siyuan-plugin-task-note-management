@@ -3048,10 +3048,10 @@ export class QuickReminderDialog {
 
                         <!-- Inner Tabs below task title -->
                         <div id="quickTaskDetailTabs" role="tablist" style="display: flex; gap: 12px; align-items: center; margin: 8px 0 12px 0; border-bottom: 1px solid var(--b3-border-color);">
-                            <button type="button" id="quickTaskSettingsTab" role="tab" aria-selected="true" class="b3-button b3-button--text" style="border-radius: 0; border-bottom: 2px solid var(--b3-theme-primary); color: var(--b3-theme-primary); background: var(--b3-theme-background); padding: 6px 8px; font-weight: 500;">
+                            <button type="button" id="quickTaskSettingsTab" role="tab" aria-selected="true" class="b3-button b3-button--text" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 0; border-bottom: 2px solid var(--b3-theme-primary); color: var(--b3-theme-primary); background: var(--b3-theme-background); padding: 6px 8px; font-weight: 500;">
                                 ${renderTaskMetadataText(i18n("taskSettings") || "📋任务设置")}
                             </button>
-                            <button type="button" id="quickTaskNotesTab" role="tab" aria-selected="false" class="b3-button b3-button--text" style="border-radius: 0; border-bottom: 2px solid transparent; color: var(--b3-theme-on-surface); background: transparent; padding: 6px 8px; font-weight: 500;">
+                            <button type="button" id="quickTaskNotesTab" role="tab" aria-selected="false" class="b3-button b3-button--text" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 0; border-bottom: 2px solid transparent; color: var(--b3-theme-on-surface); background: transparent; padding: 6px 8px; font-weight: 500;">
                                 ${renderTaskMetadataText(i18n("taskNotes") || "📝任务备注")}
                             </button>
                         </div>
