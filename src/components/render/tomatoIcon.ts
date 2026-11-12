@@ -6,12 +6,14 @@ export const TOMATO_ICON_PATHS = {
     highlight: 'M5 13a6 6 0 0 0 3 5',
 } as const;
 
-/** 菜单版沿用相同几何路径，以无填充的描边呈现。 */
+/** 菜单版保留果实描边和实心叶片，省略彩色版的装饰高光。 */
 export function getTomatoIconLayers(mode: 'color' | 'monochrome' = 'color') {
     if (mode === 'monochrome') {
-        return Object.values(TOMATO_ICON_PATHS).map(d => ({
-            d, color: 'currentColor', fill: false, opacity: 1, width: 1.8,
-        }));
+        return [
+            { d: TOMATO_ICON_PATHS.body, color: 'currentColor', fill: false, opacity: 1, width: 1.8 },
+            { d: TOMATO_ICON_PATHS.leaves, color: 'currentColor', fill: true, opacity: 1, width: 0 },
+            { d: TOMATO_ICON_PATHS.stem, color: 'currentColor', fill: false, opacity: 1, width: 1.8 },
+        ];
     }
     return [
         { d: TOMATO_ICON_PATHS.body, color: '#ef5b54', fill: true, opacity: 1, width: 0 },

@@ -1,5 +1,5 @@
 import randomRest from './icons/randomRest.svg?raw';
-import { getTomatoIconLayers, renderTomatoIconContent, TOMATO_ICON_PATHS } from './tomatoIcon';
+import { getTomatoIconLayers, renderTomatoIconContent } from './tomatoIcon';
 import { MEDITATION_ICON_PATH, SHORT_BREAK_ICON_PATHS } from './restIcons';
 
 /** 内联彩色 SVG 可同时用于思源面板和没有宿主图标库的独立窗口。 */
@@ -74,7 +74,7 @@ export const POMODORO_TOOLBAR_ICON_SVGS: Record<string, string> = {
 
 /** 状态与更多菜单的共享路径；工作阶段的填充和透明度由番茄图层定义。 */
 export const POMODORO_MENU_ICON_PATHS = {
-    work: Object.values(TOMATO_ICON_PATHS),
+    work: getTomatoIconLayers('monochrome').map(layer => layer.d),
     shortBreak: Object.values(SHORT_BREAK_ICON_PATHS),
     longBreak: [MEDITATION_ICON_PATH],
     timer: ['M9 2h6m-3 0v4m6 1 2-2M12 10v4l3 2', 'M20 14a8 8 0 1 1-16 0 8 8 0 0 1 16 0'],
