@@ -523,7 +523,7 @@
             const displayDefaults = {
                 showCompletedSubtasks: settings.projectKanbanShowCompletedSubtasks !== false,
                 showTaskCategories: settings.projectKanbanShowTaskCategories !== false,
-                clipTitleToOneLine: settings.projectKanbanClipTitleToOneLine === true,
+                clipTitleToOneLine: settings.projectKanbanClipTitleToOneLine !== false,
             };
 
             let maxSort = 0;

@@ -105,7 +105,7 @@ export class ReminderPanel {
     // 是否在”今日任务”视图下显示已完成的子任务（由显示设置菜单控制）
     private showCompletedSubtasks: boolean = false;
     // 是否将任务标题限制在一行显示（超出部分省略号截断）
-    private clipTitleToOneLine: boolean = false;
+    private clipTitleToOneLine: boolean = true;
     // 是否在任务卡片上显示绑定块所属文档标题
     private showTaskCardDocumentTitle: boolean = true;
 

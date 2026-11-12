@@ -230,7 +230,7 @@ export class ProjectKanbanView {
     public lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
     public showTaskCategories: boolean = true; // 是否显示任务分类
-    public clipTitleToOneLine: boolean = false; // 是否将任务标题限制在一行显示
+    public clipTitleToOneLine: boolean = true; // 是否将任务标题限制在一行显示
     private hideEmptyStatusBars: boolean = false; // 是否隐藏没有任务的状态栏/分组
     public hideNoDoingGroups: boolean = false; // 是否隐藏没有进行中任务的分组
     public hideNoTodayGroups: boolean = false; // 是否隐藏没有今日任务的分组
@@ -840,7 +840,7 @@ export class ProjectKanbanView {
             if (this.project && typeof this.project.clipTitleToOneLine === 'boolean') {
                 this.clipTitleToOneLine = this.project.clipTitleToOneLine;
             } else {
-                this.clipTitleToOneLine = settings.projectKanbanClipTitleToOneLine === true;
+                this.clipTitleToOneLine = settings.projectKanbanClipTitleToOneLine !== false;
             }
             if (this.project && typeof this.project.hideEmptyStatusBars === 'boolean') {
                 this.hideEmptyStatusBars = this.project.hideEmptyStatusBars;

@@ -227,7 +227,7 @@ export const DEFAULT_SETTINGS = {
     // 项目看板全局显示设置。项目自身字段优先；新建项目会写入这些默认值。
     projectKanbanShowCompletedSubtasks: true,
     projectKanbanShowTaskCategories: true,
-    projectKanbanClipTitleToOneLine: false,
+    projectKanbanClipTitleToOneLine: true,
     // 项目面板筛选与排序
     defaultProjectSelectorViewMode: 'status', // 'status' | 'folder' - 选择项目时默认视图类型
     projectPanelSort: 'priority',
