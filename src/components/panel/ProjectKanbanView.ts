@@ -6,7 +6,7 @@ import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
-import { formatTaskCompletedTime } from '../../utils/taskCompletedTime';
+import { createTaskCompletedTimeElement, updateTaskCompletedTimeElement } from '../render/taskCompletedTimeElement';
 import { ViewLifecycle } from '../../utils/viewLifecycle';
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
@@ -8676,8 +8676,6 @@ export class ProjectKanbanView {
         const context = {
             plugin: this.plugin,
             today: getLogicalDateString(),
-            formatCompletedTime: formatTaskCompletedTime,
-            completedTimePrefix: i18n('completedAt'),
             collapsedTasks: this.collapsedTasks,
             isTaskCollapsed: (t: any, hasChildren: boolean) => this.isTaskCollapsed(t, hasChildren),
             selectedTaskIds: this.selectedTaskIds,
@@ -14827,20 +14825,11 @@ export class ProjectKanbanView {
                     let completedTimeEl = infoEl.querySelector('.kanban-task-completed-time, .reminder-item__completed-time') as HTMLElement;
                     if (task.completed && task.completedTime) {
                         if (!completedTimeEl) {
-                            completedTimeEl = document.createElement('div');
-                            completedTimeEl.className = 'reminder-item__completed-time';
-                            completedTimeEl.style.cssText = `
-                                font-size: 12px;
-                                color: var(--b3-theme-on-surface);
-                                opacity: 0.7;
-                                display: flex;
-                                align-items: center;
-                                gap: 4px;
-                                margin-bottom: 4px;
-                            `;
+                            completedTimeEl = createTaskCompletedTimeElement(task.completedTime);
                             infoEl.insertBefore(completedTimeEl, infoEl.firstChild);
+                        } else {
+                            updateTaskCompletedTimeElement(completedTimeEl, task.completedTime);
                         }
-                        setTaskMetadataText(completedTimeEl, `✅ ${i18n('completedAt')} ${formatTaskCompletedTime(task.completedTime)}`);
                     } else if (completedTimeEl) {
                         completedTimeEl.remove();
                     }

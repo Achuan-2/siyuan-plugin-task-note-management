@@ -6,12 +6,13 @@
  */
 import { colorWithOpacity } from "../../utils/uiUtils";
 import { renderTaskMetadataIcon, setTaskMetadataText } from "./taskMetadataIcons";
+import { createTaskCompletedTimeElement } from './taskCompletedTimeElement';
 import type { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { updateBindBlockAtrrs } from "../../api";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { i18n } from "../../pluginInstance";
 import { showMessage } from "siyuan";
-import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
+import { getLocalDateString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { getRepeatDescription, getRepeatInstanceOriginalKey, parseReminderInstanceId, patchRepeatInstanceState } from "../dataManager/repeatUtils";
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
@@ -58,7 +59,6 @@ export interface TaskRenderContext {
     getReminderKanbanStatusInfo?: (task: any) => any;
     formatReminderTime?: (dateStr: string, timeStr: string, today: string, endDateStr?: string, endTimeStr?: string, task?: any) => string;
     formatCompletedTime?: (timeStr: string) => string;
-    completedTimePrefix?: string;
     isTodayCompleted?: (task: any, today: string) => boolean;
     getCompletedTime?: (task: any) => string;
     canApplyTodayIgnore?: (task: any, today: string) => boolean;
@@ -1312,26 +1312,7 @@ export class TaskRenderer {
 
             const completedTimeStr = virtualTodayCompletedTime || (context.getCompletedTime ? context.getCompletedTime(task) : task.completedTime);
             if (completedTimeStr) {
-                const completedEl = document.createElement('div');
-                completedEl.className = 'reminder-item__completed-time';
-
-                const currentLogicalToday = getLogicalDateString();
-                const completionDate = new Date(String(completedTimeStr).replace(' ', 'T'));
-                const completionLogicalDay = getLogicalDateString(completionDate);
-                const formattedTime = context.formatCompletedTime ? context.formatCompletedTime(completedTimeStr) : getLocalDateTimeString(completionDate);
-
-                const showTodayCompletedStyle = virtualTodayCompletedTime || task.isSpanningTodayCompletedInstance;
-                if (completionLogicalDay === currentLogicalToday && showTodayCompletedStyle) {
-                    const timeOnly = formattedTime.includes(' ') ? formattedTime.substring(formattedTime.indexOf(' ') + 1) : formattedTime;
-                    completedEl.textContent = i18n('todayCompletedWithTime', { time: timeOnly }) || `今日完成于 ${timeOnly}`;
-                } else {
-                    completedEl.innerHTML = renderTaskMetadataIcon('check') + ' ';
-                    completedEl.appendChild(document.createTextNode(
-                        context.completedTimePrefix ? `${context.completedTimePrefix} ${formattedTime}` : formattedTime
-                    ));
-                }
-                completedEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
-                infoEl.appendChild(completedEl);
+                infoEl.appendChild(createTaskCompletedTimeElement(completedTimeStr, context.formatCompletedTime));
             }
         } else {
             const currentToday = getLogicalDateString();
@@ -1350,20 +1331,9 @@ export class TaskRenderer {
                     try {
                         taskEl.style.setProperty('opacity', '0.5', 'important');
                     } catch (e) { }
-                    const completedEl = document.createElement('div');
-                    completedEl.className = 'reminder-item__completed-time';
-
                     const dailyTimes = task.dailyDessertCompletedTimes || {};
                     const timeStr = dailyTimes[currentToday];
-                    if (timeStr) {
-                        const formatted = context.formatCompletedTime ? context.formatCompletedTime(timeStr) : timeStr;
-                        const timeOnly = formatted.includes(' ') ? formatted.substring(formatted.indexOf(' ') + 1) : formatted;
-                        completedEl.textContent = i18n('todayCompletedWithTime', { time: timeOnly }) || `今日完成于 ${timeOnly}`;
-                    } else {
-                        completedEl.textContent = i18n('todayCompleted') || "今日已完成";
-                    }
-                    completedEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
-                    infoEl.appendChild(completedEl);
+                    infoEl.appendChild(createTaskCompletedTimeElement(timeStr, context.formatCompletedTime));
                 } else if (checkIgnoreMark()) {
                     taskEl.classList.add('reminder-ignored');
                     try {

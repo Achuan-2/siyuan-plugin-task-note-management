@@ -19,7 +19,7 @@ import { TaskRenderer } from "../render/TaskRenderer";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
-import { formatTaskCompletedTime } from '../../utils/taskCompletedTime';
+import { createTaskCompletedTimeElement } from '../render/taskCompletedTimeElement';
 import { LongPressTaskDrag, type TaskDragPoint } from '../../utils/longPressTaskDrag';
 import { generateRepeatInstances, generateRepeatInstancesWithFutureGuarantee, getRepeatDescription, getDaysDifference, addDaysToDate, generateSubtreeInstances, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, removeRepeatInstance, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
@@ -3128,7 +3128,6 @@ export class ReminderPanel {
             isReminderPinned: (r: any) => this.isReminderPinned(r),
             getReminderKanbanStatusInfo: (r: any) => this.getReminderKanbanStatusInfo(r),
             formatReminderTime: (d: string, t: string, tod: string, ed?: string, et?: string, rem?: any) => this.formatReminderTime(d, t, tod, ed, et, rem),
-            formatCompletedTime: (t: string) => this.formatCompletedTime(t),
             isTodayCompleted: (r: any, tod: string) => this.isTodayCompleted(r, tod),
             getCompletedTime: (r: any) => this.getCompletedTime(r),
             canApplyTodayIgnore: (r: any, tod: string) => this.canApplyTodayIgnore(r, tod),
@@ -5382,12 +5381,8 @@ export class ReminderPanel {
             el.classList.add('reminder-completed');
             el.style.setProperty('opacity', '0.5', 'important');
             if (infoEl) {
-                const completedEl = document.createElement('div');
-                completedEl.className = 'reminder-item__completed-time';
                 const timeText = completedTime || getLocalDateTimeString(new Date());
-                completedEl.textContent = `✅ ${this.formatCompletedTime(timeText)}`;
-                completedEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
-                infoEl.appendChild(completedEl);
+                infoEl.appendChild(createTaskCompletedTimeElement(timeText));
             }
         } else {
             el.classList.remove('reminder-completed');
@@ -7994,15 +7989,6 @@ export class ReminderPanel {
         if (reminderData[item.originalId]) {
             reminderData[item.originalId].sort = sort;
         }
-    }
-
-    /**
-     * 格式化完成时间显示
-     * @param completedTime 完成时间字符串
-     * @returns 格式化的时间显示
-     */
-    private formatCompletedTime(completedTime: string): string {
-        return formatTaskCompletedTime(completedTime);
     }
 
     private async showReminderContextMenu(event: { clientX: number; clientY: number }, reminder: any) {
