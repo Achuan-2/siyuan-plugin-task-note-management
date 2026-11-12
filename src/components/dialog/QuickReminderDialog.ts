@@ -3230,7 +3230,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group" id="quickCustomGroup" style="display: none;">
-                            <label class="b3-form__label">${this.renderSettingLabel('group', i18n("setTaskGroup"))}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('folderOpen', i18n("setTaskGroup"))}</label>
                             <div class="custom-select" id="quickCustomGroupSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
                                     <input type="text" id="quickCustomGroupSearchInput" class="b3-text-field" placeholder="${i18n("searchGroup")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
