@@ -1,3 +1,5 @@
+import { renderTomatoIconContent } from './tomatoIcon';
+
 /** 任务详情图标：普通信息跟随主题颜色，番茄使用红色果实与绿色叶片。 */
 const paths = {
     project: '<use href="#iconTNProject"/>',
@@ -15,7 +17,7 @@ const paths = {
     hourglass: '<path d="M5 2h14M5 22h14M6 2v5l6 5-6 5v5M18 2v5l-6 5 6 5v5"/>',
     flag: '<path d="M4 22V3c5-4 11 4 16 0v12c-5 4-11-4-16 0"/>',
     pin: '<path d="M12 17v5M8 3h8l-1 7 4 4v3H5v-3l4-4Z"/>',
-    tomato: '<path fill="#ef5b54" d="M8 7C4 6 2 9 2 13c0 5 4 9 10 9s10-4 10-9c0-4-3-7-7-6Z"/><path fill="#4d9e57" d="m12 7-6-3 2 5-3 2 5-1 2 3 2-3 5 1-3-3 2-4Z"/><path d="M12 7V4c0-1 1-2 2-2" fill="none" stroke="#397e44" stroke-width="2" stroke-linecap="round"/><path d="M5 13a6 6 0 0 0 3 5" fill="none" stroke="#ffaaa1" stroke-width="1.5" stroke-linecap="round"/>',
+    tomato: renderTomatoIconContent(),
 } as const;
 
 export type TaskMetadataIcon = keyof typeof paths;

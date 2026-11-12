@@ -1,4 +1,5 @@
 import { Plugin } from "siyuan";
+import { renderTomatoIconContent } from "./tomatoIcon";
 
 export function registerCustomIcons(plugin: Plugin) {
     // 任务菜单图标：复用宿主 SVG 尺寸与主题色，优先级保留颜色区分。
@@ -169,11 +170,7 @@ export function registerCustomIcons(plugin: Plugin) {
             </g>
         </symbol>
         <symbol id="iconTNPomodoro" viewBox="0 0 24 24">
-            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 7C5 6 2 8 2 12c0 5 4 10 10 10s10-5 10-10c0-4-3-6-6-5"/>
-                <path d="M12 6V4c0-1 1-2 2-2"/>
-                <path d="m12 6-5-2 2 4-3 2 5-1 1 3 1-3 5 1-3-2 2-4Z"/>
-            </g>
+            ${renderTomatoIconContent('monochrome')}
         </symbol>
         <symbol id="iconTNRandomRest" viewBox="0 0 24 24">
             <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
