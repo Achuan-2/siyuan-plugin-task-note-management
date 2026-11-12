@@ -6,6 +6,7 @@ import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
+import { LongPressTaskDrag, type TaskDragPoint } from '../../utils/longPressTaskDrag';
 import { createTaskCompletedTimeElement, updateTaskCompletedTimeElement } from '../render/taskCompletedTimeElement';
 import { ViewLifecycle } from '../../utils/viewLifecycle';
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
@@ -112,6 +113,7 @@ export class ProjectKanbanView {
     private isDragging: boolean = false;
     private draggedTask: any = null;
     private draggedElement: HTMLElement | null = null;
+    private mobileTaskDrag: LongPressTaskDrag<any> | null = null;
     private dragScrollIntervalId: number | null = null;
     private lastDragTime: number = 0;
     private lastDragClientX: number | null = null;
@@ -3337,6 +3339,7 @@ export class ProjectKanbanView {
             return;
         }
 
+        this.mobileTaskDrag?.cancel();
         this.isLoading = true;
         try {
             // 保存当前滚动状态，避免界面刷新时丢失滚动位置
@@ -5065,6 +5068,7 @@ export class ProjectKanbanView {
 
     private async renderKanban() {
         if (this.disposed) return;
+        this.mobileTaskDrag?.cancel();
         // 保存滚动位置（如果还没有被上层保存）
         if (!this._savedScrollState) this.captureScrollState();
 
@@ -8709,7 +8713,7 @@ export class ProjectKanbanView {
             lute: this.lute,
             projectCache: undefined,
             habitCache: undefined,
-            isMobileClient: this.plugin.isInMobileApp,
+            isMobileClient: getFrontend().endsWith('mobile') || this.plugin.isInMobileApp,
             isReminderPinned: (t: any) => !!t.pinned,
             getTaskStatus: (t: any) => this.getTaskStatus(t),
             formatReminderTime: (dateStr: string, timeStr: string, today: string, endDateStr?: string, endTimeStr?: string, taskParam?: any) => {
@@ -8850,7 +8854,10 @@ export class ProjectKanbanView {
                 }
             },
             setupDragAndDrop: (taskEl: HTMLElement, task: any) => {
-                if (!this.plugin.isInMobileApp) {
+                if (getFrontend().endsWith('mobile') || this.plugin.isInMobileApp) {
+                    taskEl.draggable = false;
+                    this.ensureMobileTaskDrag();
+                } else {
                     taskEl.draggable = true;
                     this.addTaskDragEvents(taskEl, task);
 
@@ -12732,9 +12739,132 @@ export class ProjectKanbanView {
         }
     }
 
-    /**
-     * Get task object from a task element, with customGroupId extracted from DOM
-     */
+    /** 与任务侧栏共用长按手势，落点仍使用项目看板的排序和父子关系规则。 */
+    private ensureMobileTaskDrag(): void {
+        if (this.mobileTaskDrag) return;
+        this.mobileTaskDrag = new LongPressTaskDrag(this.container, {
+            getSource: target => {
+                if (this.disposed || this.isLoading || this.isMultiSelectMode) return null;
+                if (!target.closest || target.closest('button, input, textarea, select, [contenteditable="true"], [contenteditable=""], .reminder-item__progress-wrap')) return null;
+                const link = target.closest('a, [data-type="a"], [data-href]');
+                if (link && !link.classList.contains('reminder-item__title')) return null;
+                const element = target.closest<HTMLElement>('.kanban-task[data-task-id]');
+                if (!element || !this.container.contains(element)) return null;
+                const task = this.getTaskFromElement(element);
+                return task ? { element, task, title: task.title || '' } : null;
+            },
+            onStart: ({ element, task }) => {
+                this.isDragging = true;
+                this.draggedElement = element;
+                this.draggedTask = task;
+            },
+            onMove: (task, point) => {
+                const target = this.getMobileTaskDropTarget(task, point);
+                if (target) {
+                    this.updateIndicator(target.action === 'parent' ? 'parentChild' : 'sort', target.element,
+                        target.action === 'parent' ? 'middle' : target.insertBefore ? 'top' : 'bottom', point);
+                } else this.updateIndicator('none', null, null);
+            },
+            onDrop: (task, point) => { void this.handleMobileTaskDrop(task, point); },
+            onEnd: () => {
+                this.isDragging = false;
+                this.draggedElement = null;
+                this.draggedTask = null;
+                this.stopDragScroll();
+                this.clearDropZoneHighlights();
+            },
+            autoScroll: (point, elapsed) => this.scrollMobileTaskDrag(point, elapsed),
+        });
+    }
+
+    private getMobileTaskDropTarget(task: any, point: TaskDragPoint) {
+        if (this.disposed || this.isLoading || this.isMultiSelectMode) return null;
+        const element = document.elementFromPoint(point.clientX, point.clientY)
+            ?.closest<HTMLElement>('.kanban-task[data-task-id]');
+        if (!element || !this.container.contains(element)) return null;
+        // 松手时重新读取当前任务，避免使用刷新、删除之前的对象。
+        const source = this.tasks.find(item => item.id === task.id);
+        const target = this.getTaskFromElement(element);
+        if (!source || !target || source.id === target.id || this.isDescendant(target, source)) return null;
+        const rect = element.getBoundingClientRect();
+        const edge = point.clientY <= rect.top + rect.height * 0.2 || point.clientY >= rect.bottom - rect.height * 0.2;
+        const insertBefore = point.clientY < rect.top + rect.height / 2;
+        const canChangeRelation = !source.isSubscribed && !target.isSubscribed && !source.isRepeatInstance && !target.isRepeatInstance;
+        if (!edge && canChangeRelation && this.canSetAsParentChild(source, target)) {
+            return { source, target, element, insertBefore, action: 'parent' as const };
+        }
+        if (edge && canChangeRelation && this.canBecomeSiblingOf(source, target)) {
+            return { source, target, element, insertBefore, action: 'sibling' as const };
+        }
+        const targetStatus = this.kanbanMode === 'custom'
+            ? element.closest<HTMLElement>('.custom-status-group')?.dataset.status
+            : this.getTaskStatus(target);
+        const structuralChange = (!source.isSubscribed || source.subscriptionType === 'caldav') && (
+            (targetStatus && targetStatus !== this.getTaskStatus(source)) ||
+            target.customGroupId !== source.customGroupId ||
+            (target.priority || 'none') !== (source.priority || 'none') ||
+            target.parentId !== source.parentId
+        );
+        if (this.canDropForSort(source, target) || structuralChange) {
+            return { source, target, element, insertBefore, action: 'sort' as const };
+        }
+        return null;
+    }
+
+    private async handleMobileTaskDrop(task: any, point: TaskDragPoint): Promise<void> {
+        const drop = this.getMobileTaskDropTarget(task, point);
+        if (!drop) return;
+        try {
+            if (drop.action === 'parent') {
+                await this.setParentChildRelation(drop.source, drop.target);
+                showMessage(i18n('taskSetAsSubtask', { childTitle: drop.source.title, parentTitle: drop.target.title }));
+            } else if (drop.action === 'sibling') {
+                await this.handleBecomeSiblingDrop(drop.source, drop.target, { clientY: point.clientY, target: drop.element });
+            } else {
+                await this.reorderTasks(drop.source, drop.target, drop.insertBefore);
+            }
+        } catch (error) {
+            console.error('Failed to move task by touch:', error);
+            showMessage(i18n('moveTaskFailed'));
+        }
+    }
+
+    /** 按实际命中的滚动层级处理纵向列表及横向看板，手指停住时也继续滚动。 */
+    private scrollMobileTaskDrag(point: TaskDragPoint, elapsed: number): boolean {
+        let element = document.elementFromPoint(point.clientX, point.clientY) as HTMLElement | null;
+        if (!element || !this.container.contains(element)) return false;
+        let scrolled = false;
+        let movedX = false, movedY = false;
+        while (element) {
+            const rect = element.getBoundingClientRect();
+            const style = getComputedStyle(element);
+            for (const axis of ['x', 'y'] as const) {
+                if (axis === 'x' ? movedX : movedY) continue;
+                const overflow = axis === 'x' ? style.overflowX : style.overflowY;
+                if (overflow !== 'auto' && overflow !== 'scroll') continue;
+                const start = axis === 'x' ? rect.left : rect.top;
+                const end = axis === 'x' ? rect.right : rect.bottom;
+                const position = axis === 'x' ? point.clientX : point.clientY;
+                const edge = Math.min(50, (end - start) / 3);
+                if (edge <= 0 || position < start || position > end) continue;
+                const speed = position < start + edge ? -12 * (1 - (position - start) / edge)
+                    : position > end - edge ? 12 * (1 - (end - position) / edge) : 0;
+                const property = axis === 'x' ? 'scrollLeft' : 'scrollTop';
+                const previous = element[property];
+                element[property] += speed * elapsed / 16;
+                if (element[property] !== previous) {
+                    scrolled = true;
+                    if (axis === 'x') movedX = true;
+                    else movedY = true;
+                }
+            }
+            if (element === this.container) break;
+            element = element.parentElement;
+        }
+        return scrolled;
+    }
+
+    /** 从卡片及所在分组获取当前任务信息。 */
     private getTaskFromElement(element: HTMLElement): any {
         const taskId = element.dataset.taskId;
         if (!taskId) return null;
@@ -12879,7 +13009,7 @@ export class ProjectKanbanView {
         type: 'none' | 'sort' | 'parentChild',
         target: HTMLElement | null,
         position: 'top' | 'bottom' | 'middle' | null,
-        event?: DragEvent
+        event?: Pick<DragEvent, 'clientY'>
     ) {
         // 检查是否需要更新
         const needsUpdate = this.currentIndicatorType !== type ||
@@ -12945,7 +13075,7 @@ export class ProjectKanbanView {
      * @param element 目标元素
      * @param event 拖拽事件
      */
-    private createSortIndicator(element: HTMLElement, event: DragEvent) {
+    private createSortIndicator(element: HTMLElement, event: Pick<DragEvent, 'clientY'>) {
         const rect = element.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
 
@@ -13162,7 +13292,7 @@ export class ProjectKanbanView {
      * @param targetTask The task that was the drop target
      * @param event The drop event
      */
-    private async handleBecomeSiblingDrop(draggedTask: any, targetTask: any, event: DragEvent) {
+    private async handleBecomeSiblingDrop(draggedTask: any, targetTask: any, event: Pick<DragEvent, 'clientY' | 'target'>) {
         if (!draggedTask || !targetTask) return;
         // If both are top level, it should have been handled by canDropForSort/handleSortDrop
         if (!targetTask.parentId && !draggedTask.parentId) return;
@@ -17277,6 +17407,8 @@ export class ProjectKanbanView {
     public destroy(): void {
         if (this.disposed) return;
         this.disposed = true;
+        this.mobileTaskDrag?.dispose();
+        this.mobileTaskDrag = null;
         this.lifecycle.dispose();
         this.unbindProjectTabDropTarget();
         this.stopDragScroll();

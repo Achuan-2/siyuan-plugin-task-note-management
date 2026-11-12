@@ -17,6 +17,8 @@ interface LongPressTaskDragOptions<T> {
     onMove(task: T, point: TaskDragPoint): void;
     onDrop(task: T, point: TaskDragPoint): void;
     onEnd(): void;
+    /** 多列视图可自行滚动实际命中的容器，返回是否发生滚动。 */
+    autoScroll?(point: TaskDragPoint, elapsed: number): boolean;
 }
 
 interface TouchDragSession<T> {
@@ -50,7 +52,7 @@ export class LongPressTaskDrag<T> {
         this.lifecycle.listen(root, 'pointercancel', () => this.cancel());
         this.lifecycle.listen(root, 'scroll', () => {
             if (this.session && !this.session.dragging) this.cancel();
-        }, { passive: true });
+        }, { capture: true, passive: true });
         this.lifecycle.listen(window, 'blur', () => this.cancel());
         this.lifecycle.listen(document, 'visibilitychange', () => {
             if (document.hidden) this.cancel();
@@ -129,10 +131,16 @@ export class LongPressTaskDrag<T> {
         }
         const previousScroll = this.root.scrollTop;
         const elapsed = Math.min(32, time - (session.lastFrameTime ?? time - 16));
-        this.root.scrollTop += speed * elapsed / 16;
+        let scrolled: boolean;
+        if (this.options.autoScroll) {
+            scrolled = this.options.autoScroll(session.point, elapsed);
+        } else {
+            this.root.scrollTop += speed * elapsed / 16;
+            scrolled = previousScroll !== this.root.scrollTop;
+        }
         session.lastFrameTime = time;
         // 手指停留在边缘时也持续滚动，并按滚动后的实际位置更新落点。
-        if (session.dirty || previousScroll !== this.root.scrollTop) {
+        if (session.dirty || scrolled) {
             session.dirty = false;
             this.options.onMove(session.source.task, session.point);
         }
