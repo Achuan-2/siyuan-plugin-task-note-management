@@ -1,5 +1,5 @@
 import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
-﻿import { Dialog, Menu } from "siyuan";
+﻿import { Dialog } from "siyuan";
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { i18n } from "../../pluginInstance";
 import { SortCriterion, AVAILABLE_SORT_METHODS, getSortCriterionName } from "../../utils/sortConfig";
@@ -72,9 +72,9 @@ export class SortMenuDialog {
                     </div>
                 </div>
                 </section>
-                ${this.options.grouping ? `<section class="sort-menu-grouping-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--b3-theme-border);">
-                    <h3 style="margin: 0 0 12px; font-size: 14px; font-weight: 600;">${i18n('reminderGrouping')}</h3>
-                    <button class="b3-button b3-button--outline sort-menu-grouping"></button>
+                ${this.options.grouping ? `<section class="sort-menu-grouping-section" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--b3-theme-border);">
+                    <h3 style="margin: 0; font-size: 14px; font-weight: 600;">${i18n('reminderGrouping')}</h3>
+                    <select class="b3-select sort-menu-grouping" aria-label="${i18n('reminderGrouping')}" style="max-width: 60%; cursor: pointer;"></select>
                 </section>` : ''}
                 <div class="sort-menu-actions" style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px;">
                     <button class="b3-button b3-button--cancel sort-menu-cancel">${i18n("close") || "关闭"}</button>
@@ -84,39 +84,33 @@ export class SortMenuDialog {
         });
 
         this.dialog = dialog;
-        this.bindGroupingMenu();
+        this.bindGroupingSelect();
         this.renderSelectedList();
         this.renderCurrentSingleItem();
         this.renderAvailableOptions();
         this.bindEvents();
     }
 
-    private bindGroupingMenu(): void {
+    private bindGroupingSelect(): void {
         const grouping = this.options.grouping;
-        const button = this.dialog?.element.querySelector<HTMLButtonElement>('.sort-menu-grouping');
-        if (!grouping || !button) return;
-        const updateLabel = () => {
-            button.textContent = grouping.options.find(option => option.key === grouping.value)?.label || '';
-        };
-        updateLabel();
-        button.addEventListener('click', () => {
-            const menu = new Menu('reminder-grouping-menu');
-            grouping.options.forEach(option => menu.addItem({
-                label: option.label,
-                current: option.key === grouping.value,
-                click: async () => {
-                    button.disabled = true;
-                    try {
-                        if (await grouping.onChange(option.key) === false) return;
-                        grouping.value = option.key;
-                        updateLabel();
-                    } finally {
-                        button.disabled = false;
-                    }
-                },
-            }));
-            const rect = button.getBoundingClientRect();
-            menu.open({ x: rect.left, y: rect.bottom });
+        const select = this.dialog?.element.querySelector<HTMLSelectElement>('.sort-menu-grouping');
+        if (!grouping || !select) return;
+        grouping.options.forEach(option => {
+            const element = document.createElement('option');
+            element.value = option.key;
+            element.textContent = option.label;
+            select.appendChild(element);
+        });
+        select.value = grouping.value;
+        select.addEventListener('change', async () => {
+            const value = select.value;
+            select.disabled = true;
+            try {
+                if (await grouping.onChange(value) !== false) grouping.value = value;
+            } finally {
+                select.value = grouping.value;
+                select.disabled = false;
+            }
         });
     }
 
