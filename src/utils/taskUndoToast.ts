@@ -2,7 +2,7 @@ import { showMessage } from 'siyuan';
 import { i18n } from '../pluginInstance';
 
 const activeToasts = new WeakMap<object, () => void>();
-const UNDO_DURATION = 6000;
+const UNDO_DURATION = 3000;
 
 export function dismissTaskUndo(plugin: object): void {
     activeToasts.get(plugin)?.();

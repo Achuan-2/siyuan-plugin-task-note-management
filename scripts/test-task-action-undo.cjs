@@ -193,12 +193,12 @@ test('共享日期排除保持幂等，普通删除保留实例历史，文档�
     assert.equal(task.repeat.instances['2026-11-08'], undefined);
 });
 
-test('提示保留 6 秒，悬停和聚焦暂停计时，新提示替换旧提示且卸载清理', async () => {
+test('提示保留 3 秒，悬停和聚焦暂停计时，新提示替换旧提示且卸载清理', async () => {
     const f = fixture({ task: { id: 'task' } }), action = f.action();
     await action.save({}); action.show('deleted');
     let toast = f.document.body.children[0];
     assert.equal(toast.children[1].attributes['aria-label'], 'undoTaskAction');
-    assert.equal([...f.timers.values()][0].delay, 6000);
+    assert.equal([...f.timers.values()][0].delay, 3000);
     toast.hovered = true; toast.fire('mouseenter');
     assert.equal(f.timers.size, 0);
     toast.hovered = false; toast.fire('mouseleave');
