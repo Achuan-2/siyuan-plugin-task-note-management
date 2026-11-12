@@ -45,9 +45,10 @@ const emojiIcons: Record<string, TaskMetadataIcon> = {
     '🔄': 'repeat', '🔁': 'repeat', '🍅': 'tomato', '⏱': 'duration',
     '✅': 'check',
     '🍰': 'calendarHeart', '📌': 'pin', '📋': 'clipboard', '📝': 'note',
+    '🎯': 'flag', '📜': 'document',
     '🕒': 'duration', '🕐': 'clock', '⏰': 'alarm',
 };
-const metadataIconPattern = /(📂|📁|🏷️?|🗓️*|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅|🍰|📌|📋|📝)/u;
+const metadataIconPattern = /(📂|📁|🏷️?|🗓️*|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅|🍰|📌|📋|📝|🎯|📜)/u;
 
 /** 模板和 Svelte 共用：先转义动态文字，只插入固定的可信 SVG。 */
 export function renderTaskMetadataText(text: string): string {
