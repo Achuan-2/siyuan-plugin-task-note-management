@@ -8,7 +8,7 @@ export function updateTaskCompletedTimeElement(
     completedTime: string,
     formatTime: (time: string) => string = formatTaskCompletedTime,
 ): void {
-    setTaskMetadataText(element, `✅ ${i18n('completedAt')} ${formatTime(completedTime)}`);
+    setTaskMetadataText(element, `✅ ${i18n('taskCompletedAtTime', { time: formatTime(completedTime) })}`);
 }
 
 export function createTaskCompletedTimeElement(

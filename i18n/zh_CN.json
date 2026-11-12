@@ -513,6 +513,7 @@
     "everyNMonthsRepeat": "每 ${n} 个月重复",
     "everyNYearsRepeat": "每 ${n} 年重复",
     "completedAt": "完成于",
+    "taskCompletedAtTime": "完成于${time}",
     "completedToday": "今天",
     "completedYesterday": "昨天",
     "pomodoroLongBreak": "长时休息",

@@ -513,6 +513,7 @@
     "everyNMonthsRepeat": "Every ${n} months repeat",
     "everyNYearsRepeat": "Every ${n} years repeat",
     "completedAt": "Completed at",
+    "taskCompletedAtTime": "Completed at ${time}",
     "completedToday": "Today",
     "completedYesterday": "Yesterday",
     "pomodoroLongBreak": "Long Break",
