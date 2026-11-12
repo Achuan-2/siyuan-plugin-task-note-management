@@ -235,7 +235,7 @@ export const DEFAULT_SETTINGS = {
     projectPanelStatusFilter: 'all',
     projectPanelShowDates: true,
     projectPanelShowTaskCounts: false,
-    projectPanelShowPomodoro: true,
+    projectPanelShowPomodoro: false,
     projectPanelShowProgress: true,
     reminderPanelSelectedCategories: [] as string[],
     reminderPanelShowProjectKanbanStatus: true,

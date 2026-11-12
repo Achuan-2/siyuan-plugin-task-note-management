@@ -263,7 +263,7 @@ export class ProjectPanel {
     private reminderDataCache: any = null;
     private showDates = true;
     private showTaskCounts = false;
-    private showPomodoro = true;
+    private showPomodoro = false;
     private showProgress = true;
     private isMobileClient: boolean = false;
 
@@ -2560,7 +2560,7 @@ export class ProjectPanel {
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
             this.showDates = settings.projectPanelShowDates !== false;
             this.showTaskCounts = settings.projectPanelShowTaskCounts === true;
-            this.showPomodoro = settings.projectPanelShowPomodoro !== false;
+            this.showPomodoro = settings.projectPanelShowPomodoro === true;
             this.showProgress = settings.projectPanelShowProgress !== false;
         } catch (error) {
             console.error("Failed to restore project panel settings:", error);
