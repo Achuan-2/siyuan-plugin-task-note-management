@@ -2823,7 +2823,7 @@ export class QuickReminderDialog {
                         <button class="b3-button b3-button--outline" id="moveBtn" style="width: 100%; height: auto; padding: 12px; text-align: left; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px;">
                             <span style="font-weight: 600; color: var(--b3-theme-primary);">${i18n('moveOthersToNote')}</span>
                             <div style="font-size: 11px; color: var(--b3-theme-on-surface-light); white-space: normal; line-height: 1.4;">
-                                <div><b>${i18n('eventTitle')}:</b> ${escapeHtml(lines[0])}</div>
+                                <div><b>${i18n('taskTitle')}:</b> ${escapeHtml(lines[0])}</div>
                                 <div style="overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;"><b>${i18n('reminderNote')}:</b> ${escapeHtml(lines.slice(1).join(' '))}</div>
                             </div>
                         </button>
@@ -3024,7 +3024,7 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${this.renderSettingLabel('note', i18n("eventTitle"))}</label>
+                            <label class="b3-form__label">${this.renderSettingLabel('note', i18n("taskTitle"))}</label>
                             <div class="title-input-container" style="display: flex; gap: 8px; align-items: flex-start;">
                                 <textarea id="quickReminderTitle" class="b3-text-field" rows="1" placeholder="${i18n("enterReminderTitle")}" spellcheck="false" style="flex: 1; max-height: 200px; resize: vertical; overflow-y: auto; padding: 4px 8px; line-height: 1.5;" required autofocus></textarea>
                                 <button type="button" id="quickNlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("smartDateRecognition")}">
