@@ -1703,6 +1703,7 @@
     "generateAndUpload": "生成并上传",
     "icsCloudUrl": "ICS 云端链接",
     "icsCloudUrlDesc": "上传成功后自动生成的云端链接",
+    "icsCloudUrlQiniuWarning": "七牛云 S3 未配置自定义域名时，无法通过外链直接访问 ICS 文件。请配置可公开访问的自定义域名。",
     "icsLastSyncAt": "上一次上传时间",
     "icsLastSyncAtDesc": "显示上次成功上传ICS文件的时间",
     "s3UseSiyuanConfig": "使用思源S3设置",

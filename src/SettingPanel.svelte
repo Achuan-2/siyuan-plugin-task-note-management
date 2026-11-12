@@ -3424,6 +3424,11 @@
                                                 />
                                             {/if}
                                         </Form.Wrap>
+                                        {#if item.key === 'icsCloudUrl' && settings.icsSyncMethod === 's3'}
+                                            <div class="ics-cloud-url-warning">
+                                                {i18n('icsCloudUrlQiniuWarning')}
+                                            </div>
+                                        {/if}
                                     {/if}
                                 {/if}
                             {/each}
@@ -3682,6 +3687,14 @@
 </div>
 
 <style lang="scss">
+    .ics-cloud-url-warning {
+        margin-top: -8px;
+        margin-bottom: 16px;
+        color: var(--b3-theme-error, #d23f31);
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
     .config__panel {
         height: 100%;
         display: flex;

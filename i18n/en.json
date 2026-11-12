@@ -1703,6 +1703,7 @@
     "generateAndUpload": "Generate & Upload",
     "icsCloudUrl": "ICS Cloud URL",
     "icsCloudUrlDesc": "Cloud URL automatically generated after successful upload",
+    "icsCloudUrlQiniuWarning": "Qiniu Cloud S3 requires a custom domain to access ICS files directly via external links. Please configure a publicly accessible custom domain.",
     "icsLastSyncAt": "Last Upload Time",
     "icsLastSyncAtDesc": "Shows the time of the last successful ICS file upload",
     "s3UseSiyuanConfig": "Use SiYuan S3 Settings",
