@@ -37,6 +37,7 @@ import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from 
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
 import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
+import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
 import { getAllReminders, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../../utils/icsSubscription';
 import { VipManager } from "../vip/vip";
@@ -9945,7 +9946,7 @@ export class ProjectKanbanView {
             const statusMenuItems: any[] = [];
             statusCandidates.forEach((s: any) => {
                 statusMenuItems.push({
-                    icon: 'iconTNStatus',
+                    iconHTML: createStatusMenuIcon(s.color),
                     label: s.name || s.id,
                     current: currentStatus === s.id,
                     click: () => this.changeTaskStatus(task, s.id)

@@ -8,6 +8,7 @@ import { getLuteInstance } from "../../utils/luteSingleton";
 import { SortMenuDialog } from "../dialog/SortMenuDialog";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
 import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
+import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { CategoryManager } from "../dataManager/categoryManager";
 import { CategoryManageDialog } from "../dialog/CategoryManageDialog";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
@@ -8070,7 +8071,7 @@ export class ReminderPanel {
         const statusMenuItems: any[] = [];
         statusCandidates.forEach((s: any) => {
             statusMenuItems.push({
-                icon: 'iconTNStatus',
+                iconHTML: createStatusMenuIcon(s.color),
                 label: s.name || s.id,
                 current: currentStatus === s.id,
                 click: () => {
