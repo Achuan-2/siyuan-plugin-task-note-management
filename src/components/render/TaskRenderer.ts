@@ -1594,7 +1594,11 @@ export class TaskRenderer {
                     milestoneEl.style.textDecoration = 'underline dotted';
                 }
 
-                milestoneEl.innerHTML = `<span>${milestone.icon || '🚩'}</span><span style="font-weight: 500;">${milestone.name}</span>`;
+                milestoneEl.innerHTML = '<svg aria-hidden="true" style="width: 12px; height: 12px; flex-shrink: 0;"><use xlink:href="#iconTNMilestone"></use></svg>';
+                const milestoneName = document.createElement('span');
+                milestoneName.style.fontWeight = '500';
+                milestoneName.textContent = milestone.name;
+                milestoneEl.appendChild(milestoneName);
 
                 milestoneEl.addEventListener('click', (e) => {
                     if (milestone.blockId) {
