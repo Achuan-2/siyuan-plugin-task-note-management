@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import { Constants, Dialog, confirm } from 'siyuan';
+    import { Constants, Dialog, confirm, getFrontend } from 'siyuan';
     import Form from '@/libs/components/Form';
     import { i18n } from './pluginInstance';
     import { EMAIL_PROVIDERS, EMAIL_TRANSPORTS, SMTP_SECURITY_MODES } from './services/emailNotification';
@@ -40,6 +40,8 @@
 
     export let plugin;
     export let initialGroup: string = '';
+
+    const isMobile = getFrontend().endsWith('mobile');
 
     // 使用从 index.ts 导入的默认设置
     let settings = { ...DEFAULT_SETTINGS };
@@ -3123,7 +3125,7 @@
     }
 </script>
 
-<div class="fn__flex-1 fn__flex config__panel">
+<div class="fn__flex-1 fn__flex config__panel" class:config__panel--mobile={isMobile}>
     <div class="config__tab-sidebar">
         <div class="config__search-wrap">
             <input
@@ -3740,6 +3742,12 @@
         overflow: auto;
         padding: 2px;
         background-color: var(--b3-theme-background);
+    }
+
+    .config__panel--mobile .config__tab-wrap > .config__tab-container {
+        // 覆盖宿主设置页的内边距，为手机端内容保留更多空间。
+        padding: 8px;
+        scroll-padding-block: 8px;
     }
 
     .config__search-empty {
