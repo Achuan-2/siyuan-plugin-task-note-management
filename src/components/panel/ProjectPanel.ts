@@ -262,7 +262,7 @@ export class ProjectPanel {
     // 缓存提醒数据，避免为每个项目重复读取
     private reminderDataCache: any = null;
     private showDates = true;
-    private showTaskCounts = true;
+    private showTaskCounts = false;
     private showPomodoro = true;
     private showProgress = true;
     private isMobileClient: boolean = false;
@@ -2559,7 +2559,7 @@ export class ProjectPanel {
             this.syncLegacySortStateFromCriteria();
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
             this.showDates = settings.projectPanelShowDates !== false;
-            this.showTaskCounts = settings.projectPanelShowTaskCounts !== false;
+            this.showTaskCounts = settings.projectPanelShowTaskCounts === true;
             this.showPomodoro = settings.projectPanelShowPomodoro !== false;
             this.showProgress = settings.projectPanelShowProgress !== false;
         } catch (error) {

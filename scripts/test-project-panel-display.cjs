@@ -104,7 +104,7 @@ test('忽略旧视图选项，统一文件夹树并保留嵌套层级和项目�
     assert.ok(panel.projectsContainer.classList.contains('project-document-tree'));
     assert.deepEqual(panel.projectsContainer.querySelectorAll('.project-folder-group').map(item => item.dataset.folderId), ['work', 'research']);
     assert.ok(panel.projectsContainer.querySelector('.project-status-tag'));
-    assert.ok(panel.projectsContainer.querySelector('.project-counts-dynamic'));
+    assert.equal(panel.projectsContainer.querySelector('.project-counts-dynamic'), null);
 });
 
 test('四项显示开关的所有组合独立生效，全部关闭不产生空统计容器或计算', async () => {
@@ -135,7 +135,8 @@ test('日期包含已开始天数或截止倒计时，关闭日期仍保留优�
 });
 
 test('更多菜单四项开关立即刷新并持久化，恢复时保留明确关闭的值', async () => {
-    const { panel, persisted, metrics } = fixture();
+    const { panel, persisted, metrics } = fixture({ projectPanelShowTaskCounts: true });
+    await panel.restorePanelSettings();
     panel.renderProjects([project()]);
     panel.showMoreMenu({ target: { closest: () => null }, clientX: 0, clientY: 0 });
     const submenu = metrics.menus[0].items.find(item => item.label === zh.displaySettings).submenu;
@@ -165,9 +166,10 @@ test('隐藏任务数量后，任务更新仍刷新番茄统计和独立进度�
     assert.equal(metrics.pomodoro, 2);
 });
 
-test('关闭全部统计时加载项目不读取任务数据，默认仍展示所有信息', async () => {
+test('任务数量默认关闭，其他信息默认开启；关闭全部统计后不读取任务数据', async () => {
     const { panel, metrics } = fixture({}, [project()]);
-    assert.ok(panel.showDates && panel.showTaskCounts && panel.showPomodoro && panel.showProgress);
+    assert.equal(panel.showTaskCounts, false);
+    assert.ok(panel.showDates && panel.showPomodoro && panel.showProgress);
     panel.showTaskCounts = panel.showPomodoro = panel.showProgress = false;
     await panel.loadProjects();
     assert.equal(metrics.reads, 0);

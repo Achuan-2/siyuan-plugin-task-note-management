@@ -234,7 +234,7 @@ export const DEFAULT_SETTINGS = {
     projectPanelSelectedCategories: [] as string[],
     projectPanelStatusFilter: 'all',
     projectPanelShowDates: true,
-    projectPanelShowTaskCounts: true,
+    projectPanelShowTaskCounts: false,
     projectPanelShowPomodoro: true,
     projectPanelShowProgress: true,
     reminderPanelSelectedCategories: [] as string[],
