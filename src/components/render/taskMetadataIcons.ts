@@ -1,12 +1,12 @@
 /** 任务详情图标：普通信息跟随主题颜色，番茄使用红色果实与绿色叶片。 */
 const paths = {
-    project: '<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1M3 7h18l-3 12H2Z"/>',
+    project: '<use href="#iconTNProject"/>',
     tag: '<path d="m20 13-7 7a2 2 0 0 1-3 0l-8-8V2h10l8 8a2 2 0 0 1 0 3Z"/><circle cx="7" cy="7" r="1"/>',
-    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18M8 15h2m4 0h2m-8 3h2"/>',
+    calendar: '<path d="M8 2v4m8-4v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
     repeat: '<path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3"/>',
-    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     alarm: '<circle cx="12" cy="13" r="8"/><path d="m3 5 3-3m12 0 3 3M12 9v4l3 2M6 20l-2 2m14-2 2 2"/>',
-    timer: '<circle cx="12" cy="14" r="8"/><path d="M9 2h6m-3 0v4m6 1 2-2M12 10v4l3 2"/>',
+    timer: '<path d="M10 2h4M12 14v-4m-8-7 3 3"/><circle cx="12" cy="14" r="8"/>',
     document: '<path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9ZM14 2v7h7M7 13h10m-10 4h7"/>',
     parent: '<path d="M4 3v9a4 4 0 0 0 4 4h12m-5-5 5 5-5 5"/>',
     check: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/>',
@@ -20,8 +20,11 @@ const paths = {
 export type TaskMetadataIcon = keyof typeof paths;
 
 export function renderTaskMetadataIcon(name: TaskMetadataIcon): string {
-    const paint = name === 'tomato' ? '' : ' fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false" style="display:inline-block;width:1em;height:1em;vertical-align:-0.125em;flex-shrink:0;pointer-events:none"${paint}>${paths[name]}</svg>`;
+    // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
+    const content = name === 'tomato' || name === 'project'
+        ? paths[name]
+        : `<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }
 
 const emojiIcons: Record<string, TaskMetadataIcon> = {

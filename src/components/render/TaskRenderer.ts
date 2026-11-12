@@ -1179,6 +1179,7 @@ export class TaskRenderer {
         if (task.repeat?.enabled || task.isRepeatInstance) {
             const repeatIcon = document.createElement('span');
             repeatIcon.className = 'reminder-repeat-icon';
+            repeatIcon.style.cssText = 'display: inline-flex; align-items: center; color: var(--b3-theme-on-surface-light);';
             repeatIcon.innerHTML = renderTaskMetadataIcon('repeat');
             repeatIcon.classList.add('ariaLabel');
             repeatIcon.setAttribute('aria-label', task.repeat?.enabled ? getRepeatDescription(task.repeat) : (i18n("repeatInstance") || "周期事件实例"));
