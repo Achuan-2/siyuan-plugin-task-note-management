@@ -34,8 +34,8 @@ class Element {
     getAttribute(name) { return this.attributes[name]; }
     addEventListener(name, callback) { this.events[name] = callback; }
 }
-const Panel = new Function('i18n', 'getRelativeDateString', 'getLogicalDateString', 'document', 'parseReminderInstanceId', 'renderTaskMetadataText', compile(`class Panel { ${methods} }`) + ';return Panel;')(
-    key => key, () => '2026-11-13', () => today, { createElement: () => new Element() }, () => null, value => value,
+const Panel = new Function('i18n', 'getRelativeDateString', 'getLogicalDateString', 'document', 'parseReminderInstanceId', 'renderTaskMetadataText', 'renderTaskMetadataIcon', compile(`class Panel { ${methods} }`) + ';return Panel;')(
+    key => key, () => '2026-11-13', () => today, { createElement: () => new Element() }, () => null, value => value, () => '<svg></svg>',
 );
 function fixture(mode = 'date') {
     const rows = new Map();

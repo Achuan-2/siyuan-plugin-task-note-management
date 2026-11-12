@@ -19,6 +19,7 @@ const paths = {
     flag: '<path d="M4 22V3c5-4 11 4 16 0v12c-5 4-11-4-16 0"/>',
     pin: '<path d="M12 17v5M8 3h8l-1 7 4 4v3H5v-3l4-4Z"/>',
     calendarHeart: '<path d="M12.127 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.125"/><path d="M14.62 17.8A2.25 2.25 0 1118 14.836a2.25 2.25 0 113.38 2.966l-2.626 2.856a.998.998 0 01-1.507 0z"/><path d="M16 2v3"/><path d="M3 9h18"/><path d="M8 2v3"/>',
+    calendarCheck: '<path d="M 19 3 L 5 3"/><path d="M 21 13 L 21 5"/><path d="M 21 5 A2 2 0 0 0 19 3"/><path d="M 3 19 A2 2 0 0 0 5 21"/><path d="M 3 5 L 3 19"/><path d="M 5 3 A2 2 0 0 0 3 5"/><path d="m16 19 2 2 4-4"/><path d="M16 2v3"/><path d="M3 9h18"/><path d="M5 21 L12.5 21"/><path d="M8 2v3"/>',
     clipboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 12h6m-6 4h6"/>',
     note: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M16 3l5 5M10 14l-1 4 4-1L22 8a2.1 2.1 0 0 0-5-5Z"/>',
     group: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -37,7 +38,7 @@ export function renderTaskMetadataIcon(name: TaskMetadataIcon, size = 14): strin
     // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
     const content = name === 'tomato' || name === 'project' || name === 'duration' || name === 'check'
         ? paths[name]
-        : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' || name === 'calendarHeart' || name === 'folderOpen' || name === 'progress' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
+        : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' || name === 'calendarHeart' || name === 'calendarCheck' || name === 'folderOpen' || name === 'progress' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
     const viewBox = name === 'duration' ? '0 0 1024 1024' : '0 0 24 24';
     return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false" style="display:inline-block;width:${size}px;height:${size}px;vertical-align:-2px;flex-shrink:0;float:none;margin:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }

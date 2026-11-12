@@ -2883,7 +2883,7 @@ export class ReminderPanel {
         header.setAttribute('aria-expanded', String(!this.collapsedTodayGroups.has(group)));
 
         const titles = {
-            today: i18n('todayReminders') || '今日任务',
+            today: `${renderTaskMetadataIcon('calendarCheck')} ${renderTaskMetadataText(i18n('todayReminders') || '今日任务')}`,
             daily: renderTaskMetadataText(i18n('dailyAvailable') || '🍰 每日可做'),
             completed: i18n('completedReminders') || '已完成任务',
             ignored: i18n('todayIgnored') || '今日忽略'
