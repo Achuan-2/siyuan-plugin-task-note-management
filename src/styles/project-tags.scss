@@ -8,8 +8,12 @@
     border: 1px solid var(--b3-border-color);
     border-radius: 999px;
     background-color: var(--tn-project-tag-color, var(--b3-theme-surface-lighter));
-    color: var(--b3-theme-on-background);
+    color: var(--tn-project-tag-text-color, #000000);
     font-size: 12px;
     font-weight: 500;
     line-height: 20px;
+
+    .b3-button--text {
+        color: inherit;
+    }
 }

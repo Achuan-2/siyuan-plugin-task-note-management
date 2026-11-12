@@ -1,6 +1,7 @@
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
+import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
@@ -14868,7 +14869,7 @@ export class ProjectKanbanView {
                                 if (!tag) continue;
                                 const tagEl = document.createElement('span');
                                 tagEl.className = 'reminder-item__tag tn-project-tag';
-                                tagEl.style.setProperty('--tn-project-tag-color', tag.color);
+                                applyProjectTagColor(tagEl, tag.color);
                                 tagEl.textContent = `#${tag.name}`;
                                 tagEl.classList.add('ariaLabel');
                                 tagEl.setAttribute('aria-label', tag.name);

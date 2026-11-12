@@ -1,6 +1,7 @@
 import { Dialog, showMessage } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { generateRandomColor } from "../../utils/uiUtils";
+import { applyProjectTagColor, getProjectTagColorStyle } from "../../utils/projectTagColor";
 import { saveReminders } from "../../utils/icsSubscription";
 
 export async function showManageTagsDialog(view: any, projectId: string = view.projectId) {
@@ -56,7 +57,7 @@ export async function showManageTagsDialog(view: any, projectId: string = view.p
             projectTags.forEach((tag: { id: string, name: string, color: string }) => {
                 const tagItem = document.createElement('div');
                 tagItem.className = 'tag-item tn-project-tag';
-                tagItem.style.setProperty('--tn-project-tag-color', tag.color);
+                applyProjectTagColor(tagItem, tag.color);
                 tagItem.style.cursor = 'pointer';
 
                 const tagText = document.createElement('span');
@@ -160,7 +161,7 @@ export async function showManageTagsDialog(view: any, projectId: string = view.p
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <input type="color" id="tagColorInput" value="${defaultColor}" style="width: 60px; height: 32px; border: 1px solid var(--b3-border-color); border-radius: 4px; cursor: pointer;">
                             <input type="text" id="tagColorText" class="b3-text-field" value="${defaultColor}" style="flex: 1;" readonly>
-                            <div id="tagColorPreview" class="tn-project-tag" style="--tn-project-tag-color: ${defaultColor}; min-width: 80px; justify-content: center;">${i18n('preview')}</div>
+                            <div id="tagColorPreview" class="tn-project-tag" style="${getProjectTagColorStyle(defaultColor)} min-width: 80px; justify-content: center;">${i18n('preview')}</div>
                         </div>
                     </div>
                 </div>
@@ -182,7 +183,7 @@ export async function showManageTagsDialog(view: any, projectId: string = view.p
         colorInput.addEventListener('input', () => {
             const color = colorInput.value;
             colorText.value = color;
-            colorPreview.style.setProperty('--tn-project-tag-color', color);
+            applyProjectTagColor(colorPreview, color);
         });
 
         cancelBtn.addEventListener('click', () => tagDialog.destroy());
@@ -252,7 +253,7 @@ export async function showManageTagsDialog(view: any, projectId: string = view.p
                             <label class="b3-form__label">${i18n('selectTagsToSync')}</label>
                             <div id="syncTagsList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; max-height: 300px; overflow-y: auto;">
                                 ${currentTags.map(tag => `
-                                    <label class="tn-project-tag" style="--tn-project-tag-color: ${tag.color}; cursor: pointer;">
+                                    <label class="tn-project-tag" style="${getProjectTagColorStyle(tag.color)} cursor: pointer;">
                                         <input type="checkbox" value="${tag.name}" data-color="${tag.color}" checked style="cursor: pointer;">
                                         <span>#${tag.name}</span>
                                     </label>

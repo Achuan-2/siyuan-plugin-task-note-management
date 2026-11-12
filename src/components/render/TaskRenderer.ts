@@ -15,6 +15,7 @@ import { getRepeatDescription, getRepeatInstanceOriginalKey, parseReminderInstan
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { shouldTreatStartDateOnlyAsOverdue, isOpenEndedStartDateTask } from "../../utils/startDateOverdue";
+import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { getReminderSkipWeekendsEffective, getReminderSkipHolidaysEffective, shouldSkipReminderOnDate } from "../../utils/reminderSkipDate";
 
 export type TaskPriorityDisplayStyle = 'background' | 'checkboxBorder';
@@ -1718,7 +1719,7 @@ export class TaskRenderer {
                         if (tag) {
                             const tagEl = document.createElement('span');
                             tagEl.className = 'reminder-item__tag tn-project-tag';
-                            tagEl.style.setProperty('--tn-project-tag-color', tag.color);
+                            applyProjectTagColor(tagEl, tag.color);
                             tagEl.textContent = `#${tag.name}`;
                             tagEl.classList.add('ariaLabel');
                             tagEl.setAttribute('aria-label', tag.name);

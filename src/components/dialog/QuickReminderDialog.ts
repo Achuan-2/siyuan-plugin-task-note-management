@@ -5,6 +5,7 @@ import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
 import { i18n } from "../../pluginInstance";
+import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { RepeatSettingsDialog, RepeatConfig } from "./RepeatSettingsDialog";
 import { solarToLunar } from "../../utils/lunarUtils";
 import { ProjectSelectorPopup } from "./ProjectSelectorPopup";
@@ -4315,7 +4316,7 @@ export class QuickReminderDialog {
                     tagEl.classList.add('selected');
                 }
 
-                tagEl.style.setProperty('--tn-project-tag-color', tag.color);
+                applyProjectTagColor(tagEl, tag.color);
 
                 tagEl.textContent = `#${tag.name}`;
                 tagEl.classList.add('ariaLabel'); tagEl.setAttribute('aria-label', tag.name);
