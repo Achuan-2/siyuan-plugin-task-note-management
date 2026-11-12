@@ -8684,6 +8684,7 @@ export class ProjectKanbanView {
             clipTitleToOneLine: this.clipTitleToOneLine,
             showProjectKanbanStatus: false,
             showProjectBadge: false,
+            showProjectTagIcon: false,
             showCategoryBadge: this.showTaskCategories && !hasSameParentCategories,
             customContainerClass: 'kanban-task',
             allTasks: this.tasks,

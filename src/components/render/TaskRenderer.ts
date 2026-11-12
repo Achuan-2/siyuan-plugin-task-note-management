@@ -32,6 +32,7 @@ export interface TaskRenderContext {
     clipTitleToOneLine?: boolean;
     showProjectKanbanStatus?: boolean;
     showProjectBadge?: boolean;
+    showProjectTagIcon?: boolean; // 项目标签默认显示图标，设为 false 时使用 # 前缀
     showDocumentTitle?: boolean;
     showCategoryBadge?: boolean; // 是否显示分类标签（默认 true）
     priorityDisplayStyle?: TaskPriorityDisplayStyle;
@@ -1697,8 +1698,12 @@ export class TaskRenderer {
                             const tagEl = document.createElement('span');
                             tagEl.className = 'reminder-item__tag tn-project-tag';
                             applyProjectTagColor(tagEl, tag.color);
-                            tagEl.innerHTML = renderTaskMetadataIcon('tag') + ' ';
-                            tagEl.appendChild(document.createTextNode(tag.name));
+                            if (context.showProjectTagIcon === false) {
+                                tagEl.textContent = `#${tag.name}`;
+                            } else {
+                                tagEl.innerHTML = renderTaskMetadataIcon('tag') + ' ';
+                                tagEl.appendChild(document.createTextNode(tag.name));
+                            }
                             tagEl.classList.add('ariaLabel');
                             tagEl.setAttribute('aria-label', tag.name);
                             tagsContainer.appendChild(tagEl);
