@@ -232,7 +232,6 @@ export const DEFAULT_SETTINGS = {
     defaultProjectSelectorViewMode: 'status', // 'status' | 'folder' - 选择项目时默认视图类型
     projectPanelSort: 'priority',
     projectPanelSortOrder: 'desc',
-    projectPanelShowOnlyDoing: false,
     projectPanelSelectedCategories: [] as string[],
     projectPanelStatusFilter: 'all',
     reminderPanelSelectedCategories: [] as string[],

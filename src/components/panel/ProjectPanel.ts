@@ -240,7 +240,6 @@ export class ProjectPanel {
     private categoryFilterButton: HTMLButtonElement;
     private sortButton: HTMLButtonElement;
     private searchInput: HTMLInputElement;
-    private showOnlyWithDoingCheckbox: HTMLInputElement;
     private plugin: any;
     private currentTab: string = 'all';
     private selectedCategories: string[] = [];
@@ -248,7 +247,6 @@ export class ProjectPanel {
     private currentSortOrder: 'asc' | 'desc' = 'desc';
     private currentSortCriteria: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
     private currentSearchQuery: string = '';
-    private showOnlyWithDoingTasks: boolean = false;
     private categoryManager: CategoryManager;
     private statusManager: StatusManager;
     private projectUpdatedHandler: () => void;
@@ -583,40 +581,6 @@ export class ProjectPanel {
         this.categoryFilterButton.addEventListener('click', () => this.showCategorySelectDialog());
         controls.appendChild(this.categoryFilterButton);
 
-        // 添加"只显示进行中>0"复选框
-        const doingFilterContainer = document.createElement('label');
-        doingFilterContainer.className = 'b3-label';
-        doingFilterContainer.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin: 0;
-            white-space: nowrap;
-            cursor: pointer;
-            padding: 0;
-        `;
-
-        this.showOnlyWithDoingCheckbox = document.createElement('input');
-        this.showOnlyWithDoingCheckbox.type = 'checkbox';
-        this.showOnlyWithDoingCheckbox.className = 'b3-switch';
-        this.showOnlyWithDoingCheckbox.checked = this.showOnlyWithDoingTasks;
-        this.showOnlyWithDoingCheckbox.addEventListener('change', () => {
-            this.showOnlyWithDoingTasks = this.showOnlyWithDoingCheckbox.checked;
-            this.savePanelSettings();
-            this.loadProjects();
-        });
-
-        const doingFilterText = document.createElement('span');
-        doingFilterText.textContent = i18n("showOnlyWithDoingTasks") || '进行中>0';
-        doingFilterText.style.cssText = `
-            font-size: 12px;
-            color: var(--b3-theme-on-surface);
-        `;
-
-        doingFilterContainer.appendChild(this.showOnlyWithDoingCheckbox);
-        doingFilterContainer.appendChild(doingFilterText);
-        controls.appendChild(doingFilterContainer);
-
         header.appendChild(controls);
 
         // 搜索框
@@ -916,21 +880,6 @@ export class ProjectPanel {
             } catch (err) {
                 console.warn("Failed to read reminder data; counting will fall back asynchronously:", err);
                 this.reminderDataCache = null;
-            }
-
-            // 如果勾选了"只显示进行中>0"，则过滤项目
-            if (this.showOnlyWithDoingTasks && this.reminderDataCache) {
-                const filtered: any[] = [];
-                for (const project of displayProjects) {
-                    try {
-                        const counts = await this.countTopLevelKanbanStatus(project.id, this.reminderDataCache);
-                        if (counts.doing > 0) filtered.push(project);
-                    } catch (err) {
-                        // on error, conservatively include the project
-                        filtered.push(project);
-                    }
-                }
-                displayProjects = filtered;
             }
 
             // 渲染项目
@@ -3171,7 +3120,6 @@ export class ProjectPanel {
             );
             this.currentSortCriteria = savedCriteria;
             this.syncLegacySortStateFromCriteria();
-            this.showOnlyWithDoingTasks = settings.projectPanelShowOnlyDoing || false;
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
             this.currentViewMode = settings.projectPanelViewMode || 'card';
         } catch (error) {
@@ -3187,7 +3135,6 @@ export class ProjectPanel {
             settings.projectPanelSortCriteria = activeCriteria;
             settings.projectPanelSort = primary.method;
             settings.projectPanelSortOrder = primary.order;
-            settings.projectPanelShowOnlyDoing = this.showOnlyWithDoingTasks;
             settings.projectPanelSelectedCategories = this.selectedCategories;
             settings.projectPanelStatusFilter = this.currentTab;
             settings.projectPanelViewMode = this.currentViewMode;
