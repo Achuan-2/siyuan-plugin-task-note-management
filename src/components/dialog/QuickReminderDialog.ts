@@ -3045,10 +3045,10 @@ export class QuickReminderDialog {
                         <!-- Inner Tabs below task title -->
                         <div id="quickTaskDetailTabs" role="tablist" style="display: flex; gap: 12px; align-items: center; margin: 8px 0 12px 0; border-bottom: 1px solid var(--b3-border-color);">
                             <button type="button" id="quickTaskSettingsTab" role="tab" aria-selected="true" class="b3-button b3-button--text" style="border-radius: 0; border-bottom: 2px solid var(--b3-theme-primary); color: var(--b3-theme-primary); background: var(--b3-theme-background); padding: 6px 8px; font-weight: 500;">
-                                ${i18n("taskSettings") || "任务设置"}
+                                ${renderTaskMetadataText(i18n("taskSettings") || "📋任务设置")}
                             </button>
                             <button type="button" id="quickTaskNotesTab" role="tab" aria-selected="false" class="b3-button b3-button--text" style="border-radius: 0; border-bottom: 2px solid transparent; color: var(--b3-theme-on-surface); background: transparent; padding: 6px 8px; font-weight: 500;">
-                                ${i18n("taskNotes") || "任务备注"}
+                                ${renderTaskMetadataText(i18n("taskNotes") || "📝任务备注")}
                             </button>
                         </div>
 
@@ -3386,7 +3386,7 @@ export class QuickReminderDialog {
                                 <label class="b3-checkbox">
                                     <input type="checkbox" class="b3-switch" id="quickIsAvailableToday">
                                     <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">${i18n("availableTodayDesc")}</span>
+                                    <span class="b3-checkbox__label">${renderTaskMetadataText(i18n("availableTodayDesc"))}</span>
                                 </label>
                                 <div id="quickAvailableDateGroup" style="display: none; margin-left: 28px;">
                                     <label class="b3-form__label" style="font-size: 12px;">${i18n("startDate")}</label>
@@ -3400,7 +3400,7 @@ export class QuickReminderDialog {
                                 <label class="b3-checkbox">
                                     <input type="checkbox" class="b3-switch" id="quickPinned">
                                     <span class="b3-checkbox__graphic"></span>
-                                    <span class="b3-checkbox__label">📌${i18n("pinTask") || "置顶任务"}</span>
+                                    <span class="b3-checkbox__label">${renderTaskMetadataIcon('pin')} ${i18n("pinTask") || "置顶任务"}</span>
                                 </label>
                             </div>
                         </div>

@@ -1,4 +1,4 @@
-import { renderTaskMetadataIcon } from "../render/taskMetadataIcons";
+import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
@@ -2714,7 +2714,7 @@ export class ReminderPanel {
 
         const titles = {
             today: i18n('todayReminders') || '今日任务',
-            daily: i18n('dailyAvailable') || '每日可做',
+            daily: renderTaskMetadataText(i18n('dailyAvailable') || '🍰 每日可做'),
             completed: i18n('completedReminders') || '已完成任务',
             ignored: i18n('todayIgnored') || '今日忽略'
         };

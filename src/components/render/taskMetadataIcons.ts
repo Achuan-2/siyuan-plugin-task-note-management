@@ -17,6 +17,9 @@ const paths = {
     hourglass: '<path d="M5 2h14M5 22h14M6 2v5l6 5-6 5v5M18 2v5l-6 5 6 5v5"/>',
     flag: '<path d="M4 22V3c5-4 11 4 16 0v12c-5 4-11-4-16 0"/>',
     pin: '<path d="M12 17v5M8 3h8l-1 7 4 4v3H5v-3l4-4Z"/>',
+    cake: '<path d="m3 9 14-6 4 6v11H3ZM3 9h18M3 15h18"/>',
+    clipboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 12h6m-6 4h6"/>',
+    note: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M16 3l5 5M10 14l-1 4 4-1L22 8a2.1 2.1 0 0 0-5-5Z"/>',
     tomato: renderTomatoIconContent(),
 } as const;
 
@@ -35,9 +38,10 @@ const emojiIcons: Record<string, TaskMetadataIcon> = {
     '📂': 'project', '📁': 'project', '🏷': 'tag', '🗓': 'calendar', '📅': 'calendar',
     '🔄': 'repeat', '🔁': 'repeat', '🍅': 'tomato', '⏱': 'duration',
     '✅': 'check',
+    '🍰': 'cake', '📌': 'pin', '📋': 'clipboard', '📝': 'note',
     '🕒': 'duration', '🕐': 'clock', '⏰': 'alarm',
 };
-const metadataIconPattern = /(📂|📁|🏷️?|🗓️*|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅)/u;
+const metadataIconPattern = /(📂|📁|🏷️?|🗓️*|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅|🍰|📌|📋|📝)/u;
 
 /** 模板和 Svelte 共用：先转义动态文字，只插入固定的可信 SVG。 */
 export function renderTaskMetadataText(text: string): string {
