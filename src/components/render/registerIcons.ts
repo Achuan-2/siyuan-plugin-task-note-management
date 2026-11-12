@@ -35,6 +35,11 @@ export function registerCustomIcons(plugin: Plugin) {
                 <path d="M11 5h10m-10 7h10m-10 7h10"/>
             </g>
         </symbol>
+        <symbol id="iconTNMilestoneOutline" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 22V3c5-4 11 4 16 0v12c-5 4-11-4-16 0"/>
+            </g>
+        </symbol>
         <symbol id="iconTNMilestone" viewBox="0 0 24 24">
             <g fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 22V3"/>

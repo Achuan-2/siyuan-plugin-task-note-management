@@ -9484,7 +9484,7 @@ export class ProjectKanbanView {
                 || projectGroups.some((g: any) => (g.milestones || []).some((m: any) => !m.archived));
             if (hasMilestones) {
                 menu.addItem({
-                    icon: "iconTNMilestone",
+                    icon: "iconTNMilestoneOutline",
                     label: i18n('setMilestone') || '设置里程碑',
                     click: () => this.batchSetMilestone()
                 });
@@ -10080,7 +10080,7 @@ export class ProjectKanbanView {
                     });
 
                     menu.addItem({
-                        icon: "iconTNMilestone",
+                        icon: "iconTNMilestoneOutline",
                         label: i18n('setMilestone') || "设置里程碑",
                         submenu: milestoneMenuItems
                     });
