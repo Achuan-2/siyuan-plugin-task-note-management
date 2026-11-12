@@ -1,7 +1,7 @@
 /** 任务详情图标：普通信息跟随主题颜色，番茄使用红色果实与绿色叶片。 */
 const paths = {
     project: '<use href="#iconTNProject"/>',
-    tag: '<path d="m20 13-7 7a2 2 0 0 1-3 0l-8-8V2h10l8 8a2 2 0 0 1 0 3Z"/><circle cx="7" cy="7" r="1"/>',
+    tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
     calendar: '<path d="M8 2v4m8-4v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>',
     repeat: '<path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4m14-1v2a3 3 0 0 1-3 3H3"/>',
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
@@ -23,7 +23,7 @@ export function renderTaskMetadataIcon(name: TaskMetadataIcon): string {
     // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
     const content = name === 'tomato' || name === 'project'
         ? paths[name]
-        : `<g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
+        : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
     return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }
 

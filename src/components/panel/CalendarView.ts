@@ -10741,8 +10741,7 @@ export class CalendarView {
             if (reminder.categoryId) {
                 const categoryIds = reminder.categoryId.split(',');
                 htmlParts.push(
-                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">`,
-                    `<span style="opacity: 0.7;">${renderTaskMetadataIcon('tag')}</span>`
+                    `<div style="color: var(--b3-theme-on-surface); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">`
                 );
 
                 categoryIds.forEach(id => {
@@ -10751,9 +10750,7 @@ export class CalendarView {
                         htmlParts.push(
                             `<span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background-color: ${category.color}; border-radius: 4px; color: white; font-size: 11px;">`
                         );
-                        if (category.icon) {
-                            htmlParts.push(`<span style="font-size: 12px;">${category.icon}</span>`);
-                        }
+                        htmlParts.push(renderTaskMetadataIcon('tag'));
                         htmlParts.push(
                             `<span>${this.escapeHtml(category.name)}</span>`,
                             `</span>`
