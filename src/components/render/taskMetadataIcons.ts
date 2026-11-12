@@ -7,6 +7,7 @@ const paths = {
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
     alarm: '<circle cx="12" cy="13" r="8"/><path d="m3 5 3-3m12 0 3 3M12 9v4l3 2M6 20l-2 2m14-2 2 2"/>',
     timer: '<path d="M10 2h4M12 14v-4m-8-7 3 3"/><circle cx="12" cy="14" r="8"/>',
+    duration: '<path d="M512 512m-292.571429 0a292.571429 292.571429 0 1 0 585.142858 0 292.571429 292.571429 0 1 0-585.142858 0Z" fill="#001029" fill-opacity=".156"/><path d="M512 999.643429A487.643429 487.643429 0 1 1 512 24.429714a487.643429 487.643429 0 0 1 0 975.213715z m0-97.572572A390.070857 390.070857 0 1 0 512 121.929143a390.070857 390.070857 0 0 0 0 780.141714zM560.786286 512h194.998857v97.499429h-219.428572a73.142857 73.142857 0 0 1-73.142857-73.142858V268.214857h97.572572V512z" fill="#001029" fill-opacity=".65"/>',
     document: '<path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9ZM14 2v7h7M7 13h10m-10 4h7"/>',
     parent: '<path d="M4 3v9a4 4 0 0 0 4 4h12m-5-5 5 5-5 5"/>',
     check: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/>',
@@ -21,22 +22,24 @@ export type TaskMetadataIcon = keyof typeof paths;
 
 export function renderTaskMetadataIcon(name: TaskMetadataIcon): string {
     // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
-    const content = name === 'tomato' || name === 'project'
+    const content = name === 'tomato' || name === 'project' || name === 'duration'
         ? paths[name]
         : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
-    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
+    const viewBox = name === 'duration' ? '0 0 1024 1024' : '0 0 24 24';
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="14" height="14" aria-hidden="true" focusable="false" style="display:inline-block;width:14px;height:14px;vertical-align:-2px;flex-shrink:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }
 
 const emojiIcons: Record<string, TaskMetadataIcon> = {
     '📂': 'project', '🏷️': 'tag', '🗓️': 'calendar', '📅': 'calendar',
-    '🔄': 'repeat', '🔁': 'repeat', '🍅': 'tomato', '⏱️': 'timer', '⏱': 'timer',
+    '🔄': 'repeat', '🔁': 'repeat', '🍅': 'tomato', '⏱️': 'duration', '⏱': 'duration',
+    '✅': 'check',
     '🕒': 'clock', '🕐': 'clock', '⏰': 'alarm',
 };
 
 /** 保留动态文本为文本节点，只将固定图标替换为可信 SVG。 */
 export function setTaskMetadataText(element: HTMLElement, text: string): void {
     element.replaceChildren();
-    for (const part of text.split(/(📂|🏷️|🗓️|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰)/u)) {
+    for (const part of text.split(/(📂|🏷️|🗓️|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅)/u)) {
         const name = emojiIcons[part];
         if (name) element.insertAdjacentHTML('beforeend', renderTaskMetadataIcon(name));
         else element.appendChild(document.createTextNode(part));

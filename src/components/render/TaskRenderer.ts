@@ -1259,8 +1259,8 @@ export class TaskRenderer {
                 const repeatingFocus = totalRepeatingFocusTime || 0;
                 const instanceCount = pomodoroCount || 0;
 
-                const repeatingFocusText = repeatingFocus > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(repeatingFocus)}` : '';
-                const instanceFocusText = focusTime > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(focusTime)}` : '';
+                const repeatingFocusText = repeatingFocus > 0 ? ` ${renderTaskMetadataIcon('duration')} ${this.formatMinutesToString(repeatingFocus)}` : '';
+                const instanceFocusText = focusTime > 0 ? ` ${renderTaskMetadataIcon('duration')} ${this.formatMinutesToString(focusTime)}` : '';
                 const instanceEstimatedText = task.estimatedPomodoroDuration
                     ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro') || "预计番茄"}'>（${i18n('estimated') || "预计"}：${task.estimatedPomodoroDuration}）</span>`
                     : '';
@@ -1277,13 +1277,13 @@ export class TaskRenderer {
                  </div>`;
             } else {
                 const formattedTotalTomato = `${renderTaskMetadataIcon('tomato')} ${pomodoroCount || 0}`;
-                const totalFocusText = focusTime > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(focusTime)}` : '';
+                const totalFocusText = focusTime > 0 ? ` ${renderTaskMetadataIcon('duration')} ${this.formatMinutesToString(focusTime)}` : '';
                 totalLine = (pomodoroCount > 0 || focusTime > 0)
                     ? `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;"><span class="ariaLabel" aria-label="${i18n('totalCompletedPomodoroTitle') || "完成的番茄钟数量: "}${pomodoroCount || 0}">${i18n('total') || "总共"}: ${formattedTotalTomato}</span><span class="ariaLabel" aria-label="${i18n('totalFocusDurationTitle') || "总专注时长: "}${focusTime || 0} ${i18n('minutes') || "分钟"}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span></div>`
                     : '';
 
                 const hasHistoricalData = (pomodoroCount > todayPomodoroCount) || (focusTime > todayFocusTime);
-                const todayFocusText = todayFocusTime > 0 ? ` ${renderTaskMetadataIcon('timer')} ${this.formatMinutesToString(todayFocusTime)}` : '';
+                const todayFocusText = todayFocusTime > 0 ? ` ${renderTaskMetadataIcon('duration')} ${this.formatMinutesToString(todayFocusTime)}` : '';
                 todayLine = hasHistoricalData && (todayPomodoroCount > 0 || todayFocusTime > 0)
                     ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label='${i18n('todayCompletedPomodoroTitle') || "今日完成番茄钟: "}${todayPomodoroCount}'>${i18n('today') || "今日"}: ${renderTaskMetadataIcon('tomato')} ${todayPomodoroCount}</span><span class="ariaLabel" aria-label='${i18n('todayFocusTimeTitle') || "今日专注时长: "}${todayFocusTime} ${i18n('minutes') || "分钟"}' style='margin-left:8px'>${todayFocusText}</span></div>`
                     : '';

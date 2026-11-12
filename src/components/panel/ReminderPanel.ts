@@ -2190,12 +2190,12 @@ export class ReminderPanel {
                                     if (hours > 0) return `${hours}h ${mins}m`;
                                     return `${mins}m`;
                                 };
-                                const totalFocusText = focusTimeMinutes > 0 ? ` ${renderTaskMetadataIcon('timer')} ${formatMinutesToString(focusTimeMinutes)}` : '';
-                                const todayFocusText = (todayFocusMinutes > 0 || totalCount > 0) ? ` ${renderTaskMetadataIcon('timer')} ${formatMinutesToString(todayFocusMinutes)}` : '';
+                                const totalFocusText = focusTimeMinutes > 0 ? ` ${renderTaskMetadataIcon('duration')} ${formatMinutesToString(focusTimeMinutes)}` : '';
+                                const todayFocusText = (todayFocusMinutes > 0 || totalCount > 0) ? ` ${renderTaskMetadataIcon('duration')} ${formatMinutesToString(todayFocusMinutes)}` : '';
                                 const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTotalTooltip', { count: String(totalCount) })}">${renderTaskMetadataIcon('tomato')} ${totalCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTotalTooltip', { minutes: String(focusTimeMinutes) })}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
                                 const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTodayTooltip', { count: String(todayCount) })}">${i18n("todayPomodoroWithIcon").replace("🍅", renderTaskMetadataIcon("tomato"))}${todayCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTodayTooltip', { minutes: String(todayFocusMinutes) })}" style="margin-left:8px">${todayFocusText}</span></div>` : '';
 
-                                const focusTimeText = focusTimeMinutes > 0 ? ` ${renderTaskMetadataIcon('timer')} ${formatMinutesToString(focusTimeMinutes)}` : '';
+                                const focusTimeText = focusTimeMinutes > 0 ? ` ${renderTaskMetadataIcon('duration')} ${formatMinutesToString(focusTimeMinutes)}` : '';
                                 pomEl.innerHTML = `${totalLine}${todayLine}`;
                             }
                         }
@@ -3413,8 +3413,8 @@ export class ReminderPanel {
         const totalFocus = cachedData.focusTime || 0;
         const todayFocus = cachedData.todayFocusTime || 0;
         const formattedTotalTomato = `${renderTaskMetadataIcon('tomato')} ${totalCount}`;
-        const totalFocusText = totalFocus > 0 ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(totalFocus)}` : '';
-        const todayFocusText = (todayFocus > 0 || totalCount > 0) ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(todayFocus)}` : '';
+        const totalFocusText = totalFocus > 0 ? ` ${renderTaskMetadataIcon('duration')} ${this.formatPomodoroMinutes(totalFocus)}` : '';
+        const todayFocusText = (todayFocus > 0 || totalCount > 0) ? ` ${renderTaskMetadataIcon('duration')} ${this.formatPomodoroMinutes(todayFocus)}` : '';
         const estimatedLine = reminder.estimatedPomodoroDuration ? `<span class="ariaLabel" aria-label='${i18n('estimatedPomodoro')}'>${i18n('estimated')}: ${reminder.estimatedPomodoroDuration}</span>` : '';
 
         let totalLine = '';
@@ -3423,8 +3423,8 @@ export class ReminderPanel {
         if (reminder.isRepeatInstance) {
             const repeatingTotal = cachedData.totalRepeatingPomodoroCount || 0;
             const repeatingFocus = cachedData.totalRepeatingFocusTime || 0;
-            const repeatingFocusText = repeatingFocus > 0 ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(repeatingFocus)}` : '';
-            const instanceFocusText = totalFocus > 0 ? ` ${renderTaskMetadataIcon('clock')} ${this.formatPomodoroMinutes(totalFocus)}` : '';
+            const repeatingFocusText = repeatingFocus > 0 ? ` ${renderTaskMetadataIcon('duration')} ${this.formatPomodoroMinutes(repeatingFocus)}` : '';
+            const instanceFocusText = totalFocus > 0 ? ` ${renderTaskMetadataIcon('duration')} ${this.formatPomodoroMinutes(totalFocus)}` : '';
 
             totalLine = `<div style="margin-top:${estimatedLine ? '6px' : '0'}; font-size:12px;">
                 <div class="ariaLabel" aria-label="${i18n('seriesTotalTomatoTitle')}${repeatingTotal}">

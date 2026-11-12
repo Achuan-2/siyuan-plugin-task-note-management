@@ -2,6 +2,7 @@ import { showMessage } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { ProjectManager, type MilestoneDateDisplayInfo } from "../dataManager/projectManager";
+import { setTaskMetadataText } from "./taskMetadataIcons";
 
 const PROJECT_KANBAN_TAB_TYPE = "TN_project_kanban_tab";
 const BLOCK_POMODORO_COUNT_ATTR = "custom-task-pomodoro-count";
@@ -1788,8 +1789,9 @@ export class TaskNoteDOMManager {
             textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
             btn.appendChild(textEl);
         }
-        if (textEl.textContent !== text) {
-            textEl.textContent = text;
+        if (textEl.dataset.taskMetadataText !== text || !textEl.querySelector('.task-metadata-icon')) {
+            setTaskMetadataText(textEl, text);
+            textEl.dataset.taskMetadataText = text;
         }
         btn.classList.add("ariaLabel");
         if (btn.getAttribute("aria-label") !== ariaText) {
@@ -1877,8 +1879,9 @@ export class TaskNoteDOMManager {
             textEl.style.cssText = "font-size:12px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
             btn.appendChild(textEl);
         }
-        if (textEl.textContent !== text) {
-            textEl.textContent = text;
+        if (textEl.dataset.taskMetadataText !== text || !textEl.querySelector('.task-metadata-icon')) {
+            setTaskMetadataText(textEl, text);
+            textEl.dataset.taskMetadataText = text;
         }
         btn.classList.add("ariaLabel");
         if (btn.getAttribute("aria-label") !== ariaText) {
