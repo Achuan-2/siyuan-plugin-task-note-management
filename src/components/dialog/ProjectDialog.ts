@@ -529,7 +529,7 @@ export class ProjectDialog {
         return {
             showCompletedSubtasks: settings.projectKanbanShowCompletedSubtasks !== false,
             showTaskCategories: settings.projectKanbanShowTaskCategories !== false,
-            clipTitleToOneLine: settings.projectKanbanClipTitleToOneLine !== false,
+            clipTitleToOneLine: settings.projectKanbanClipTitleToOneLine === true,
         };
     }
 
