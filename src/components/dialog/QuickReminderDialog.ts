@@ -3239,6 +3239,7 @@ export class QuickReminderDialog {
                             <label class="b3-form__label">${i18n("milestone")}</label>
                             <div class="custom-select" id="quickMilestoneSelectCustom" style="position: relative;">
                                 <div style="position: relative;">
+                                    <svg id="quickMilestoneSelectedIcon" aria-hidden="true" style="display: none; position: absolute; z-index: 1; left: 8px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; pointer-events: none;"><use xlink:href="#iconTNMilestone"></use></svg>
                                     <input type="text" id="quickMilestoneSearchInput" class="b3-text-field" placeholder="${i18n("searchMilestone")}" autocomplete="off" style="width: 100%; padding-right: 30px; background: var(--b3-select-background);" spellcheck="false">
                                     <input type="hidden" id="quickMilestoneSelector">
                                 </div>
@@ -6779,11 +6780,14 @@ export class QuickReminderDialog {
         const searchInputText = this.dialog.element.querySelector('#quickMilestoneSearchInput') as HTMLInputElement;
         const hiddenInput = this.dialog.element.querySelector('#quickMilestoneSelector') as HTMLInputElement;
         const dropdownEl = this.dialog.element.querySelector('#quickMilestoneDropdown') as HTMLElement;
+        const selectedIcon = this.dialog.element.querySelector('#quickMilestoneSelectedIcon') as SVGSVGElement;
 
         if (!milestoneGroup || !searchInputText || !hiddenInput || !dropdownEl) return;
 
         // 默认隐藏
         milestoneGroup.style.display = 'none';
+        if (selectedIcon) selectedIcon.style.display = 'none';
+        searchInputText.style.paddingLeft = '';
 
         if (!projectId) return;
 
@@ -6804,15 +6808,6 @@ export class QuickReminderDialog {
 
             // 只有当有里程碑时才显示选择器
             if (milestones.length > 0) {
-                let html = '';
-                // 添加无里程碑选项
-                html += `<div class="b3-menu__item" data-value="" data-label="${i18n("noMilestone")}"><span class="b3-menu__label">${i18n("noMilestone")}</span></div>`;
-
-                milestones.forEach(m => {
-                    const label = `${m.icon ? m.icon + ' ' : ''}${m.name}`.trim();
-                    html += `<div class="b3-menu__item" data-value="${m.id}" data-label="${label}"><span class="b3-menu__label">${label}</span></div>`;
-                });
-
                 // 为了防止重复绑定事件，克隆节点
                 const searchInput = searchInputText.cloneNode(true) as HTMLInputElement;
                 searchInputText.parentNode?.replaceChild(searchInput, searchInputText);
@@ -6820,28 +6815,48 @@ export class QuickReminderDialog {
                 const dropdown = dropdownEl.cloneNode(true) as HTMLElement;
                 dropdownEl.parentNode?.replaceChild(dropdown, dropdownEl);
 
-                dropdown.innerHTML = html;
+                dropdown.replaceChildren();
+                const appendOption = (value: string, label: string, iconId: string) => {
+                    const item = document.createElement('div');
+                    item.className = 'b3-menu__item';
+                    item.dataset.value = value;
+                    item.dataset.label = label;
+                    item.innerHTML = `<svg class="b3-menu__icon" aria-hidden="true"><use xlink:href="#${iconId}"></use></svg>`;
+                    const name = document.createElement('span');
+                    name.className = 'b3-menu__label';
+                    name.textContent = label;
+                    item.appendChild(name);
+                    dropdown.appendChild(item);
+                };
+                appendOption('', i18n('noMilestone'), 'iconTNSkip');
+                milestones.forEach(m => appendOption(m.id, m.name, 'iconTNMilestone'));
                 milestoneGroup.style.display = 'block';
+
+                const setSelectedIconVisible = (visible: boolean) => {
+                    if (selectedIcon) selectedIcon.style.display = visible ? 'block' : 'none';
+                    searchInput.style.paddingLeft = visible ? '32px' : '';
+                };
+                const syncSelectedMilestone = () => {
+                    const currentId = hiddenInput.value;
+                    const item = Array.from(dropdown.querySelectorAll<HTMLElement>('.b3-menu__item[data-value]'))
+                        .find(option => option.dataset.value === currentId);
+                    searchInput.value = currentId ? (item?.dataset.label || '') : '';
+                    setSelectedIconVisible(!!currentId && !!item);
+                };
 
                 // 事件绑定
                 const showAllOptions = () => {
                     dropdown.style.display = 'block';
                     const items = dropdown.querySelectorAll('.b3-menu__item[data-value]');
                     items.forEach((item: HTMLElement) => {
-                        item.style.display = 'block';
+                        item.style.display = 'flex';
                     });
                 };
 
                 const hideDropdown = () => {
                     setTimeout(() => {
                         dropdown.style.display = 'none';
-                        const currentId = hiddenInput.value;
-                        const item = dropdown.querySelector(`.b3-menu__item[data-value="${currentId}"]`);
-                        if (item) {
-                            searchInput.value = item.getAttribute('data-label') || '';
-                        } else if (!currentId) {
-                            searchInput.value = '';
-                        }
+                        syncSelectedMilestone();
                     }, 200);
                 };
 
@@ -6851,7 +6866,7 @@ export class QuickReminderDialog {
                     items.forEach((item: HTMLElement) => {
                         const label = item.getAttribute('data-label')?.toLowerCase() || '';
                         const match = terms.length === 0 || terms.every(t => label.includes(t));
-                        item.style.display = match ? 'block' : 'none';
+                        item.style.display = match ? 'flex' : 'none';
                     });
                 };
 
@@ -6859,6 +6874,7 @@ export class QuickReminderDialog {
                 searchInput.addEventListener('click', showAllOptions);
                 searchInput.addEventListener('blur', hideDropdown);
                 searchInput.addEventListener('input', () => {
+                    setSelectedIconVisible(false);
                     dropdown.style.display = 'block';
                     filterOptions(searchInput.value);
                 });
@@ -6871,10 +6887,9 @@ export class QuickReminderDialog {
                     const target = (e.target as HTMLElement).closest('.b3-menu__item');
                     if (target) {
                         const val = target.getAttribute('data-value');
-                        const label = target.getAttribute('data-label');
 
                         hiddenInput.value = val || '';
-                        searchInput.value = val ? (label || '') : '';
+                        syncSelectedMilestone();
 
                         dropdown.style.display = 'none';
                     }
@@ -6882,16 +6897,8 @@ export class QuickReminderDialog {
 
                 // 设置默认值
                 const targetMilestoneId = this.defaultMilestoneId !== undefined ? this.defaultMilestoneId : (this.reminder?.milestoneId || undefined);
-                if (targetMilestoneId) {
-                    hiddenInput.value = targetMilestoneId;
-                    const item = dropdown.querySelector(`.b3-menu__item[data-value="${targetMilestoneId}"]`);
-                    if (item) {
-                        searchInput.value = item.getAttribute('data-label') || '';
-                    }
-                } else {
-                    hiddenInput.value = '';
-                    searchInput.value = '';
-                }
+                hiddenInput.value = targetMilestoneId || '';
+                syncSelectedMilestone();
 
             } else {
                 milestoneGroup.style.display = 'none';
