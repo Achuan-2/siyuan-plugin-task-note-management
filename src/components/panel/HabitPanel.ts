@@ -60,7 +60,7 @@ export class HabitPanel {
     private selectedGroups: string[] = [];
     private currentSearchQuery: string = '';
     private showCompletedHabitsInTodayPending: boolean = true;
-    private showWeekCheckIns: boolean = false;
+    private showWeekCheckIns: boolean = true;
     private weekStartDay: number = 1;
     private checkInDaysMode: HabitCheckInDaysMode = 'total';
     private groupManager: HabitGroupManager;
@@ -156,7 +156,7 @@ export class HabitPanel {
                 this.showCompletedHabitsInTodayPending = settings.habitPanelShowCompletedInTodayPending;
             }
             this.checkInDaysMode = settings.habitPanelCheckInDaysMode === 'streak' ? 'streak' : 'total';
-            this.showWeekCheckIns = settings.habitPanelShowWeekCheckIns === true;
+            this.showWeekCheckIns = settings.habitPanelShowWeekCheckIns !== false;
             this.weekStartDay = Number.isInteger(settings.weekStartDay) && settings.weekStartDay >= 0 && settings.weekStartDay <= 6
                 ? settings.weekStartDay : 1;
         } catch (error) {
