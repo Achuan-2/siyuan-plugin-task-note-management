@@ -1,5 +1,5 @@
 import { renderTaskMetadataText } from "../render/taskMetadataIcons";
-﻿import { Dialog } from "siyuan";
+﻿import { Dialog, Menu } from "siyuan";
 import { getDragHandleIcon } from "../../utils/dragHandleIcon";
 import { i18n } from "../../pluginInstance";
 import { SortCriterion, AVAILABLE_SORT_METHODS, getSortCriterionName } from "../../utils/sortConfig";
@@ -10,6 +10,11 @@ export interface SortMenuDialogOptions {
     onSave: (criteria: SortCriterion[]) => void;
     onChange?: (criteria: SortCriterion[]) => void; // 实时变更回调
     availableMethods?: Array<{ key: string; label: () => string; icon: string }>;
+    grouping?: {
+        value: string;
+        options: Array<{ key: string; label: string }>;
+        onChange: (value: string) => Promise<boolean | void>;
+    };
 }
 
 export class SortMenuDialog {
@@ -33,6 +38,10 @@ export class SortMenuDialog {
         const dialog = new Dialog({
             title: i18n("sortBy") || "排序方式",
             content: `<div class="sort-menu-dialog" style="padding: 16px; min-width: 320px;">
+                ${this.options.grouping ? `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                    <span>${i18n('reminderGrouping')}</span>
+                    <button class="b3-button b3-button--outline sort-menu-grouping"></button>
+                </div>` : ''}
                 <div class="sort-menu-mode" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--b3-theme-border);">
                     <span style="font-size: 13px; color: var(--b3-theme-on-surface);">${i18n("multiSelectSortMode") || "多选排序模式"}</span>
                     <label  style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -72,10 +81,40 @@ export class SortMenuDialog {
         });
 
         this.dialog = dialog;
+        this.bindGroupingMenu();
         this.renderSelectedList();
         this.renderCurrentSingleItem();
         this.renderAvailableOptions();
         this.bindEvents();
+    }
+
+    private bindGroupingMenu(): void {
+        const grouping = this.options.grouping;
+        const button = this.dialog?.element.querySelector<HTMLButtonElement>('.sort-menu-grouping');
+        if (!grouping || !button) return;
+        const updateLabel = () => {
+            button.textContent = grouping.options.find(option => option.key === grouping.value)?.label || '';
+        };
+        updateLabel();
+        button.addEventListener('click', () => {
+            const menu = new Menu('reminder-grouping-menu');
+            grouping.options.forEach(option => menu.addItem({
+                label: option.label,
+                current: option.key === grouping.value,
+                click: async () => {
+                    button.disabled = true;
+                    try {
+                        if (await grouping.onChange(option.key) === false) return;
+                        grouping.value = option.key;
+                        updateLabel();
+                    } finally {
+                        button.disabled = false;
+                    }
+                },
+            }));
+            const rect = button.getBoundingClientRect();
+            menu.open({ x: rect.left, y: rect.bottom });
+        });
     }
 
     private renderSelectedList() {

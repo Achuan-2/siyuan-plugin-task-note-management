@@ -2923,5 +2923,17 @@
     "taskListSortMenuModeDesc": "选择移到底部或顶部，同时用于手动排序和全局自动排序。",
     "completedTasksToBottom": "已完成任务移到底部",
     "completedTasksToTop": "已完成任务移到顶部",
-    "taskListSortFailed": "任务列表排序失败，请稍后重试。"
+    "taskListSortFailed": "任务列表排序失败，请稍后重试。",
+    "reminderGrouping": "分组",
+    "reminderGroupDefault": "默认",
+    "reminderGroupProject": "按项目",
+    "reminderGroupCategory": "按分类",
+    "reminderGroupDate": "按日期",
+    "reminderGroupPriority": "按优先级",
+    "reminderGroupOverdue": "已逾期",
+    "reminderGroupDueToday": "今天截止",
+    "reminderGroupDueTomorrow": "明天截止",
+    "reminderGroupDueFuture": "未来截止",
+    "reminderGroupNoDeadline": "无截止日期",
+    "reminderGroupNoPriority": "无优先级"
 }

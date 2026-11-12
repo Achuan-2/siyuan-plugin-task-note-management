@@ -29,15 +29,20 @@ const methods = extract('src/components/panel/ReminderPanel.ts', 'ReminderPanel'
 ]);
 const cleaning = extract('src/utils/reminderLoadUtils.ts', null, ['cleanReminderItem', 'cleanInstanceState']);
 const collapseState = extract('src/utils/completedSubtaskCollapse.ts', null, ['CompletedSubtaskCollapseState']);
+const groupingExports = {};
+new Function('exports', ts.transpileModule(fs.readFileSync(path.join(root, 'src/utils/reminderGrouping.ts'), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
+}).outputText)(groupingExports);
 const code = ts.transpileModule(`${cleaning}\n${collapseState}\nclass Panel { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 const Panel = new Function('getAllReminders', 'saveReminders', 'getLogicalDateString', 'getRelativeDateString',
-    'getLocalDateString', 'compareDateStrings', 'i18n', 'showMessage', code + ';return Panel;')(
+    'getLocalDateString', 'compareDateStrings', 'i18n', 'showMessage', 'orderRemindersByGroup', code + ';return Panel;')(
     (plugin, _project, force) => plugin.read(force), async () => {}, () => today,
     offset => { const date = new Date(`${today}T12:00:00`); date.setDate(date.getDate() + offset); return date.toISOString().slice(0, 10); },
     date => date.toISOString().slice(0, 10), (a, b) => String(a).localeCompare(String(b)), key => key,
     message => { throw new Error(message); },
+    groupingExports.orderRemindersByGroup,
 );
 function deferred() {
     let resolve;
@@ -198,4 +203,27 @@ test('显式强制刷新可丢弃未保存成功的乐观编辑', async () => {
     await panel.loadReminders(true);
     assert.equal(panel.optimisticUpdatesCache.size, 0);
     assert.deepEqual(commits, [[task()]]);
+});
+
+test('显式分组在分页前排序，父子任务不拆页且分页计数保持根任务数', async () => {
+    const data = {
+        low: task({ id: 'low', priority: 'low' }),
+        child: task({ id: 'child', parentId: 'low', priority: 'high' }),
+        high1: task({ id: 'high1', priority: 'high' }),
+        high2: task({ id: 'high2', priority: 'high' }),
+    };
+    const { panel, commits } = fixture(async () => copy(data));
+    Object.assign(panel, {
+        reminderGroupMode: 'priority', isPaginationEnabled: true, itemsPerPage: 2, currentPage: 1,
+        getReminderGroup: item => ({ key: item.priority, title: item.priority, order: item.priority === 'high' ? 0 : 1 }),
+        renderPaginationControls: () => {},
+    });
+    await panel.loadReminders();
+    assert.deepEqual(commits[0].map(item => item.id), ['high1', 'high2']);
+    assert.equal(panel.totalItems, 3);
+    assert.equal(panel.totalPages, 2);
+    panel.currentPage = 2;
+    await panel.loadReminders();
+    assert.deepEqual(commits[1].map(item => item.id), ['low', 'child']);
+    assert.equal(panel.totalItems, 3);
 });

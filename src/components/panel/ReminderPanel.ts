@@ -17,6 +17,7 @@ import { showAddTaskReminderTimeDialog } from "../dialog/AddTaskReminderTimeDial
 import { i18n } from "../../pluginInstance";
 import { TaskRenderer } from "../render/TaskRenderer";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
+import { normalizeReminderGroupMode, orderRemindersByGroup, type ReminderGroup, type ReminderGroupMode } from '../../utils/reminderGrouping';
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
 import { createTaskCompletedTimeElement } from '../render/taskCompletedTimeElement';
@@ -82,6 +83,8 @@ export class ReminderPanel {
     private currentSearchQuery: string = '';
     // 排序条件数组（支持多选和拖拽排序）
     private currentSortCriteria: SortCriterion[] = [{ method: 'time', order: 'asc' }];
+    private reminderGroupMode: ReminderGroupMode = 'none';
+    private collapsedReminderGroups = new Set<string>();
     // 临时排序覆盖（仅当前筛选器会话有效，切换筛选器后清除）
     private temporarySortOverrideTab: string | null = null;
     private temporarySortCriteria: SortCriterion[] | null = null;
@@ -210,11 +213,18 @@ export class ReminderPanel {
             }
         };
 
-        this.settingsUpdatedHandler = () => {
+        this.settingsUpdatedHandler = (event?: CustomEvent) => {
+            if (event?.detail?.source === this.panelId) return;
             void (async () => {
                 await this.refreshReminderSkipDateContext();
                 try {
                     const settings = await this.plugin.loadSettings();
+                    const groupMode = normalizeReminderGroupMode(settings.reminderPanelGroupBy);
+                    if (groupMode !== this.reminderGroupMode) {
+                        this.reminderGroupMode = groupMode;
+                        this.currentPage = 1;
+                    }
+                    this.updateSortButtonTitle();
                     if (typeof settings.showTaskCardDocumentTitle === 'boolean') {
                         this.showTaskCardDocumentTitle = settings.showTaskCardDocumentTitle;
                     }
@@ -405,6 +415,8 @@ export class ReminderPanel {
         try {
             const config = await loadSortConfig(this.plugin);
             this.currentSortCriteria = config.criteria || [{ method: 'time', order: 'asc' }];
+            const settings = await this.plugin.loadSettings();
+            this.reminderGroupMode = normalizeReminderGroupMode(settings.reminderPanelGroupBy);
             this.updateSortButtonTitle();
         } catch (error) {
             console.error("Failed to load sort configuration:", error);
@@ -1288,6 +1300,18 @@ export class ReminderPanel {
     }
 
     private isSameNonPrioritySortGroup(a: any, b: any): boolean {
+        if (this.reminderGroupMode && this.reminderGroupMode !== 'none') {
+            const visible = new Map(this.currentRemindersCache.map(task => [task.id, task]));
+            const groupKey = (task: any) => {
+                const visited = new Set<string>();
+                while (task.parentId && visible.has(task.parentId) && !visited.has(task.id)) {
+                    visited.add(task.id);
+                    task = visible.get(task.parentId);
+                }
+                return this.getReminderGroup(task, getLogicalDateString()).key;
+            };
+            if (groupKey(a) !== groupKey(b)) return false;
+        }
         const activeCriteria = this.getActiveSortCriteria();
         const hasPriorityCriterion = activeCriteria?.some(c => c.method === 'priority');
         if (hasPriorityCriterion) return true;
@@ -1616,6 +1640,10 @@ export class ReminderPanel {
             }
             this.sortButton.classList.add('ariaLabel');
             this.sortButton.setAttribute('aria-label', `${i18n("sortBy")}:<br>${fullSortDescription}`);
+            if (this.reminderGroupMode !== 'none') {
+                const label = this.getReminderGroupingOptions().find(option => option.key === this.reminderGroupMode)?.label;
+                this.sortButton.setAttribute('aria-label', `${i18n('reminderGrouping')}: ${label}<br>${i18n('sortBy')}:<br>${fullSortDescription}`);
+            }
         }
     }
 
@@ -1868,6 +1896,41 @@ export class ReminderPanel {
     }
 
 
+    private getReminderGroupingOptions(): Array<{ key: ReminderGroupMode; label: string }> {
+        return [
+            { key: 'none', label: i18n('reminderGroupDefault') },
+            { key: 'project', label: i18n('reminderGroupProject') },
+            { key: 'category', label: i18n('reminderGroupCategory') },
+            { key: 'date', label: i18n('reminderGroupDate') },
+            { key: 'priority', label: i18n('reminderGroupPriority') },
+        ];
+    }
+
+    private createReminderGroupingOptions() {
+        return {
+            value: this.reminderGroupMode,
+            options: this.getReminderGroupingOptions(),
+            onChange: async (value: string) => {
+                const mode = normalizeReminderGroupMode(value);
+                if (mode === this.reminderGroupMode) return;
+                try {
+                    const settings = await this.plugin.loadSettings();
+                    await this.plugin.saveSettings({ ...settings, reminderPanelGroupBy: mode });
+                    this.reminderGroupMode = mode;
+                    this.currentPage = 1;
+                    this.updateSortButtonTitle();
+                    window.dispatchEvent(new CustomEvent('reminderSettingsUpdated', { detail: { source: this.panelId } }));
+                    await this.loadReminders();
+                    return true;
+                } catch (error) {
+                    console.error('Failed to save reminder grouping:', error);
+                    showMessage(i18n('operationFailed'));
+                    return false;
+                }
+            },
+        };
+    }
+
     // 显示排序菜单对话框（支持多选和拖拽排序）
     private async showSortMenu(event: MouseEvent) {
         try {
@@ -1885,6 +1948,7 @@ export class ReminderPanel {
                     async () => {
                         const dialog = new SortMenuDialog({
                             plugin: this.plugin,
+                            grouping: this.createReminderGroupingOptions(),
                             currentCriteria: this.getActiveSortCriteria(),
                             onSave: async (criteria) => {
                                 try {
@@ -1919,6 +1983,7 @@ export class ReminderPanel {
 
             const dialog = new SortMenuDialog({
                 plugin: this.plugin,
+                grouping: this.createReminderGroupingOptions(),
                 currentCriteria: this.getActiveSortCriteria(),
                 onSave: async (criteria) => {
                     // 点击关闭时也会触发，确保配置已保存
@@ -2323,7 +2388,7 @@ export class ReminderPanel {
             const today = getLogicalDateString();
             const allRemindersWithInstances = this.generateAllRemindersWithInstances(reminderData, today);
             const activeSortCriteria = this.getActiveSortCriteria();
-            if (activeSortCriteria.some(c => c.method === 'project')) {
+            if (activeSortCriteria.some(c => c.method === 'project') || this.reminderGroupMode === 'project') {
                 await this.refreshProjectSortMetaCache();
                 if (!isCurrentLoad()) return;
             }
@@ -2430,6 +2495,9 @@ export class ReminderPanel {
             displayReminders = this.applySearchFilter(displayReminders);
 
             this.sortReminders(displayReminders);
+            if (this.reminderGroupMode && this.reminderGroupMode !== 'none') {
+                displayReminders = orderRemindersByGroup(displayReminders, task => this.getReminderGroup(task, today));
+            }
             this.currentRemindersCache = [...displayReminders];
 
             // 分页逻辑：按顶级父任务数进行分页（每页 N 个父任务及其子任务），避免父子被拆分
@@ -2696,6 +2764,77 @@ export class ReminderPanel {
         return asyncDataCache;
     }
 
+    private getReminderGroup(reminder: any, today: string): ReminderGroup {
+        if (this.reminderGroupMode === 'project') {
+            const projectId = reminder.projectId || '';
+            const meta = this.projectSortMetaCache.get(projectId);
+            return { key: `project:${projectId}`, title: meta?.title || projectId || i18n('noProject'), order: meta?.groupOrder ?? Number.MAX_SAFE_INTEGER };
+        }
+        if (this.reminderGroupMode === 'category') {
+            // 多分类任务使用分类管理中的首个分类，避免同一任务重复显示。
+            const original = reminder.isRepeatInstance ? this.originalRemindersCache?.[reminder.originalId] : null;
+            const ids = new Set(String(reminder.categoryId ?? original?.categoryId ?? '').split(',').map(id => id.trim()).filter(Boolean));
+            const categories = this.categoryManager.getCategories();
+            const index = categories.findIndex(category => ids.has(category.id));
+            const category = categories[index];
+            return { key: `category:${category?.id || ''}`, title: category?.name || i18n('noCategory'), order: index < 0 ? Number.MAX_SAFE_INTEGER : index };
+        }
+        if (this.reminderGroupMode === 'priority') {
+            const priorities = [
+                { key: 'high', title: i18n('priorityHigh') },
+                { key: 'medium', title: i18n('priorityMedium') },
+                { key: 'low', title: i18n('priorityLow') },
+                { key: 'none', title: i18n('reminderGroupNoPriority') },
+            ];
+            const index = priorities.findIndex(priority => priority.key === reminder.priority);
+            const order = index < 0 ? 3 : index;
+            return { key: `priority:${priorities[order].key}`, title: priorities[order].title, order };
+        }
+        // 有结束日期时使用结束日期；仅开始日期遵循插件的截止日期设置。
+        const date = reminder.endDate || (this.shouldTreatOnlyStartDateAsDeadline(reminder) ? reminder.date : '');
+        const deadline = date ? this.getReminderLogicalDate(date, reminder.endDate ? (reminder.endTime || reminder.time) : reminder.time) : '';
+        if (!deadline) return { key: 'date:none', title: i18n('reminderGroupNoDeadline'), order: 4 };
+        if (deadline < today) return { key: 'date:overdue', title: i18n('reminderGroupOverdue'), order: 0 };
+        if (deadline === today) return { key: 'date:today', title: i18n('reminderGroupDueToday'), order: 1 };
+        if (deadline === getRelativeDateString(1)) return { key: 'date:tomorrow', title: i18n('reminderGroupDueTomorrow'), order: 2 };
+        return { key: 'date:future', title: i18n('reminderGroupDueFuture'), order: 3 };
+    }
+
+    private createReminderGroupHeader(group: ReminderGroup, count: number): HTMLElement {
+        const header = document.createElement('div');
+        header.className = 'reminder-section-header';
+        header.dataset.reminderGroup = group.key;
+        header.setAttribute('role', 'button');
+        header.tabIndex = 0;
+        header.innerHTML = `<span class="reminder-section-header__title"></span>
+            <span class="reminder-section-header__count"></span>
+            <svg class="reminder-section-header__arrow" aria-hidden="true"><use xlink:href="#iconDown"></use></svg>`;
+        header.querySelector('.reminder-section-header__title')!.textContent = group.title;
+        header.querySelector('.reminder-section-header__count')!.textContent = String(count);
+        const update = () => {
+            const collapsed = this.collapsedReminderGroups.has(group.key);
+            header.dataset.collapsed = String(collapsed);
+            header.setAttribute('aria-expanded', String(!collapsed));
+            this.remindersContainer.querySelectorAll<HTMLElement>('.reminder-section-item').forEach(item => {
+                if (item.dataset.reminderGroup === group.key) item.hidden = collapsed;
+            });
+        };
+        update();
+        const toggle = () => {
+            if (this.collapsedReminderGroups.has(group.key)) this.collapsedReminderGroups.delete(group.key);
+            else this.collapsedReminderGroups.add(group.key);
+            update();
+        };
+        header.addEventListener('click', toggle);
+        header.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggle();
+            }
+        });
+        return header;
+    }
+
     private createTodayGroupHeader(group: 'today' | 'daily' | 'completed' | 'ignored', count: number): HTMLElement {
         const header = document.createElement('div');
         const headerIds = {
@@ -2863,8 +3002,17 @@ export class ReminderPanel {
         for (let i = topLevelReminders.length - 1; i >= 0; i--) {
             renderQueue.push({ reminder: topLevelReminders[i], level: 0 });
         }
-        const isTodayTaskGroupedView = this.isTodayLikeView();
-        const isTodayCompletedGroupedView = this.currentTab === 'todayCompleted';
+        const isCustomGroupedView = this.reminderGroupMode !== 'none';
+        const isTodayTaskGroupedView = !isCustomGroupedView && this.isTodayLikeView();
+        const isTodayCompletedGroupedView = !isCustomGroupedView && this.currentTab === 'todayCompleted';
+        const customGroups = new Map<string, { group: ReminderGroup; count: number }>();
+        if (isCustomGroupedView) topLevelReminders.forEach(reminder => {
+            const group = this.getReminderGroup(reminder, today);
+            const entry = customGroups.get(group.key);
+            if (entry) entry.count++;
+            else customGroups.set(group.key, { group, count: 1 });
+        });
+        let activeCustomGroup: ReminderGroup | null = null;
         const sectionCounts = topLevelReminders.reduce((counts, item) => {
             if (isTodayTaskGroupedView) {
                 counts[this.getReminderTodayGroup(item, reminders, today)]++;
@@ -2882,6 +3030,25 @@ export class ReminderPanel {
             try {
                 // 创建任务元素（使用预处理的异步数据）
                 const element = this.createReminderElementOptimized(reminder, asyncDataCache, today, level, reminders, indexes);
+
+                // 复用卡片时清除上一种分组的可见性，避免切换分组后遗留隐藏状态。
+                element.classList.remove('reminder-section-item');
+                delete element.dataset.reminderGroup;
+                element.hidden = false;
+                if (isCustomGroupedView) {
+                    if (level === 0) {
+                        const group = this.getReminderGroup(reminder, today);
+                        if (activeCustomGroup?.key !== group.key) {
+                            activeCustomGroup = group;
+                            elements.push(this.createReminderGroupHeader(group, customGroups.get(group.key)?.count || 0));
+                        }
+                    }
+                    if (activeCustomGroup) {
+                        element.classList.add('reminder-section-item');
+                        element.dataset.reminderGroup = activeCustomGroup.key;
+                        element.hidden = this.collapsedReminderGroups.has(activeCustomGroup.key);
+                    }
+                }
 
                 // 添加到文档片段
 
@@ -3381,7 +3548,19 @@ export class ReminderPanel {
             reminder: renderedReminder, signature, title: reminder.title || '', note: reminder.note || '',
             onNoteClick: callbacks.onNoteClick,
         });
-        if (this.isTodayLikeView() || this.currentTab === 'todayCompleted') {
+        if (this.reminderGroupMode !== 'none') {
+            const visible = indexes?.visible.byId || new Map(allVisibleReminders.map(task => [task.id, task]));
+            let root = reminder;
+            const visited = new Set<string>();
+            while (root.parentId && visible.has(root.parentId) && !visited.has(root.id)) {
+                visited.add(root.id);
+                root = visible.get(root.parentId);
+            }
+            const group = this.getReminderGroup(root, today);
+            element.classList.add('reminder-section-item');
+            element.dataset.reminderGroup = group.key;
+            element.hidden = this.collapsedReminderGroups.has(group.key);
+        } else if (this.isTodayLikeView() || this.currentTab === 'todayCompleted') {
             const group = this.isTodayLikeView()
                 ? this.getReminderTodayGroup(reminder, allVisibleReminders, today)
                 : this.getTodayCompletedGroup(reminder, allVisibleReminders, today);
@@ -4762,7 +4941,7 @@ export class ReminderPanel {
     // 项目面板排序设置缓存（支持多条件）
     private projectPanelSortCriteria: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
     // 项目排序缓存：项目ID -> 状态顺序 + 状态内顺序（用于保持状态顺序不受升降序影响）
-    private projectSortMetaCache: Map<string, { statusOrder: number; orderInStatus: number }> = new Map();
+    private projectSortMetaCache: Map<string, { statusOrder: number; orderInStatus: number; title?: string; groupOrder?: number }> = new Map();
 
     /**
      * 获取原始提醒数据（用于重复事件实例）
@@ -5260,7 +5439,7 @@ export class ReminderPanel {
                 settings?.projectPanelSortOrder
             );
 
-            const projectSortMap = new Map<string, { statusOrder: number; orderInStatus: number }>();
+            const projectSortMap: typeof this.projectSortMetaCache = new Map();
             const projectData = projectDataRaw && typeof projectDataRaw === 'object' ? projectDataRaw : {};
             const categoryOrderMap = buildProjectCategoryOrderMap(this.categoryManager.getCategories());
             const statusOrderMap = buildProjectStatusOrderMap(Array.isArray(statusDataRaw) ? statusDataRaw : []);
@@ -5283,10 +5462,15 @@ export class ReminderPanel {
                 const currentCount = statusCounters.get(statusOrder) ?? 0;
                 projectSortMap.set(String(project.id), {
                     statusOrder,
-                    orderInStatus: currentCount
+                    orderInStatus: currentCount,
+                    title: project.title || String(project.id),
                 });
                 statusCounters.set(statusOrder, currentCount + 1);
             });
+
+            [...projectSortMap.values()]
+                .sort((a, b) => a.statusOrder - b.statusOrder || a.orderInStatus - b.orderInStatus)
+                .forEach((meta, index) => { meta.groupOrder = index; });
 
             this.projectSortMetaCache = projectSortMap;
         } catch (error) {
@@ -7701,7 +7885,7 @@ export class ReminderPanel {
             const hasPriorityCriterion = activeCriteria.some(c => c.method === 'priority');
 
             // 兜底保护：非优先级模式禁止跨分组拖拽
-            if (!hasPriorityCriterion && !this.isSameNonPrioritySortGroup(draggedReminder, targetReminder)) {
+            if ((!hasPriorityCriterion || (this.reminderGroupMode && this.reminderGroupMode !== 'none')) && !this.isSameNonPrioritySortGroup(draggedReminder, targetReminder)) {
                 return;
             }
 
@@ -11148,6 +11332,10 @@ export class ReminderPanel {
 
             // 4. 如果任务不满足当前视图筛选条件（含父/祖先驱动判定），且 DOM 中已存在则移除，然后退出
             if (!this.shouldShowInCurrentView(savedReminder)) {
+                if (this.reminderGroupMode !== 'none') {
+                    await this.loadReminders();
+                    return;
+                }
                 const existing = this.remindersContainer.querySelector(`[data-reminder-id="${savedReminder.id}"]`);
                 if (existing) existing.remove();
                 return;
@@ -11164,6 +11352,12 @@ export class ReminderPanel {
                     || this.currentRemindersCache.find(r => r.id === currentAncestorId || r.originalId === currentAncestorId);
                 if (ancTask) this.completedSubtaskCollapse.setExpanded(ancTask, true);
                 currentAncestorId = ancTask?.parentId;
+            }
+
+            // 分组视图统一重排并重算组头，避免编辑后残留空组或插入到另一组头下。
+            if (this.reminderGroupMode !== 'none') {
+                await this.loadReminders();
+                return;
             }
 
             // 6. 计算任务层级深度 (level)

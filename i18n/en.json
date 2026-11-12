@@ -2923,5 +2923,17 @@
     "taskListSortMenuModeDesc": "Choose bottom or top for manual sorting and global auto-sort.",
     "completedTasksToBottom": "Move completed tasks to bottom",
     "completedTasksToTop": "Move completed tasks to top",
-    "taskListSortFailed": "Failed to sort task list. Please try again later."
+    "taskListSortFailed": "Failed to sort task list. Please try again later.",
+    "reminderGrouping": "Group by",
+    "reminderGroupDefault": "Default",
+    "reminderGroupProject": "Project",
+    "reminderGroupCategory": "Category",
+    "reminderGroupDate": "Date",
+    "reminderGroupPriority": "Priority",
+    "reminderGroupOverdue": "Overdue",
+    "reminderGroupDueToday": "Due today",
+    "reminderGroupDueTomorrow": "Due tomorrow",
+    "reminderGroupDueFuture": "Due later",
+    "reminderGroupNoDeadline": "No due date",
+    "reminderGroupNoPriority": "No priority"
 }
