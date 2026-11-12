@@ -1274,6 +1274,10 @@
     font-weight: 600;
 }
 
+.habit-card__week-day--today .habit-card__week-date {
+    color: var(--b3-theme-primary);
+}
+
 .habit-card__week-status {
     display: flex;
     flex-wrap: wrap;
