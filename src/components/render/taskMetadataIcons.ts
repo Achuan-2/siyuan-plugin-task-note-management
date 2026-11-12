@@ -24,7 +24,7 @@ const paths = {
     folderOpen: '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
     link: '<path d="M10 13a5 5 0 0 0 7 .5l4-4a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7-.5l-4 4a5 5 0 0 0 7 7l2-2"/>',
     habit: '<path d="M12 21v-8a7 7 0 0 1 7-7h2v2a7 7 0 0 1-7 7h-2M12 17a7 7 0 0 1-9-7V8h2a7 7 0 0 1 7 7M5 21h14"/>',
-    progress: '<path d="M3 3v16a2 2 0 0 0 2 2h16M8 16v-4m5 4V8m5 8V4"/>',
+    progress: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
     eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     status: '<path d="M10 5h11M10 12h11M10 19h11M3 5h.01m-.01 7h.01M3 19h.01"/>',
     tomato: renderTomatoIconContent(),
@@ -36,7 +36,7 @@ export function renderTaskMetadataIcon(name: TaskMetadataIcon, size = 14): strin
     // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
     const content = name === 'tomato' || name === 'project' || name === 'duration' || name === 'check'
         ? paths[name]
-        : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' || name === 'calendarHeart' || name === 'folderOpen' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
+        : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' || name === 'calendarHeart' || name === 'folderOpen' || name === 'progress' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
     const viewBox = name === 'duration' ? '0 0 1024 1024' : '0 0 24 24';
     return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false" style="display:inline-block;width:${size}px;height:${size}px;vertical-align:-2px;flex-shrink:0;float:none;margin:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }
