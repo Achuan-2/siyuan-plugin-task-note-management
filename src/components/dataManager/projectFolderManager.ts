@@ -1,4 +1,4 @@
-import type { GroupTabCountMode, CustomGroupStatusDisplayMode } from './projectManager';
+import type { GroupTabCountMode, CustomGroupStatusDisplayMode, KanbanMilestoneFilterState } from './projectManager';
 
 export interface FolderKanbanSettings {
     sortCriteria?: { method: string; order: 'asc' | 'desc' }[];
@@ -16,6 +16,7 @@ export interface FolderKanbanSettings {
     statusTabsMode?: boolean;
     customGroupStatusDisplayMode?: CustomGroupStatusDisplayMode;
     columnWidths?: { [columnKey: string]: number };
+    milestoneFilterState?: KanbanMilestoneFilterState;
 }
 
 export interface ProjectFolder {

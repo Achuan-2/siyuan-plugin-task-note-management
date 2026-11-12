@@ -12,7 +12,7 @@ import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProj
 import { i18n } from "../../pluginInstance";
 import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { CategoryManager } from "../dataManager/categoryManager";
-import { ProjectManager, type GroupTabCountMode, type CustomGroupStatusDisplayMode } from "../dataManager/projectManager";
+import { ProjectManager, type GroupTabCountMode, type CustomGroupStatusDisplayMode, type KanbanMilestoneFilterState } from "../dataManager/projectManager";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
@@ -200,6 +200,9 @@ export class ProjectKanbanView {
     private selectedFilterMilestones: Map<string, Set<string>> = new Map();
     // 按状态列/分组记录多选模式，默认使用单选。
     private multiSelectMilestoneFilters: Set<string> = new Set();
+    private milestoneFiltersLoaded = false;
+    // 串行保存，避免快速切换后较早的写入覆盖最新选择；关闭视图也不取消保存。
+    private milestoneFilterSaveQueue: Promise<void> = Promise.resolve();
     private milestoneFilterButton: HTMLButtonElement;
     private isFilterActive: boolean = false;
     private selectedDateFilters: Set<string> = new Set();
@@ -807,10 +810,16 @@ export class ProjectKanbanView {
                     title: this.aggregateTitle || this.viewOptions.folderId || i18n('projectKanban') || '项目看板',
                     categoryId: firstProject?.categoryId,
                     // 文件夹看板设置覆盖项目设置
-                    ...(folderKanbanSettings || {})
+                    ...(folderKanbanSettings || {}),
+                    // 聚合看板的筛选独立保存，不继承首个项目的筛选。
+                    milestoneFilterState: folderKanbanSettings?.milestoneFilterState
                 };
             } else {
                 this.project = projectData[this.projectId];
+            }
+            if (!this.milestoneFiltersLoaded) {
+                this.restoreMilestoneFilters(this.project?.milestoneFilterState);
+                this.milestoneFiltersLoaded = true;
             }
             // 加载显示已完成子任务设置，默认为true
             if (this.project && typeof this.project.showCompletedSubtasks === 'boolean') {
@@ -2081,8 +2090,7 @@ export class ProjectKanbanView {
                 // 设置为空 Set，表示清除所有选择（不显示任何任务）
                 this.selectedFilterMilestones.set(targetGroupId, new Set());
                 renderOptions();
-                this.queueLoadTasks();
-                this.updateMilestoneFilterButtonsState();
+                this.applyMilestoneFilterChange();
             });
             btnsContainer.appendChild(clearBtn);
 
@@ -2128,8 +2136,7 @@ export class ProjectKanbanView {
                     } else {
                         this.selectedFilterMilestones.set(targetGroupId, new Set([milestoneId]));
                     }
-                    this.queueLoadTasks();
-                    this.updateMilestoneFilterButtonsState();
+                    this.applyMilestoneFilterChange();
                     if (!multiSelectCheckbox.checked) closePopup();
                 });
 
@@ -2203,8 +2210,7 @@ export class ProjectKanbanView {
                     }
                 }
                 renderOptions();
-                this.queueLoadTasks();
-                this.updateMilestoneFilterButtonsState();
+                this.applyMilestoneFilterChange();
             });
             renderOptions();
 
@@ -2248,6 +2254,55 @@ export class ProjectKanbanView {
         } catch (error) {
             console.error("Failed to load milestone filter menu:", error);
         }
+    }
+
+    private restoreMilestoneFilters(state?: KanbanMilestoneFilterState): void {
+        this.selectedFilterMilestones.clear();
+        this.multiSelectMilestoneFilters.clear();
+        if (!state || typeof state !== 'object') return;
+        if (state.selections && typeof state.selections === 'object' && !Array.isArray(state.selections)) {
+            Object.entries(state.selections).forEach(([groupId, ids]) => {
+                if (!Array.isArray(ids)) return;
+                this.selectedFilterMilestones.set(groupId, new Set(ids.filter(id => typeof id === 'string' && id.length > 0)));
+            });
+        }
+        if (Array.isArray(state.multiSelectGroups)) {
+            state.multiSelectGroups.forEach(groupId => {
+                if (typeof groupId === 'string' && this.selectedFilterMilestones.has(groupId)) {
+                    this.multiSelectMilestoneFilters.add(groupId);
+                }
+            });
+        }
+    }
+
+    private saveMilestoneFilters(): Promise<void> {
+        const state: KanbanMilestoneFilterState = {
+            selections: Object.fromEntries(Array.from(this.selectedFilterMilestones, ([groupId, ids]) => [groupId, Array.from(ids)])),
+            multiSelectGroups: Array.from(this.multiSelectMilestoneFilters)
+        };
+        if (this.project) this.project.milestoneFilterState = state;
+        this.milestoneFilterSaveQueue = this.milestoneFilterSaveQueue.then(async () => {
+            if (this.isAggregateView) {
+                await this.saveFolderKanbanSetting({ milestoneFilterState: state });
+                return;
+            }
+            const projectData = await this.plugin.loadProjectData() || {};
+            if (!projectData[this.projectId]) return;
+            projectData[this.projectId].milestoneFilterState = state;
+            await this.plugin.saveProjectData(projectData);
+            // 项目管理器会从自身缓存整项保存，同步新字段以免后续编辑项目时丢失。
+            const cachedProject = this.projectManager.getProjectById(this.projectId);
+            if (cachedProject) cachedProject.milestoneFilterState = state;
+        }).catch(error => {
+            console.error('Failed to save milestone filters:', error);
+        });
+        return this.milestoneFilterSaveQueue;
+    }
+
+    private applyMilestoneFilterChange(): void {
+        void this.saveMilestoneFilters();
+        void this.queueLoadTasks();
+        this.updateMilestoneFilterButtonsState();
     }
 
     private updateMilestoneFilterButtonsState() {

@@ -42,6 +42,12 @@ export interface ProjectGroup {
 export type GroupTabCountMode = 'doing' | 'unfinished' | 'all';
 export type CustomGroupStatusDisplayMode = 'kanban' | 'tabs' | 'list';
 
+export interface KanbanMilestoneFilterState {
+    // 缺少分组键表示全部任务，空数组表示不显示任何任务。
+    selections: Record<string, string[]>;
+    multiSelectGroups: string[];
+}
+
 export interface Project {
     id: string;
     name: string;
@@ -68,6 +74,7 @@ export interface Project {
     customGroupTabsMode?: boolean;
     groupTabCountMode?: GroupTabCountMode;
     customGroupStatusDisplayMode?: CustomGroupStatusDisplayMode;
+    milestoneFilterState?: KanbanMilestoneFilterState;
     activeCustomGroupTabId?: string;
     kanbanStatuses?: KanbanStatus[];
     updatedTime?: string;

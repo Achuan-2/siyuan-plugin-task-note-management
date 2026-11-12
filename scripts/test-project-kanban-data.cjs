@@ -208,6 +208,135 @@ function task(id, projectId, kanbanStatus = 'doing') {
     return { id, title: id, projectId, kanbanStatus, completed: false };
 }
 
+function milestoneFilterFixture(initial, folder) {
+    const state = { data: clone(initial), folder: folder && clone(folder), writes: 0, errors: [] };
+    const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
+        'loadProject', 'restoreMilestoneFilters', 'saveMilestoneFilters', 'applyMilestoneFilterChange', 'getSingleFilteredMilestoneId',
+    ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const Board = new Function('ProjectFolderManager', 'i18n', 'showMessage', 'console', compiled + ';return Board;')(
+        { getInstance: () => ({ getFolderById: () => state.folder }) }, key => key,
+        message => assert.fail(message), { error: (...args) => state.errors.push(args) },
+    );
+    const cached = clone(initial);
+    const plugin = {
+        loadProjectData: async () => clone(state.data),
+        saveProjectData: async data => { state.data = clone(data); state.writes++; },
+    };
+    const board = (projectId = 'A', aggregate = false) => Object.assign(new Board(), {
+        plugin, projectId, projectManager: { getProjectById: id => cached[id] },
+        isAggregateView: aggregate, aggregateProjectIds: ['A', 'B'],
+        viewOptions: aggregate ? { folderId: 'folder' } : {},
+        selectedFilterMilestones: new Map(), multiSelectMilestoneFilters: new Set(),
+        milestoneFilterSaveQueue: Promise.resolve(), milestoneFiltersLoaded: false,
+        getProjectCustomGroupsForView: async () => [], refreshAggregateProjectContext() {},
+        queueLoadTasks: async () => {}, updateMilestoneFilterButtonsState() {},
+        saveFolderKanbanSetting: async partial => {
+            state.folder.kanbanSettings = { ...state.folder.kanbanSettings, ...clone(partial) };
+        },
+    });
+    return { state, plugin, board, cached };
+}
+
+test('关闭重开项目看板恢复各列和分组的里程碑选择及多选模式，新建任务仍跟随单个里程碑', async () => {
+    const f = milestoneFilterFixture({ A: { title: 'A' }, B: { title: 'B' } });
+    const board = f.board();
+    await board.loadProject();
+    assert.equal(board.selectedFilterMilestones.size, 0);
+    board.selectedFilterMilestones.set('doing', new Set(['v7.2.0']));
+    board.selectedFilterMilestones.set('group', new Set(['__no_milestone__', 'v7.1.0']));
+    board.multiSelectMilestoneFilters.add('group');
+    board.applyMilestoneFilterChange();
+    board.disposed = true;
+    await board.milestoneFilterSaveQueue;
+    const reopened = f.board();
+    await reopened.loadProject();
+    assert.deepEqual([...reopened.selectedFilterMilestones.get('doing')], ['v7.2.0']);
+    assert.deepEqual([...reopened.selectedFilterMilestones.get('group')], ['__no_milestone__', 'v7.1.0']);
+    assert.deepEqual([...reopened.multiSelectMilestoneFilters], ['group']);
+    assert.equal(reopened.getSingleFilteredMilestoneId('doing'), 'v7.2.0');
+    assert.deepEqual(f.cached.A.milestoneFilterState, f.state.data.A.milestoneFilterState);
+});
+
+test('全部任务、无里程碑和多选清空选择在重开后保持各自含义', async () => {
+    const f = milestoneFilterFixture({ A: { title: 'A' } });
+    const board = f.board();
+    await board.loadProject();
+    board.selectedFilterMilestones.set('doing', new Set());
+    board.multiSelectMilestoneFilters.add('doing');
+    board.selectedFilterMilestones.set('waiting', new Set(['__no_milestone__']));
+    await board.saveMilestoneFilters();
+    const reopened = f.board();
+    await reopened.loadProject();
+    assert.equal(reopened.selectedFilterMilestones.get('doing').size, 0);
+    assert.equal(reopened.multiSelectMilestoneFilters.has('doing'), true);
+    assert.equal(reopened.getSingleFilteredMilestoneId('waiting'), undefined);
+    reopened.selectedFilterMilestones.delete('waiting');
+    await reopened.saveMilestoneFilters();
+    const allTasks = f.board();
+    await allTasks.loadProject();
+    assert.equal(allTasks.selectedFilterMilestones.has('waiting'), false);
+    assert.equal(allTasks.selectedFilterMilestones.has('doing'), true);
+});
+
+test('快速切换串行保存最后一次选择，并保留最新项目字段及其他项目数据', async () => {
+    const f = milestoneFilterFixture({ A: { title: 'A' }, B: { title: 'B', milestoneFilterState: { selections: { doing: ['other'] }, multiSelectGroups: [] } } });
+    const board = f.board();
+    await board.loadProject();
+    f.state.data.A.note = 'new note';
+    let release, started;
+    const firstStarted = new Promise(resolve => { started = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const save = f.plugin.saveProjectData;
+    f.plugin.saveProjectData = async data => {
+        if (!f.state.writes) { started(); await gate; }
+        await save(data);
+    };
+    board.selectedFilterMilestones.set('doing', new Set(['old']));
+    const first = board.saveMilestoneFilters();
+    await firstStarted;
+    board.selectedFilterMilestones.set('doing', new Set(['latest']));
+    const latest = board.saveMilestoneFilters();
+    release();
+    await Promise.all([first, latest]);
+    assert.deepEqual(f.state.data.A.milestoneFilterState.selections.doing, ['latest']);
+    assert.equal(f.state.data.A.note, 'new note');
+    assert.deepEqual(f.state.data.B.milestoneFilterState.selections.doing, ['other']);
+    assert.equal(f.state.writes, 2);
+});
+
+test('文件夹看板独立恢复和保存筛选，不继承或覆盖首个项目的筛选', async () => {
+    const initial = { A: { title: 'A', milestoneFilterState: { selections: { doing: ['project'] }, multiSelectGroups: [] } }, B: { title: 'B' } };
+    const f = milestoneFilterFixture(initial, { id: 'folder', kanbanSettings: { kanbanMode: 'custom' } });
+    const board = f.board('folder', true);
+    await board.loadProject();
+    assert.equal(board.selectedFilterMilestones.size, 0);
+    board.selectedFilterMilestones.set('agg_A_group', new Set(['folder-milestone']));
+    await board.saveMilestoneFilters();
+    const reopened = f.board('folder', true);
+    await reopened.loadProject();
+    assert.deepEqual([...reopened.selectedFilterMilestones.get('agg_A_group')], ['folder-milestone']);
+    assert.equal(f.state.folder.kanbanSettings.kanbanMode, 'custom');
+    assert.deepEqual(f.state.data, initial);
+    assert.equal(f.state.writes, 0);
+});
+
+test('保存失败后后续选择仍能持久化，配置刷新不会覆盖当前待保存的选择', async () => {
+    const f = milestoneFilterFixture({ A: { title: 'A' } });
+    const board = f.board();
+    await board.loadProject();
+    const save = f.plugin.saveProjectData;
+    f.plugin.saveProjectData = async () => { throw new Error('write failed'); };
+    board.selectedFilterMilestones.set('doing', new Set(['first']));
+    await board.saveMilestoneFilters();
+    assert.equal(f.state.errors.length, 1);
+    board.selectedFilterMilestones.set('doing', new Set(['latest']));
+    await board.loadProject();
+    assert.deepEqual([...board.selectedFilterMilestones.get('doing')], ['latest']);
+    f.plugin.saveProjectData = save;
+    await board.saveMilestoneFilters();
+    assert.deepEqual(f.state.data.A.milestoneFilterState.selections.doing, ['latest']);
+});
+
 function fixture(initial) {
     const state = { data: clone(initial), writes: 0, reads: [], dialog: null, events: [] };
     const undoModule = loadTaskActionUndo({
