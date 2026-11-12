@@ -1,6 +1,6 @@
 import randomRest from './icons/randomRest.svg?raw';
 import { getTomatoIconLayers, renderTomatoIconContent } from './tomatoIcon';
-import { MEDITATION_ICON_PATHS, SHORT_BREAK_ICON_PATHS } from './restIcons';
+import { MEDITATION_ICON_PATH, SHORT_BREAK_ICON_PATHS } from './restIcons';
 
 /** 内联彩色 SVG 可同时用于思源面板和没有宿主图标库的独立窗口。 */
 function svg(content: string, viewBox = '0 0 24 24'): string {
@@ -30,7 +30,7 @@ const chartUp = svg('<rect x="2" y="2" width="20" height="20" rx="3" fill="#e9f2
 const chartDown = svg('<rect x="2" y="2" width="20" height="20" rx="3" fill="#e9f2fc"/>' + line('<path d="m5 7 5 6 4-3 5 8"/>', '#e68f92'));
 const tomato = svg(renderTomatoIconContent());
 const shortBreak = svg(`<path d="${SHORT_BREAK_ICON_PATHS.body}" fill="#77c8a7"/><ellipse cx="12" cy="8" rx="9" ry="2.2" fill="#d8f0df"/><ellipse cx="12" cy="8" rx="7" ry="1.3" fill="#78a95f"/>` + line(`<path d="${SHORT_BREAK_ICON_PATHS.steam}"/><path d="${SHORT_BREAK_ICON_PATHS.saucer}"/>`, '#59a98a'));
-const longBreak = svg(line(Object.values(MEDITATION_ICON_PATHS).map(path => `<path d="${path}"/>`).join(''), '#9678c5'));
+const longBreak = svg(`<path d="${MEDITATION_ICON_PATH}" fill="#9678c5"/>`, '0 0 1024 1024');
 const timer = svg('<circle cx="12" cy="14" r="8" fill="#e3effc" stroke="#6498cc" stroke-width="1.8"/>' + line('<path d="M10 2h4m-2 8v4l3 2M5 5l2 2"/>', '#527eb1'));
 
 function arrow(rotation: number): string {
@@ -76,7 +76,7 @@ export const POMODORO_TOOLBAR_ICON_SVGS: Record<string, string> = {
 export const POMODORO_MENU_ICON_PATHS = {
     work: getTomatoIconLayers('monochrome').map(layer => layer.d),
     shortBreak: Object.values(SHORT_BREAK_ICON_PATHS),
-    longBreak: Object.values(MEDITATION_ICON_PATHS),
+    longBreak: [MEDITATION_ICON_PATH],
     timer: ['M9 2h6m-3 0v4m6 1 2-2M12 10v4l3 2', 'M20 14a8 8 0 1 1-16 0 8 8 0 0 1 16 0'],
     hourglass: ['M5 2h14M5 22h14M6 2v5l6 5-6 5v5M18 2v5l-6 5 6 5v5'],
     pencil: ['m16 3 5 5M3 21l6-1L21 8a2 2 0 0 0 0-3l-2-2a2 2 0 0 0-3 0L4 15Z', 'm4 15 5 5'],
@@ -90,6 +90,7 @@ export type PomodoroMenuIconName = keyof typeof POMODORO_MENU_ICON_PATHS;
 
 export function renderPomodoroMenuIcon(name: PomodoroMenuIconName): string {
     if (name === 'work') return svg(renderTomatoIconContent('monochrome'));
+    if (name === 'longBreak') return svg(`<path d="${MEDITATION_ICON_PATH}" fill="currentColor"/>`, '0 0 1024 1024');
     return svg(line(POMODORO_MENU_ICON_PATHS[name].map(path => `<path d="${path}"/>`).join(''), 'currentColor'));
 }
 
@@ -134,6 +135,10 @@ export function getNativePomodoroMenuIcon(name: PomodoroMenuIconName, nativeImag
                 }
                 context.restore();
             }
+        } else if (name === 'longBreak') {
+            context.scale(24 / 1024, 24 / 1024);
+            context.fillStyle = color;
+            context.fill(new Path2D(MEDITATION_ICON_PATH));
         } else {
             for (const path of POMODORO_MENU_ICON_PATHS[name]) context.stroke(new Path2D(path));
         }
