@@ -4307,7 +4307,7 @@ export class QuickReminderDialog {
             // 渲染每个标签
             projectTags.forEach((tag: { id: string, name: string, color: string }) => {
                 const tagEl = document.createElement('div');
-                tagEl.className = 'tag-option';
+                tagEl.className = 'tag-option tn-project-tag';
                 tagEl.setAttribute('data-tag-id', tag.id);
 
                 const isSelected = currentTagIds.includes(tag.id);
@@ -4315,20 +4315,7 @@ export class QuickReminderDialog {
                     tagEl.classList.add('selected');
                 }
 
-                tagEl.style.cssText = `
-                    display: inline-flex;
-                    align-items: center;
-                    padding: 4px 10px;
-                    font-size: 12px;
-                    border-radius: 12px;
-                    background: ${isSelected ? tag.color + '30' : tag.color + '20'};
-                    border: 1px solid ${tag.color};
-                    color: ${tag.color};
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    user-select: none;
-                    font-weight: ${isSelected ? '600' : '500'};
-                `;
+                tagEl.style.setProperty('--tn-project-tag-color', tag.color);
 
                 tagEl.textContent = `#${tag.name}`;
                 tagEl.classList.add('ariaLabel'); tagEl.setAttribute('aria-label', tag.name);
@@ -4349,22 +4336,6 @@ export class QuickReminderDialog {
                             this.selectedTagIds.splice(index, 1);
                         }
                     }
-
-                    // 更新样式
-                    tagEl.style.background = isNowSelected ? tag.color + '30' : tag.color + '20';
-                    tagEl.style.color = tag.color;
-                    tagEl.style.fontWeight = isNowSelected ? '600' : '500';
-                });
-
-                // 悬停效果
-                tagEl.addEventListener('mouseenter', () => {
-                    tagEl.style.opacity = '0.8';
-                    tagEl.style.transform = 'translateY(-1px)';
-                });
-
-                tagEl.addEventListener('mouseleave', () => {
-                    tagEl.style.opacity = '1';
-                    tagEl.style.transform = 'translateY(0)';
                 });
 
                 tagsSelector.appendChild(tagEl);

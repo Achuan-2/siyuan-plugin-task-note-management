@@ -1,0 +1,15 @@
+// 项目内自定义标签共用的胶囊样式，颜色由标签设置提供。
+.tn-project-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    padding: 0 7px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 999px;
+    background-color: var(--tn-project-tag-color, var(--b3-theme-surface-lighter));
+    color: var(--b3-theme-on-background);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 20px;
+}

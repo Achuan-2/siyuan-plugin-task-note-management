@@ -55,19 +55,9 @@ export async function showManageTagsDialog(view: any) {
 
             projectTags.forEach((tag: { id: string, name: string, color: string }) => {
                 const tagItem = document.createElement('div');
-                tagItem.className = 'tag-item';
-                tagItem.style.cssText = `
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    padding: 6px 12px;
-                    background: ${tag.color}20;
-                    border: 1px solid ${tag.color};
-                    border-radius: 16px;
-                    font-size: 14px;
-                    color: ${tag.color};
-                    cursor: pointer;
-                `;
+                tagItem.className = 'tag-item tn-project-tag';
+                tagItem.style.setProperty('--tn-project-tag-color', tag.color);
+                tagItem.style.cursor = 'pointer';
 
                 const tagText = document.createElement('span');
                 tagText.textContent = `#${tag.name}`;
@@ -172,7 +162,7 @@ export async function showManageTagsDialog(view: any) {
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <input type="color" id="tagColorInput" value="${defaultColor}" style="width: 60px; height: 32px; border: 1px solid var(--b3-border-color); border-radius: 4px; cursor: pointer;">
                             <input type="text" id="tagColorText" class="b3-text-field" value="${defaultColor}" style="flex: 1;" readonly>
-                            <div id="tagColorPreview" style="width: 80px; height: 32px; border-radius: 16px; border: 1px solid ${defaultColor}; background: ${defaultColor}20; display: flex; align-items: center; justify-content: center; font-size: 12px;">${i18n('preview')}</div>
+                            <div id="tagColorPreview" class="tn-project-tag" style="--tn-project-tag-color: ${defaultColor}; min-width: 80px; justify-content: center;">${i18n('preview')}</div>
                         </div>
                     </div>
                 </div>
@@ -194,8 +184,7 @@ export async function showManageTagsDialog(view: any) {
         colorInput.addEventListener('input', () => {
             const color = colorInput.value;
             colorText.value = color;
-            colorPreview.style.borderColor = color;
-            colorPreview.style.background = `${color}20`;
+            colorPreview.style.setProperty('--tn-project-tag-color', color);
         });
 
         cancelBtn.addEventListener('click', () => tagDialog.destroy());
@@ -265,7 +254,7 @@ export async function showManageTagsDialog(view: any) {
                             <label class="b3-form__label">${i18n('selectTagsToSync')}</label>
                             <div id="syncTagsList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; max-height: 300px; overflow-y: auto;">
                                 ${currentTags.map(tag => `
-                                    <label style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: ${tag.color}20; border: 1px solid ${tag.color}; border-radius: 16px; font-size: 14px; color: ${tag.color}; cursor: pointer;">
+                                    <label class="tn-project-tag" style="--tn-project-tag-color: ${tag.color}; cursor: pointer;">
                                         <input type="checkbox" value="${tag.name}" data-color="${tag.color}" checked style="cursor: pointer;">
                                         <span>#${tag.name}</span>
                                     </label>

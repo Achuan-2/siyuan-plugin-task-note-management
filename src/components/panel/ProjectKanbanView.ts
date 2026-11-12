@@ -14868,18 +14868,8 @@ export class ProjectKanbanView {
                                 const tag = tagMap.get(tagId);
                                 if (!tag) continue;
                                 const tagEl = document.createElement('span');
-                                tagEl.className = 'reminder-item__tag';
-                                tagEl.style.cssText = `
-                                    display: inline-flex;
-                                    align-items: center;
-                                    padding: 2px 8px;
-                                    font-size: 11px;
-                                    border-radius: 12px;
-                                    background: ${tag.color}20;
-                                    border: 1px solid ${tag.color};
-                                    color: ${tag.color};
-                                    font-weight: 500;
-                                `;
+                                tagEl.className = 'reminder-item__tag tn-project-tag';
+                                tagEl.style.setProperty('--tn-project-tag-color', tag.color);
                                 tagEl.textContent = `#${tag.name}`;
                                 tagEl.classList.add('ariaLabel');
                                 tagEl.setAttribute('aria-label', tag.name);
