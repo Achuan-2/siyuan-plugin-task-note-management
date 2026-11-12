@@ -16,6 +16,9 @@ import { SubtasksDialog } from "./SubtasksDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
 import { setTaskMetadataText, renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
+import { collectTaskDeletionIds, deleteTaskTree } from "../../utils/taskTreeDeletion";
+import { getAllReminders } from "../../utils/icsSubscription";
+import { showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
 import { Plugin, NodeSelection } from "@milkdown/prose/state";
 import { commonmark } from "@milkdown/kit/preset/commonmark";
@@ -577,6 +580,7 @@ export class QuickReminderDialog {
     private editFutureInstancesOnly: boolean = false;
     private futureEditOriginalReminder?: any;
     private readOnly: boolean = false; // 是否为只读模式
+    private isDeletingTask = false;
 
 
     constructor(
@@ -3418,6 +3422,9 @@ export class QuickReminderDialog {
                         <div id="quickSubtasksTabPanel" role="tabpanel" style="display: none; min-height: 220px;"></div>
                     </div>
                     <div class="b3-dialog__action" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                        ${this.mode === 'edit' && !this.readOnly && !this.skipSave ? `<button type="button" class="b3-button b3-button--text ariaLabel" id="quickDeleteBtn" aria-label="${i18n('deleteTaskAndSubtasks')}" style="margin-right: auto; color: var(--b3-theme-error); padding: 8px;">
+                            <svg style="width: 16px; height: 16px;" aria-hidden="true"><use xlink:href="#iconTrashcan"></use></svg>
+                        </button>` : ''}
                         <button class="b3-button b3-button--cancel" id="quickCancelBtn">${this.readOnly ? i18n("close") : i18n("cancel")}</button>
                         ${this.readOnly ? '' : `<button class="b3-button b3-button--primary" id="quickConfirmBtn">${i18n("save")}</button>`}
                     </div>
@@ -5872,6 +5879,11 @@ export class QuickReminderDialog {
             }
         });
 
+        // 删除按钮
+        this.dialog.element.querySelector('#quickDeleteBtn')?.addEventListener('click', () => {
+            void this.deleteCurrentTask();
+        });
+
         // 取消按钮
         cancelBtn?.addEventListener('click', () => {
             this.destroyDialog();
@@ -6919,6 +6931,59 @@ export class QuickReminderDialog {
         blockBindingDialog.show();
     }
 
+    private async deleteCurrentTask() {
+        if (this.mode !== 'edit' || this.readOnly || this.skipSave || this.isDeletingTask || !this.reminder?.id) return;
+        this.isDeletingTask = true;
+        try {
+            const targetId = this.reminder.originalId || parseReminderInstanceId(this.reminder.id)?.originalId || this.reminder.id;
+            const data = await getAllReminders(this.plugin, undefined, true, 'none', { strict: true });
+            const task = data[targetId];
+            if (!task) throw new Error(i18n('reminderNotExist'));
+            const count = collectTaskDeletionIds(data, targetId).size - 1;
+            const performDelete = async (keepCompletedInstances = false) => {
+                if (this.isDeletingTask || !this.dialog) return;
+                this.isDeletingTask = true;
+                const deleteBtn = this.dialog.element.querySelector('#quickDeleteBtn') as HTMLButtonElement;
+                if (deleteBtn) deleteBtn.disabled = true;
+                try {
+                    const undo = await deleteTaskTree(this.plugin, targetId, keepCompletedInstances, this.reminderSkipHolidayData);
+                    this.destroyDialog();
+                    window.dispatchEvent(new CustomEvent('reminderUpdated', {
+                        detail: { refreshDelayMs: 0, projectId: task.projectId }
+                    }));
+                    undo.show(i18n('reminderDeleted'));
+                } catch (error) {
+                    console.error('Failed to delete task from editor:', error);
+                    showMessage(i18n('deleteReminderFailed'), 3000, 'error');
+                } finally {
+                    this.isDeletingTask = false;
+                    if (deleteBtn) deleteBtn.disabled = false;
+                }
+            };
+            this.isDeletingTask = false;
+            if (task.repeat?.enabled) {
+                showDeleteRepeatTaskDialog({
+                    title: task.title,
+                    description: count > 0 ? i18n('includesNSubtasks', { count: String(count) }) : undefined,
+                    onConfirm: performDelete,
+                });
+            } else {
+                // confirm 接收 HTML，动态标题先转义为纯文本。
+                const title = String(task.title || '').replace(/[&<>"']/g, char => ({
+                    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+                })[char]!);
+                confirm(i18n('deleteTaskAndSubtasks'), count > 0
+                    ? i18n('confirmDeleteTaskWithSubtasks', { title, count: String(count) })
+                    : i18n('confirmDeleteTask', { title }), () => { void performDelete(); });
+            }
+        } catch (error) {
+            console.error('Failed to prepare task deletion:', error);
+            showMessage(i18n('deleteReminderFailed'), 3000, 'error');
+        } finally {
+            this.isDeletingTask = false;
+        }
+    }
+
     private destroyDialog() {
         if (this.editor) {
             this.editor.destroy();
@@ -7035,6 +7100,7 @@ export class QuickReminderDialog {
     }
 
     private async saveReminder() {
+        if (this.isDeletingTask) return;
         if (this.readOnly) {
             this.destroyDialog();
             return;
