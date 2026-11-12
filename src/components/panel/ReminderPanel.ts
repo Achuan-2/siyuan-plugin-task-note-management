@@ -18,6 +18,8 @@ import { i18n } from "../../pluginInstance";
 import { TaskRenderer } from "../render/TaskRenderer";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { normalizeReminderGroupMode, orderRemindersByGroup, type ReminderGroup, type ReminderGroupMode } from '../../utils/reminderGrouping';
+import { buildProjectFolderOrderMap } from '../../utils/projectFolderOrder';
+import { ProjectFolderManager } from '../dataManager/projectFolderManager';
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
 import { createTaskCompletedTimeElement } from '../render/taskCompletedTimeElement';
@@ -90,6 +92,11 @@ export class ReminderPanel {
     private temporarySortCriteria: SortCriterion[] | null = null;
     private reminderUpdatedHandler: (event?: CustomEvent) => void;
     private sortConfigUpdatedHandler: (event: CustomEvent) => void;
+    private projectUpdatedHandler = () => {
+        if (this.reminderGroupMode === 'project' || this.getActiveSortCriteria().some(criterion => criterion.method === 'project')) {
+            void this.loadReminders();
+        }
+    };
     private settingsUpdatedHandler: (event?: CustomEvent) => void;
     private categoryManager: CategoryManager; // 添加分类管理器
     private isDragging: boolean = false;
@@ -310,6 +317,7 @@ export class ReminderPanel {
         window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
         // 监听排序配置更新事件
         window.addEventListener('sortConfigUpdated', this.sortConfigUpdatedHandler);
+        window.addEventListener('projectUpdated', this.projectUpdatedHandler);
         window.addEventListener('reminderSettingsUpdated', this.settingsUpdatedHandler);
     }
 
@@ -366,6 +374,7 @@ export class ReminderPanel {
         if (this.sortConfigUpdatedHandler) {
             window.removeEventListener('sortConfigUpdated', this.sortConfigUpdatedHandler);
         }
+        window.removeEventListener('projectUpdated', this.projectUpdatedHandler);
         if (this.settingsUpdatedHandler) {
             window.removeEventListener('reminderSettingsUpdated', this.settingsUpdatedHandler);
         }
@@ -4970,8 +4979,8 @@ export class ReminderPanel {
     private asyncDataCache: Map<string, any> = new Map();
     // 项目面板排序设置缓存（支持多条件）
     private projectPanelSortCriteria: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
-    // 项目排序缓存：项目ID -> 状态顺序 + 状态内顺序（用于保持状态顺序不受升降序影响）
-    private projectSortMetaCache: Map<string, { statusOrder: number; orderInStatus: number; title?: string; groupOrder?: number }> = new Map();
+    // 文件夹与状态顺序固定，升降序只作用于同文件夹、同状态内的项目顺序。
+    private projectSortMetaCache: Map<string, { folderOrder: number; statusOrder: number; orderInStatus: number; title?: string; groupOrder?: number }> = new Map();
 
     /**
      * 获取原始提醒数据（用于重复事件实例）
@@ -5457,10 +5466,11 @@ export class ReminderPanel {
 
     private async refreshProjectSortMetaCache(): Promise<void> {
         try {
-            const [projectDataRaw, settings, statusDataRaw] = await Promise.all([
+            const [projectDataRaw, settings, statusDataRaw, folders] = await Promise.all([
                 this.plugin?.loadProjectData?.(),
                 this.plugin?.loadSettings?.(),
-                this.plugin?.loadProjectStatus?.()
+                this.plugin?.loadProjectStatus?.(),
+                ProjectFolderManager.getInstance(this.plugin).loadFolders(),
             ]);
 
             this.projectPanelSortCriteria = normalizeProjectPanelSortCriteria(
@@ -5473,6 +5483,7 @@ export class ReminderPanel {
             const projectData = projectDataRaw && typeof projectDataRaw === 'object' ? projectDataRaw : {};
             const categoryOrderMap = buildProjectCategoryOrderMap(this.categoryManager.getCategories());
             const statusOrderMap = buildProjectStatusOrderMap(Array.isArray(statusDataRaw) ? statusDataRaw : []);
+            const folderOrderMap = buildProjectFolderOrderMap(folders, getLocaleTag());
 
             const sortableProjects = Object.entries(projectData).map(([id, project]) => ({
                 id,
@@ -5491,6 +5502,7 @@ export class ReminderPanel {
                 const statusOrder = statusOrderMap.get(statusId) ?? Number.MAX_SAFE_INTEGER;
                 const currentCount = statusCounters.get(statusOrder) ?? 0;
                 projectSortMap.set(String(project.id), {
+                    folderOrder: folderOrderMap.get(project.folderId) ?? Number.MAX_SAFE_INTEGER,
                     statusOrder,
                     orderInStatus: currentCount,
                     title: project.title || String(project.id),
@@ -5499,7 +5511,7 @@ export class ReminderPanel {
             });
 
             [...projectSortMap.values()]
-                .sort((a, b) => a.statusOrder - b.statusOrder || a.orderInStatus - b.orderInStatus)
+                .sort((a, b) => a.folderOrder - b.folderOrder || a.statusOrder - b.statusOrder || a.orderInStatus - b.orderInStatus)
                 .forEach((meta, index) => { meta.groupOrder = index; });
 
             this.projectSortMetaCache = projectSortMap;
@@ -5513,6 +5525,7 @@ export class ReminderPanel {
     private getProjectSortMeta(reminder: any): {
         hasProject: boolean;
         projectId: string;
+        folderOrder: number;
         statusOrder: number;
         orderInStatus: number;
     } {
@@ -5521,6 +5534,7 @@ export class ReminderPanel {
             return {
                 hasProject: false,
                 projectId: '',
+                folderOrder: Number.MAX_SAFE_INTEGER,
                 statusOrder: Number.MAX_SAFE_INTEGER,
                 orderInStatus: Number.MAX_SAFE_INTEGER
             };
@@ -5531,6 +5545,7 @@ export class ReminderPanel {
             return {
                 hasProject: true,
                 projectId,
+                folderOrder: Number.MAX_SAFE_INTEGER,
                 statusOrder: Number.MAX_SAFE_INTEGER,
                 orderInStatus: Number.MAX_SAFE_INTEGER
             };
@@ -5539,12 +5554,13 @@ export class ReminderPanel {
         return {
             hasProject: true,
             projectId,
+            folderOrder: projectMeta.folderOrder,
             statusOrder: projectMeta.statusOrder,
             orderInStatus: projectMeta.orderInStatus
         };
     }
 
-    // 项目排序：有项目始终在前；同为有项目时按 ProjectPanel 选择的排序方式排序
+    // 文件夹顺序优先；同文件夹内保留状态顺序，再按项目面板规则排列项目。
     private compareByProject(a: any, b: any, order?: 'asc' | 'desc'): number {
         const metaA = this.getProjectSortMeta(a);
         const metaB = this.getProjectSortMeta(b);
@@ -5556,6 +5572,9 @@ export class ReminderPanel {
         if (!metaA.hasProject && !metaB.hasProject) {
             return 0;
         }
+
+        const folderDiff = metaA.folderOrder - metaB.folderOrder;
+        if (folderDiff !== 0) return folderDiff;
 
         const statusDiff = metaA.statusOrder - metaB.statusOrder;
         if (statusDiff !== 0) {
