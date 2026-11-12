@@ -1,8 +1,15 @@
 import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
+import { renderProjectStartInfo } from "../render/projectStartInfo";
 import { Dialog } from "siyuan";
 import { i18n } from "../../pluginInstance";
 import { ProjectKanbanView } from "../panel/ProjectKanbanView";
 import { getAllReminders } from "../../utils/icsSubscription";
+
+// 状态名称和 Emoji 保持纯文本，避免被元数据图标替换为 SVG。
+function escapeStatsText(value: string): string {
+    return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 export function parseTitle(title: string): { emoji: string; text: string } {
     if (!title) return { emoji: '', text: '' };
@@ -127,7 +134,7 @@ function renderStatsPanelHtml(totalTasks: number, totalPomodoro: number, focusTi
 }
 
 export function showProjectStatsDialog(plugin: any, project: any, reminderDataCache?: any) {
-    const parsed = parseTitle(project.title || '');
+    const parsed = parseTitle(project.title || project.name || '');
     showStatsDialogForProjects(
         plugin,
         parsed.emoji || "🎯",
@@ -197,12 +204,6 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
             const aggregatedStatusCounts: Record<string, number> = {};
             const statusInfoMap = new Map<string, { name: string, icon: string }>();
 
-            statusInfoMap.set('doing', { name: i18n("doing") || '进行中', icon: '🏃' });
-            statusInfoMap.set('short_term', { name: i18n("shortTerm") || '短期', icon: renderTaskMetadataIcon('calendar') });
-            statusInfoMap.set('long_term', { name: i18n("longTerm") || '长期', icon: '⏳' });
-            statusInfoMap.set('completed', { name: i18n("done") || '已完成', icon: '✅' });
-            statusInfoMap.set('abandoned', { name: i18n("abandoned") || '放弃', icon: '❌' });
-
             let totalPomodoro = 0;
             let totalFocus = 0;
 
@@ -263,8 +264,8 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
                     <div style="display:flex; flex-direction:column; gap:4px; margin-bottom: 8px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px;">
                             <span style="display:flex; align-items:center; gap:6px;">
-                                <span style="font-size:14px;">${info.icon || '📝'}</span>
-                                <span style="font-weight: 500;">${info.name}</span>
+                                ${info.icon ? `<span style="font-size:14px;">${escapeStatsText(info.icon)}</span>` : ''}
+                                <span style="font-weight: 500;">${escapeStatsText(info.name)}</span>
                             </span>
                             <span style="font-weight:500; opacity: 0.9;">${i18n('statusCountPercentage', { count: String(count), percent: String(percentage) })}</span>
                         </div>
@@ -444,6 +445,8 @@ export async function showStatsDialogForProjects(plugin: any, titleIcon: string,
                     ${subtitleText}
                 </div>
             </div>
+
+            ${targetType === 'project' && projects.length === 1 ? renderProjectStartInfo(projects[0].startDate) : ''}
 
             <!-- Tabs Header (if project has groups) -->
             ${tabHeadersHtml}

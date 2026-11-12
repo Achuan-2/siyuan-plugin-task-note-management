@@ -1,5 +1,6 @@
 <script lang="ts">
     import { renderTaskMetadataText } from "../render/taskMetadataIcons";
+    import { renderProjectStartInfo } from "../render/projectStartInfo";
 
     import { createEventDispatcher } from "svelte";
     import { i18n } from '../../pluginInstance';
@@ -29,6 +30,7 @@
             </span>
         {/if}
     </div>
+    {@html renderProjectStartInfo(item.project.startDate)}
     <div class="card-stats">
         {#each item.statusCounts as sc (sc.id)}
             <span class="project-count">{#if sc.icon}{sc.icon} {/if}{sc.name}: {sc.count}</span>
