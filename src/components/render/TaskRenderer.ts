@@ -58,6 +58,7 @@ export interface TaskRenderContext {
     getReminderKanbanStatusInfo?: (task: any) => any;
     formatReminderTime?: (dateStr: string, timeStr: string, today: string, endDateStr?: string, endTimeStr?: string, task?: any) => string;
     formatCompletedTime?: (timeStr: string) => string;
+    completedTimePrefix?: string;
     isTodayCompleted?: (task: any, today: string) => boolean;
     getCompletedTime?: (task: any) => string;
     canApplyTodayIgnore?: (task: any, today: string) => boolean;
@@ -1325,7 +1326,9 @@ export class TaskRenderer {
                     completedEl.textContent = i18n('todayCompletedWithTime', { time: timeOnly }) || `今日完成于 ${timeOnly}`;
                 } else {
                     completedEl.innerHTML = renderTaskMetadataIcon('check') + ' ';
-                    completedEl.appendChild(document.createTextNode(formattedTime));
+                    completedEl.appendChild(document.createTextNode(
+                        context.completedTimePrefix ? `${context.completedTimePrefix} ${formattedTime}` : formattedTime
+                    ));
                 }
                 completedEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
                 infoEl.appendChild(completedEl);

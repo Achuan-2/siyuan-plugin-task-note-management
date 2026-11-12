@@ -19,6 +19,7 @@ import { TaskRenderer } from "../render/TaskRenderer";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
+import { formatTaskCompletedTime } from '../../utils/taskCompletedTime';
 import { LongPressTaskDrag, type TaskDragPoint } from '../../utils/longPressTaskDrag';
 import { generateRepeatInstances, generateRepeatInstancesWithFutureGuarantee, getRepeatDescription, getDaysDifference, addDaysToDate, generateSubtreeInstances, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, removeRepeatInstance, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
@@ -8001,36 +8002,7 @@ export class ReminderPanel {
      * @returns 格式化的时间显示
      */
     private formatCompletedTime(completedTime: string): string {
-        try {
-            const today = getLogicalDateString();
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = getLocalDateString(yesterday);
-
-            // 解析完成时间
-            const completedDate = new Date(completedTime.replace(' ', 'T'));
-            const completedDateLogicalStr = getLogicalDateString(completedDate);
-
-            const timeStr = completedDate.toLocaleTimeString(getLocaleTag(), {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            if (completedDateLogicalStr === today) {
-                return `${i18n('today')} ${timeStr}`;
-            } else if (completedDateLogicalStr === yesterdayStr) {
-                return `${i18n('yesterday')} ${timeStr}`;
-            } else {
-                const dateStr = completedDate.toLocaleDateString(getLocaleTag(), {
-                    month: 'short',
-                    day: 'numeric'
-                });
-                return `${dateStr} ${timeStr}`;
-            }
-        } catch (error) {
-            console.error("Failed to format completion time:", error);
-            return completedTime;
-        }
+        return formatTaskCompletedTime(completedTime);
     }
 
     private async showReminderContextMenu(event: { clientX: number; clientY: number }, reminder: any) {

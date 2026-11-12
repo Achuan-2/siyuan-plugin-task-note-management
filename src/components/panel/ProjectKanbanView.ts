@@ -6,6 +6,7 @@ import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
+import { formatTaskCompletedTime } from '../../utils/taskCompletedTime';
 import { ViewLifecycle } from '../../utils/viewLifecycle';
 import { showMessage, confirm, Menu, Dialog, Constants, openEmoji, platformUtils } from "siyuan";
 
@@ -8675,6 +8676,8 @@ export class ProjectKanbanView {
         const context = {
             plugin: this.plugin,
             today: getLogicalDateString(),
+            formatCompletedTime: formatTaskCompletedTime,
+            completedTimePrefix: i18n('completedAt'),
             collapsedTasks: this.collapsedTasks,
             isTaskCollapsed: (t: any, hasChildren: boolean) => this.isTaskCollapsed(t, hasChildren),
             selectedTaskIds: this.selectedTaskIds,
@@ -14837,7 +14840,7 @@ export class ProjectKanbanView {
                             `;
                             infoEl.insertBefore(completedTimeEl, infoEl.firstChild);
                         }
-                        completedTimeEl.innerHTML = `<span>✅</span><span>${i18n("completedAtLabel")}${getLocalDateTimeString(new Date(task.completedTime))}</span>`;
+                        setTaskMetadataText(completedTimeEl, `✅ ${i18n('completedAt')} ${formatTaskCompletedTime(task.completedTime)}`);
                     } else if (completedTimeEl) {
                         completedTimeEl.remove();
                     }

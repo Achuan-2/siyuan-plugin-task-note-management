@@ -377,8 +377,8 @@ function boardRenderingClass(renderTask) {
     const code = ts.transpileModule(`class Board { ${members.filter(node => names.includes(node.name?.getText(source))).map(node => node.getText(source)).join('\n')} reloadCollapseState() ${reloadCollapseBlock} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
-    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'TaskRenderer', 'getLogicalDateString', code + '; return Board;')(
-        TaskHierarchyIndex, CompletedSubtaskCollapseState, { render: renderTask }, () => today,
+    return new Function('TaskHierarchyIndex', 'CompletedSubtaskCollapseState', 'TaskRenderer', 'getLogicalDateString', 'formatTaskCompletedTime', 'i18n', code + '; return Board;')(
+        TaskHierarchyIndex, CompletedSubtaskCollapseState, { render: renderTask }, () => today, value => value, key => key,
     );
 }
 
