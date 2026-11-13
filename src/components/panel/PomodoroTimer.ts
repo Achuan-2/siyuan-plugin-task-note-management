@@ -87,6 +87,7 @@ export class PomodoroTimer {
     private phaseStartTime: number = 0; // 当前阶段真实开始时间（不随暂停恢复而重算）
     private activeWorkSessionId: string | null = null; // 开始专注时预创建的记录ID
     private activeWorkSessionStartTime: number = 0; // 当前专注记录的真实开始时间
+    private activeWorkSessionStartPromise: Promise<string | null> | null = null;
     private pausedTime: number = 0; // 记录暂停时累计的时间
 
 
@@ -476,6 +477,7 @@ export class PomodoroTimer {
         this.phaseStartTime = 0;
         this.activeWorkSessionId = null;
         this.activeWorkSessionStartTime = 0;
+        this.activeWorkSessionStartPromise = null;
     }
 
     private getWorkSessionStartDate(): Date | undefined {
@@ -487,22 +489,31 @@ export class PomodoroTimer {
         if (!this.isWorkPhase || this.activeWorkSessionId) {
             return;
         }
+        if (this.activeWorkSessionStartPromise) {
+            await this.activeWorkSessionStartPromise;
+            return;
+        }
 
         const sessionStartTime = startTimestamp || this.phaseStartTime || Date.now();
         this.phaseStartTime = this.phaseStartTime || sessionStartTime;
         this.activeWorkSessionStartTime = sessionStartTime;
 
-        try {
-            this.activeWorkSessionId = await this.recordManager.startWorkSession(
-                this.reminder.id,
-                this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注'),
-                this.currentPhaseOriginalDuration || this.settings.workDuration || 25,
-                this.isCountUp,
-                new Date(sessionStartTime)
-            );
-        } catch (error) {
+        const request = this.recordManager.startWorkSession(
+            this.reminder.id,
+            this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注'),
+            this.currentPhaseOriginalDuration || this.settings.workDuration || 25,
+            this.isCountUp,
+            new Date(sessionStartTime)
+        ).catch(error => {
             console.error("[PomodoroTimer] Failed to create in-progress pomodoro record:", error);
-            this.activeWorkSessionId = null;
+            return null;
+        });
+        this.activeWorkSessionStartPromise = request;
+        const sessionId = await request;
+        // 保存可能跨越阶段切换；旧请求不能覆盖新阶段的记录 ID。
+        if (this.activeWorkSessionStartPromise === request) {
+            this.activeWorkSessionStartPromise = null;
+            this.activeWorkSessionId = sessionId;
         }
     }
 
@@ -516,7 +527,13 @@ export class PomodoroTimer {
         endTime: Date = new Date()
     ): Promise<PomodoroSession | null> {
         const startTime = this.getWorkSessionStartDate();
-        const activeSessionId = this.activeWorkSessionId;
+        const startRequest = this.activeWorkSessionStartPromise;
+        const existingSessionId = this.activeWorkSessionId;
+        // 在首次等待前交出旧阶段的记录，避免后台保存完成后清掉新阶段记录。
+        this.activeWorkSessionId = null;
+        this.activeWorkSessionStartTime = 0;
+        this.activeWorkSessionStartPromise = null;
+        const activeSessionId = existingSessionId || (startRequest ? await startRequest : null);
         let session: PomodoroSession | null = null;
 
         if (activeSessionId) {
@@ -548,9 +565,67 @@ export class PomodoroTimer {
             );
         }
 
-        this.activeWorkSessionId = null;
-        this.activeWorkSessionStartTime = 0;
         return session;
+    }
+
+    // 结束记录保留当前阶段的时间快照，存储与备注弹窗不阻塞下一阶段。
+    private recordCompletedWorkPhase(minutes: number) {
+        const completion = this.finishActiveWorkSession(
+            minutes,
+            this.reminder.id,
+            this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注'),
+            minutes,
+            true,
+            false
+        );
+        this.phaseStartTime = 0;
+        void completion.then(session => {
+            if (this.isWindowClosed) return;
+            this.updateStatsDisplay();
+            this.openPomodoroCompletionNotePopup(session);
+        }).catch(error => {
+            console.error('[PomodoroTimer] Failed to save completed work phase:', error);
+        });
+    }
+
+    private recordCompletedBreakPhase() {
+        const completion = this.recordManager.recordBreakSession(
+            this.currentPhaseOriginalDuration,
+            this.reminder.id,
+            this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注'),
+            this.currentPhaseOriginalDuration,
+            this.isLongBreak,
+            true,
+            {
+                startTime: this.phaseStartTime > 0 ? new Date(this.phaseStartTime) : undefined,
+                endTime: new Date()
+            }
+        );
+        this.phaseStartTime = 0;
+        void completion.then(() => {
+            if (!this.isWindowClosed) this.updateStatsDisplay();
+        }).catch(error => {
+            console.error('[PomodoroTimer] Failed to save completed break phase:', error);
+        });
+    }
+
+    private playAudioWithoutBlocking(audio: HTMLAudioElement) {
+        if (!audio) return;
+        void this.safePlayAudio(audio).catch(error => {
+            console.warn('[PomodoroTimer] Failed to play phase audio:', error);
+        });
+    }
+
+    private async playPhaseBackgroundAudio() {
+        const generation = this.audioPlaybackGeneration;
+        try {
+            if (!this.audioInitialized) await this.initializeAudioPlayback();
+            if (this.isWindowClosed || generation !== this.audioPlaybackGeneration) return;
+            const audio = this.isWorkPhase ? this.workAudio : (this.isLongBreak ? this.longBreakAudio : this.breakAudio);
+            this.playAudioWithoutBlocking(audio);
+        } catch (error) {
+            console.warn('[PomodoroTimer] Failed to initialize phase audio:', error);
+        }
     }
 
     /**
@@ -6597,7 +6672,7 @@ export class PomodoroTimer {
 
             // 自动切换会先停止背景音，结束提示音需在切换完成后播放。
             if (!this.autoMode && this.breakEndAudio) {
-                await this.safePlayAudio(this.breakEndAudio);
+                this.playAudioWithoutBlocking(this.breakEndAudio);
             }
 
             // 显示系统弹窗通知
@@ -6612,22 +6687,7 @@ export class PomodoroTimer {
             }
 
             // 记录完成的休息时间（每个实例独立记录）
-            const eventId = this.reminder.id;
-            const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
-
-            await this.recordManager.recordBreakSession(
-                this.currentPhaseOriginalDuration,
-                eventId,
-                eventTitle,
-                this.currentPhaseOriginalDuration,
-                this.isLongBreak,
-                true,
-                {
-                    startTime: this.phaseStartTime > 0 ? new Date(this.phaseStartTime) : undefined,
-                    endTime: new Date()
-                }
-            );
-            this.phaseStartTime = 0;
+            this.recordCompletedBreakPhase();
 
             // 检查是否启用自动模式并进入下一阶段
             if (this.autoMode) {
@@ -6640,7 +6700,7 @@ export class PomodoroTimer {
                 const switchToWork = async () => {
                     await this.autoSwitchToWork();
                     if (this.breakEndAudio) {
-                        await this.safePlayAudio(this.breakEndAudio);
+                        this.playAudioWithoutBlocking(this.breakEndAudio);
                     }
                 };
                 // 检查是否为 BrowserWindow 模式，如果是则跳过 setTimeout 延迟以防被 Chromium 挂起后台节流
@@ -6690,6 +6750,7 @@ export class PomodoroTimer {
             }
         } finally {
             this.isCompletingPhase = false;
+            this.updateDisplay();
         }
     }
 
@@ -6730,25 +6791,14 @@ export class PomodoroTimer {
 
                 // 自动切换会先停止背景音，结束提示音需在切换完成后播放。
                 if (!this.autoMode && this.workEndAudio) {
-                    await this.safePlayAudio(this.workEndAudio);
-                }            // 记录完成的工作番茄（每个实例独立记录）
-                const eventId = this.reminder.id;
-                const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
+                    this.playAudioWithoutBlocking(this.workEndAudio);
+                }
 
                 // 计算实际完成的时间（分钟）
                 // 在倒计时模式下，实际完成时间 = totalTime（设定的总时间）
                 const actualDuration = Math.round(this.totalTime / 60);
 
-                const completedSession = await this.finishActiveWorkSession(
-                    actualDuration,
-                    eventId,
-                    eventTitle,
-                    actualDuration,
-                    true,
-                    false
-                );
-                this.openPomodoroCompletionNotePopup(completedSession);
-                this.phaseStartTime = 0;
+                this.recordCompletedWorkPhase(actualDuration);
 
                 // 更新番茄数量计数
                 this.completedPomodoros++;
@@ -6773,7 +6823,7 @@ export class PomodoroTimer {
                     const switchToBreak = async () => {
                         await this.autoSwitchToBreak(shouldTakeLongBreak);
                         if (this.workEndAudio) {
-                            await this.safePlayAudio(this.workEndAudio);
+                            this.playAudioWithoutBlocking(this.workEndAudio);
                         }
                     };
                     // 自动切换到休息阶段（如果是 BrowserWindow 模式，跳过延迟防 Chromium 挂起）
@@ -6836,26 +6886,11 @@ export class PomodoroTimer {
 
                 // 自动切换会先停止背景音，结束提示音需在切换完成后播放。
                 if (!this.autoMode && this.breakEndAudio) {
-                    await this.safePlayAudio(this.breakEndAudio);
+                    this.playAudioWithoutBlocking(this.breakEndAudio);
                 }
 
                 // 记录完成的休息时间（每个实例独立记录）
-                const eventId = this.reminder.id;
-                const eventTitle = this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注');
-
-                await this.recordManager.recordBreakSession(
-                    this.currentPhaseOriginalDuration,
-                    eventId,
-                    eventTitle,
-                    this.currentPhaseOriginalDuration,
-                    this.isLongBreak,
-                    true,
-                    {
-                        startTime: this.phaseStartTime > 0 ? new Date(this.phaseStartTime) : undefined,
-                        endTime: new Date()
-                    }
-                );
-                this.phaseStartTime = 0;
+                this.recordCompletedBreakPhase();
 
                 const breakType = this.isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
 
@@ -6880,7 +6915,7 @@ export class PomodoroTimer {
                     const switchToWork = async () => {
                         await this.autoSwitchToWork();
                         if (this.breakEndAudio) {
-                            await this.safePlayAudio(this.breakEndAudio);
+                            this.playAudioWithoutBlocking(this.breakEndAudio);
                         }
                     };
                     // 自动切换到工作阶段（如果是 BrowserWindow 模式，跳过延迟防 Chromium 挂起）
@@ -6942,6 +6977,7 @@ export class PomodoroTimer {
             }
         } finally {
             this.isCompletingPhase = false;
+            this.updateDisplay();
         }
     }
     /**
@@ -6949,10 +6985,6 @@ export class PomodoroTimer {
  * @param isLongBreak 是否为长休息
  */
     private async autoSwitchToBreak(isLongBreak: boolean = false) {
-        if (!this.audioInitialized) {
-            await this.initializeAudioPlayback();
-        }
-
         // 停止所有音频和定时器
         this.stopAllAudio(true);
         this.stopRandomRestTimer();
@@ -6985,13 +7017,6 @@ export class PomodoroTimer {
             this.totalTime = this.timeLeft;
         }
 
-        // 播放对应的背景音
-        if (isLongBreak && this.longBreakAudio) {
-            await this.safePlayAudio(this.longBreakAudio);
-        } else if (!isLongBreak && this.breakAudio) {
-            await this.safePlayAudio(this.breakAudio);
-        }
-
         // 开始计时
         const phaseStart = Date.now();
         this.startTime = phaseStart;
@@ -7007,18 +7032,13 @@ export class PomodoroTimer {
 
         this.updateDisplay();
         this.updateStatsDisplay();
-
-        const breakType = isLongBreak ? (i18n('pomodoroLongBreak') || '长时休息') : (i18n('pomodoroBreak') || '短时休息');
+        void this.playPhaseBackgroundAudio();
     }
 
     /**
      * 自动切换到工作阶段
      */
     private async autoSwitchToWork() {
-        if (!this.audioInitialized) {
-            await this.initializeAudioPlayback();
-        }
-
         // 停止所有音频和定时器
         this.stopAllAudio(true);
         this.stopRandomRestTimer();
@@ -7050,11 +7070,6 @@ export class PomodoroTimer {
             this.totalTime = this.timeLeft;
         }
 
-        // 播放工作背景音
-        if (this.workAudio) {
-            await this.safePlayAudio(this.workAudio);
-        }
-
         // 启动随机微休息定时器
         if (this.isWorkPhase) {
             this.startRandomRestTimer();
@@ -7064,7 +7079,7 @@ export class PomodoroTimer {
         const phaseStart = Date.now();
         this.startTime = phaseStart;
         this.phaseStartTime = phaseStart;
-        await this.ensureActiveWorkSessionStarted(phaseStart);
+        void this.ensureActiveWorkSessionStarted(phaseStart);
         this.timer = window.setInterval(() => {
             this.reconcileTimerState();
         }, 500);
@@ -7074,7 +7089,7 @@ export class PomodoroTimer {
 
         this.updateDisplay();
         this.updateStatsDisplay();
-
+        void this.playPhaseBackgroundAudio();
     }
 
     private stopAllAudio(preserveEndPopupAudio = false) {
