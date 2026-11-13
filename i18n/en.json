@@ -920,6 +920,7 @@
     "eventTitleCopied": "Event title copied to clipboard",
     "createCopy": "Create Copy",
     "copyCreated": "Copy created",
+    "projectCopyTitle": "${title} (Copy)",
     "parentTask": "Parent Task",
     "taskSummary": "Task Summary",
     "showSummaryFailed": "Failed to show summary",

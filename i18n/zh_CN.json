@@ -920,6 +920,7 @@
     "eventTitleCopied": "事件标题已复制到剪贴板",
     "createCopy": "创建副本",
     "copyCreated": "副本已创建",
+    "projectCopyTitle": "${title}（副本）",
     "parentTask": "父任务",
     "taskSummary": "任务摘要",
     "showSummaryFailed": "显示摘要失败",

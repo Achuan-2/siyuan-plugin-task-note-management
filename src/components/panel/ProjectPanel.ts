@@ -1559,6 +1559,13 @@ export class ProjectPanel {
             click: () => this.editProject(project)
         });
 
+        // 创建空项目副本
+        menu.addItem({
+            icon: "iconCopy",
+            label: i18n("createCopy"),
+            click: () => this.createProjectCopy(project.id)
+        });
+
         // 合并到其他项目
         menu.addItem({
             icon: "iconTNMerge",
@@ -1741,6 +1748,16 @@ export class ProjectPanel {
             x: event.clientX,
             y: event.clientY
         });
+    }
+
+    private async createProjectCopy(projectId: string) {
+        try {
+            const copy = await ProjectManager.getInstance(this.plugin).duplicateEmptyProject(projectId);
+            showMessage(i18n(copy ? "copyCreated" : "projectNotExist"));
+        } catch (error) {
+            console.error("Failed to create empty project copy:", error);
+            showMessage(i18n("operationFailed"));
+        }
     }
 
     private async copyProjectRef(project: any) {

@@ -1101,6 +1101,70 @@ export class ProjectManager {
     }
 
     /**
+     * 仅复制项目配置，不读取或改写任务，也不继承原项目的块绑定和里程碑。
+     */
+    public async duplicateEmptyProject(projectId: string): Promise<Project | undefined> {
+        const projectData = await this.plugin.loadProjectData() || {};
+        const source = projectData[projectId];
+        if (!source || typeof source !== 'object') return undefined;
+
+        let id: string;
+        do {
+            id = `quick_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        } while (projectData[id]);
+
+        const entries = this.getProjectEntries(projectData);
+        const baseTitle = i18n('projectCopyTitle', { title: source.title || source.name || i18n('unnamedProject') });
+        const titles = new Set(entries.map(([, project]) => project.title || project.name));
+        let title = baseTitle;
+        for (let index = 2; titles.has(title); index++) title = `${baseTitle} ${index}`;
+
+        // 使用配置白名单，避免把订阅、任务关联或以后新增的运行数据带入空副本。
+        const settingKeys = [
+            'status', 'archived', 'priority', 'color', 'categoryId', 'folderId',
+            'kanbanMode', 'kanbanStatuses', 'sortRule', 'sortOrder', 'sortCriteria',
+            'doneSort', 'doneSortOrder', 'showCompletedSubtasks', 'showTaskCategories',
+            'clipTitleToOneLine', 'hideEmptyStatusBars', 'hideNoDoingGroups', 'hideNoTodayGroups',
+            'customGroupTabsMode', 'groupTabCountMode', 'customGroupStatusDisplayMode', 'statusTabsMode'
+        ];
+        const settings: Record<string, any> = {};
+        for (const key of settingKeys) {
+            if (source[key] !== undefined) settings[key] = source[key];
+        }
+        // JSON 深拷贝确保副本的数组和对象不会与原项目共享引用。
+        const copy = JSON.parse(JSON.stringify(settings));
+        const now = new Date().toISOString();
+        Object.assign(copy, {
+            id, title, note: '', createdTime: now, updatedTime: now,
+            sort: entries.reduce((max, [, project]) => {
+                return (project.folderId || '') === (source.folderId || '') && typeof project.sort === 'number'
+                    ? Math.max(max, project.sort) : max;
+            }, 0) + 10,
+            customGroups: (source.customGroups || []).map((group: ProjectGroup, index: number) => ({
+                id: `${id}_group_${index}`,
+                name: group.name,
+                color: group.color,
+                icon: group.icon,
+                sort: group.sort,
+                archived: group.archived,
+                visibleStatusIds: group.visibleStatusIds ? [...group.visibleStatusIds] : undefined
+            })),
+            tags: (source.tags || []).map((tag: any, index: number) => typeof tag === 'string'
+                ? tag
+                : { id: `${id}_tag_${index}`, name: tag.name, color: tag.color })
+        });
+
+        await this.plugin.saveProjectData({ ...projectData, [id]: copy });
+        const project = { ...copy, name: title } as Project;
+        this.projects.push(project);
+        if (copy.color) this.projectColors[id] = copy.color;
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('projectUpdated', { detail: { projectId: id, project: copy } }));
+        }
+        return project;
+    }
+
+    /**
      * MCP kernel compat: create project
      */
     public async createProject(input: {
