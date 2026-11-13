@@ -4,16 +4,13 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
 const ts = require('typescript');
+const { loadPomodoroIcons } = require('./helpers/pomodoro-icon-loader.cjs');
 
 const root = path.resolve(__dirname, '..');
 const compile = source => ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS }
 }).outputText;
-const iconsModule = { exports: {} };
-new Function('module', 'exports', compile(fs.readFileSync(
-    path.join(root, 'src/components/render/pomodoroIcons.ts'), 'utf8'
-)))(iconsModule, iconsModule.exports);
-const icons = iconsModule.exports;
+const icons = loadPomodoroIcons();
 
 const source = fs.readFileSync(path.join(root, 'src/components/panel/PomodoroTimer.ts'), 'utf8');
 const ast = ts.createSourceFile('PomodoroTimer.ts', source, ts.ScriptTarget.Latest, true);
@@ -59,7 +56,7 @@ function element() {
 test('all icon states use self-contained colored SVG and preserve label escaping', () => {
     for (const [key, svg] of Object.entries(icons.POMODORO_ICON_SVGS)) {
         assert.equal(icons.renderPomodoroIcons(key), svg, key);
-        assert.match(svg, /<svg[^>]*viewBox="0 0 24 24"/);
+        assert.match(svg, /<svg[^>]*viewBox="0 0 (?:24 24|1024 1024)"/);
         assert.match(svg, /(?:fill|stroke)="#[0-9a-f]+"/i);
         assert.doesNotMatch(svg, /<image|<use|https?:\/\/(?!www\.w3\.org)/);
     }
@@ -67,12 +64,10 @@ test('all icon states use self-contained colored SVG and preserve label escaping
     assert.match(html, /<svg/);
     assert.match(html, /&lt;task &amp; &quot;name&quot;&gt;/);
     assert.doesNotMatch(html, /▶️|<task/);
-    for (const emoji of ['🍅', '🍵', '🧘', '🧘‍♀️', '💪', '⏱', '⏱️', '🎲']) {
-        assert.equal(icons.renderPomodoroIcons(emoji), emoji);
-    }
+    assert.equal(icons.renderPomodoroIcons('💪'), '💪');
 });
 
-test('titlebar controls use monochrome Lucide-style SVG while phase icons remain emoji', () => {
+test('titlebar controls use monochrome SVG while phase icons use colored SVG', () => {
     for (const [key, svg] of Object.entries(icons.POMODORO_TOOLBAR_ICON_SVGS)) {
         assert.equal(icons.renderPomodoroToolbarIcon(key), svg);
         assert.match(svg, /stroke="currentColor"/);
@@ -82,7 +77,7 @@ test('titlebar controls use monochrome Lucide-style SVG while phase icons remain
     const toolbar = html.slice(html.indexOf('<div class="custom-titlebar">'), html.indexOf('<div class="pomodoro-content">'));
     assert.match(toolbar, /<svg/);
     assert.doesNotMatch(toolbar, /(?:fill|stroke)="#/);
-    assert.equal(icons.renderPomodoroIcons('🍅'), '🍅');
+    assert.equal(icons.renderPomodoroIcons('🍅'), icons.POMODORO_ICON_SVGS['🍅']);
 });
 
 test('native menu images use the SVG paths at multiple DPI scales and cache by theme', () => {
@@ -90,16 +85,21 @@ test('native menu images use the SVG paths at multiple DPI scales and cache by t
     const document = {
         createElement(tag) {
             assert.equal(tag, 'canvas');
-            const context = { paths: [], scale(x, y) { this.scaleFactors = [x, y]; }, stroke(path) { this.paths.push(path.data); } };
+            const context = {
+                paths: [], scales: [], operations: [],
+                scale(x, y) { this.scales.push([x, y]); },
+                save() {}, restore() {},
+                stroke(path) { this.paths.push(path.data); this.operations.push(['stroke', this.strokeStyle]); },
+                fill(path) { this.paths.push(path.data); this.operations.push(['fill', this.fillStyle]); },
+            };
             const canvas = { getContext: () => context, context, toDataURL: () => 'data:image/png;base64,test' };
             canvases.push(canvas);
             return canvas;
         },
     };
-    const module = { exports: {} };
-    new Function('module', 'exports', 'document', 'Path2D', compile(fs.readFileSync(
-        path.join(root, 'src/components/render/pomodoroIcons.ts'), 'utf8'
-    )))(module, module.exports, document, class Path2D { constructor(data) { this.data = data; } });
+    const api = loadPomodoroIcons({ globals: {
+        document, Path2D: class Path2D { constructor(data) { this.data = data; } },
+    } });
     let createdImages = 0;
     const nativeImage = {
         createEmpty() {
@@ -107,19 +107,22 @@ test('native menu images use the SVG paths at multiple DPI scales and cache by t
             return { representations: [], addRepresentation(rep) { this.representations.push(rep); }, setTemplateImage(value) { this.template = value; } };
         },
     };
-    const api = module.exports;
     for (const name of Object.keys(api.POMODORO_MENU_ICON_PATHS)) {
         assert.match(api.renderPomodoroMenuIcon(name), /<svg/);
-        assert.match(api.renderPomodoroMenuIcon(name), /stroke="currentColor"/);
+        assert.match(api.renderPomodoroMenuIcon(name), /(?:fill|stroke)="currentColor"/);
         const image = api.getNativePomodoroMenuIcon(name, nativeImage, '#333333');
         assert.deepEqual(image.representations.map(rep => rep.scaleFactor), [1, 1.25, 1.5, 2, 3]);
         assert.equal(image.template, true);
         assert.equal(api.getNativePomodoroMenuIcon(name, nativeImage, '#333333'), image);
         for (const canvas of canvases.splice(0)) {
             assert.equal(canvas.width, canvas.height);
-            assert.deepEqual(canvas.context.scaleFactors, [canvas.width / 24, canvas.height / 24]);
+            assert.deepEqual(canvas.context.scales, name === 'longBreak'
+                ? [[canvas.width / 24, canvas.height / 24], [24 / 1024, 24 / 1024]]
+                : [[canvas.width / 24, canvas.height / 24]]);
             assert.deepEqual(canvas.context.paths, api.POMODORO_MENU_ICON_PATHS[name]);
-            assert.equal(canvas.context.strokeStyle, '#333333');
+            const operations = name === 'work' ? ['stroke', 'fill', 'stroke']
+                : name === 'longBreak' ? ['fill'] : api.POMODORO_MENU_ICON_PATHS[name].map(() => 'stroke');
+            assert.deepEqual(canvas.context.operations, operations.map(operation => [operation, '#333333']));
         }
     }
     assert.equal(createdImages, Object.keys(api.POMODORO_MENU_ICON_PATHS).length);
@@ -144,9 +147,7 @@ test('production minification preserves the self-contained renderer injected int
     const { code } = await transformWithEsbuild(fs.readFileSync(
         path.join(root, 'src/components/render/pomodoroIcons.ts'), 'utf8'
     ), 'pomodoroIcons.ts', { minify: true, format: 'cjs', target: 'es2020' });
-    const compiledModule = { exports: {} };
-    new Function('module', 'exports', code)(compiledModule, compiledModule.exports);
-    const factory = compiledModule.exports.createPomodoroIconRenderer;
+    const factory = loadPomodoroIcons({ code }).createPomodoroIconRenderer;
     const context = vm.createContext({});
     vm.runInContext(`const renderer = (${factory.toString()})(${JSON.stringify(icons.POMODORO_ICON_SVGS)});`, context);
     assert.equal(vm.runInContext("renderer.html('▶️')", context), icons.POMODORO_ICON_SVGS['▶️']);
@@ -159,11 +160,12 @@ test('normal and all mini layouts contain SVG controls and executable standalone
             new vm.Script(script);
             const body = html.split('<body')[1].split('<script>')[0];
             assert.doesNotMatch(body, /⏹|▶️|🔊|📌/);
-            assert.match(body, /id="diceIcon"[^>]*>🎲<\/span>/);
+            assert.ok(body.includes(`>${icons.POMODORO_ICON_SVGS['🎲']}</span>`));
             assert.doesNotMatch(body, /id="soundBtn"/);
             const phase = state.isWorkPhase === false ? (state.isLongBreak ? '🧘' : '🍵') : (state.isCountUp ? '⏱' : '🍅');
             for (const id of ['statusIcon', 'miniStatusTrigger']) {
-                assert.match(body, new RegExp(`id="${id}"[^>]*>${phase}</`));
+                const content = body.slice(body.indexOf(`id="${id}"`)).match(/^[^>]*>([\s\S]*?)<\/(?:div|button)>/)[1];
+                assert.equal(content, icons.POMODORO_ICON_SVGS[phase]);
             }
             for (const id of ['ringPlayPauseBtn', 'miniPlayPauseBtn',
                 'stopBtn', 'miniStopBtn', 'miniMinimalStopBtn', 'pinBtn', 'dockBtn']) {
@@ -174,7 +176,7 @@ test('normal and all mini layouts contain SVG controls and executable standalone
     }
 });
 
-test('standalone render preserves phase emoji and SVG controls during state updates', () => {
+test('standalone render updates phase SVG and controls without redundant DOM writes', () => {
     const { script } = fixture();
     const runtime = ts.createSourceFile('renderer.js', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const functions = runtime.statements.filter(node => ts.isFunctionDeclaration(node) &&
@@ -207,7 +209,7 @@ test('standalone render preserves phase emoji and SVG controls during state upda
     for (const [state, status, play] of steps) {
         Object.assign(context.localState, state);
         vm.runInContext('render()', context);
-        for (const id of ['statusIcon', 'miniStatusTrigger']) assert.equal(nodes.get(id).innerHTML, status);
+        for (const id of ['statusIcon', 'miniStatusTrigger']) assert.equal(nodes.get(id).innerHTML, icons.POMODORO_ICON_SVGS[status]);
         for (const id of ['ringPlayPauseBtn', 'miniPlayPauseBtn', 'miniMinimalPlayPauseBtn']) assert.equal(nodes.get(id).innerHTML, icons.POMODORO_ICON_SVGS[play]);
         assert.equal(nodes.get('dockBtn').innerHTML, icons.POMODORO_TOOLBAR_ICON_SVGS['➡️']);
         assert.equal(nodes.get('volumeMuteBtn').innerHTML, icons.POMODORO_ICON_SVGS['🔊']);

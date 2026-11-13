@@ -5,16 +5,13 @@ const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 const { test } = require('node:test');
 const ts = require('typescript');
+const { loadPomodoroIcons } = require('./helpers/pomodoro-icon-loader.cjs');
 
 const compiled = ts.transpileModule(fs.readFileSync(
     path.join(__dirname, '../src/components/panel/PomodoroTimer.ts'), 'utf8'
 ), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 
-const iconModule = { exports: {} };
-const iconCode = ts.transpileModule(fs.readFileSync(
-    path.join(__dirname, '../src/components/render/pomodoroIcons.ts'), 'utf8'
-), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
-new Function('module', 'exports', iconCode)(iconModule, iconModule.exports);
+const iconModule = { exports: loadPomodoroIcons() };
 
 function deferred() {
     let resolve;
