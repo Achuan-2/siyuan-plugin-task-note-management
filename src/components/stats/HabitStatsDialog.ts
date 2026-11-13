@@ -1,5 +1,5 @@
 ﻿import { Dialog } from "siyuan";
-import { isHabitCheckInDayComplete, type Habit } from "../../utils/habitUtils";
+import { shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitCheckInDayComplete, type Habit } from "../../utils/habitUtils";
 import { HabitDayDialog } from "../dialog/HabitDayDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import {
@@ -439,16 +439,7 @@ export class HabitStatsDialog {
                 return checkDate.getDay() === startDate.getDay();
 
             case "monthly":
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                if (frequency.interval) {
-                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
-                        (checkDate.getMonth() - startDate.getMonth());
-                    return monthsDiff >= 0 && monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getDate() === startDate.getDate();
-
+                return shouldCheckInOnDateUtil(habit, dateStr);
             case "yearly":
                 if (frequency.months && frequency.months.length > 0) {
                     if (!frequency.months.includes(checkDate.getMonth() + 1)) return false;

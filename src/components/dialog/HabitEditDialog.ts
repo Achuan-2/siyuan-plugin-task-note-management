@@ -2,6 +2,7 @@ import { setTaskMetadataText } from "../render/taskMetadataIcons";
 import { Dialog, showMessage, platformUtils, openEmoji } from "siyuan";
 import { getBlockByID, getBlockDOM } from "../../api";
 import type { Habit } from "../../utils/habitUtils";
+import { getMonthlyWeekRules, type MonthlyWeekRule } from "../../utils/monthlyRepeat";
 import { getLocalDateTimeString, getLogicalDateString } from "../../utils/dateUtils";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
 import { i18n } from "../../pluginInstance";
@@ -1008,6 +1009,18 @@ export class HabitEditDialog {
             monthDaysContainer.appendChild(cbLabel);
         }
 
+        // 每月可按日期或按第几个星期几重复，切换时保留未保存的选项。
+        const monthlyModeSelect = document.createElement('select');
+        monthlyModeSelect.name = 'monthlyRepeatMode';
+        monthlyModeSelect.className = 'b3-select';
+        monthlyModeSelect.setAttribute('aria-label', i18n('frequencyTypeLabel'));
+        monthlyModeSelect.innerHTML = `
+            <option value="date">${i18n('repeatMonthlyModeDate')}</option>
+            <option value="weekday">${i18n('repeatMonthlyModeWeekday')}</option>
+        `;
+        monthlyModeSelect.value = this.habit?.frequency?.monthlyRepeatMode || 'date';
+        const monthlyWeekRulesContainer = this.createMonthlyWeekRuleSelector();
+
         // 每年日期选择器（月-日格式）
         const yearlyDateContainer = document.createElement('div');
         yearlyDateContainer.style.cssText = 'display:flex; align-items:center; gap:8px;';
@@ -1041,7 +1054,9 @@ export class HabitEditDialog {
 
         helperContainer.appendChild(intervalContainer);
         helperContainer.appendChild(weekdaysContainer);
+        helperContainer.appendChild(monthlyModeSelect);
         helperContainer.appendChild(monthDaysContainer);
+        helperContainer.appendChild(monthlyWeekRulesContainer);
         helperContainer.appendChild(yearlyDateContainer);
 
         const noFrequencyHint = document.createElement('div');
@@ -1057,6 +1072,8 @@ export class HabitEditDialog {
         const updateHelperUI = () => {
             const type = select.value;
             noFrequencyHint.style.display = type === 'none' ? 'block' : 'none';
+            monthlyModeSelect.style.display = type === 'monthly' ? '' : 'none';
+            monthlyWeekRulesContainer.style.display = type === 'monthly' && monthlyModeSelect.value === 'weekday' ? 'flex' : 'none';
             if (type === 'daily') {
                 intervalContainer.style.display = 'flex';
                 intervalSuffix.textContent = i18n("intervalSuffixDay");
@@ -1073,7 +1090,7 @@ export class HabitEditDialog {
                 intervalContainer.style.display = 'flex';
                 intervalSuffix.textContent = i18n("intervalSuffixMonth");
                 weekdaysContainer.style.display = 'none';
-                monthDaysContainer.style.display = 'flex';
+                monthDaysContainer.style.display = monthlyModeSelect.value === 'date' ? 'flex' : 'none';
                 yearlyDateContainer.style.display = 'none';
             } else if (type === 'yearly') {
                 intervalContainer.style.display = 'flex';
@@ -1098,8 +1115,79 @@ export class HabitEditDialog {
         }
 
         select.addEventListener('change', () => updateHelperUI());
+        monthlyModeSelect.addEventListener('change', updateHelperUI);
 
         return group;
+    }
+
+    private createMonthlyWeekRuleSelector(): HTMLElement {
+        const container = document.createElement('div');
+        container.style.cssText = 'display:flex; flex-direction:column; gap:8px;';
+        const list = document.createElement('div');
+        list.style.cssText = 'display:flex; flex-direction:column; gap:8px;';
+        container.appendChild(list);
+
+        const orderOptions = [
+            { value: 1, key: 'monthlyWeekOrderFirst' },
+            { value: 2, key: 'monthlyWeekOrderSecond' },
+            { value: 3, key: 'monthlyWeekOrderThird' },
+            { value: 4, key: 'monthlyWeekOrderFourth' },
+            { value: 5, key: 'monthlyWeekOrderFifth' },
+            { value: -1, key: 'monthlyWeekOrderLast' }
+        ];
+        const weekdayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const updateRemoveButtons = () => {
+            list.querySelectorAll<HTMLButtonElement>('.habit-monthly-week-rule-remove').forEach(button => {
+                button.disabled = list.children.length <= 1;
+                button.style.visibility = button.disabled ? 'hidden' : 'visible';
+            });
+        };
+        const addRow = (rule: MonthlyWeekRule) => {
+            const row = document.createElement('div');
+            row.className = 'habit-monthly-week-rule';
+            row.style.cssText = 'display:flex; align-items:center; gap:8px;';
+            const order = document.createElement('select');
+            order.name = 'monthlyWeekOrder';
+            order.className = 'b3-select';
+            order.style.cssText = 'flex:1; min-width:0;';
+            order.innerHTML = orderOptions.map(option => `<option value="${option.value}">${i18n(option.key)}</option>`).join('');
+            order.value = String(rule.order);
+            const weekday = document.createElement('select');
+            weekday.name = 'monthlyWeekday';
+            weekday.className = 'b3-select';
+            weekday.style.cssText = 'flex:1; min-width:0;';
+            weekday.innerHTML = weekdayKeys.map((key, index) => `<option value="${index}">${i18n(key)}</option>`).join('');
+            weekday.value = String(rule.weekday);
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'b3-button b3-button--outline habit-monthly-week-rule-remove';
+            remove.textContent = '×';
+            remove.setAttribute('aria-label', i18n('remove'));
+            remove.addEventListener('click', () => {
+                row.remove();
+                updateRemoveButtons();
+            });
+            row.appendChild(order);
+            row.appendChild(weekday);
+            row.appendChild(remove);
+            list.appendChild(row);
+            updateRemoveButtons();
+        };
+
+        const rules = getMonthlyWeekRules(this.habit?.frequency);
+        const startDate = new Date(`${this.habit?.startDate || getLogicalDateString()}T00:00:00`);
+        if (rules.length > 0) {
+            rules.forEach(addRow);
+        } else {
+            addRow({ order: Math.ceil(startDate.getDate() / 7) as MonthlyWeekRule['order'], weekday: startDate.getDay() });
+        }
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'b3-button b3-button--outline';
+        add.textContent = i18n('addCheckIn');
+        add.addEventListener('click', () => addRow({ order: 1, weekday: 1 }));
+        container.appendChild(add);
+        return container;
     }
 
     private createGroupSelect(): HTMLElement {
@@ -1408,9 +1496,25 @@ export class HabitEditDialog {
         }
 
         if (frequencyType === 'monthly') {
-            if (monthDays && monthDays.length > 0) {
+            if (formData.get('monthlyRepeatMode') === 'weekday') {
+                const rows = form.querySelectorAll<HTMLElement>('.habit-monthly-week-rule');
+                const rules = getMonthlyWeekRules({
+                    monthlyRepeatMode: 'weekday',
+                    monthlyWeekRules: Array.from(rows).map(row => ({
+                        order: Number((row.querySelector('[name="monthlyWeekOrder"]') as HTMLSelectElement)?.value) as MonthlyWeekRule['order'],
+                        weekday: Number((row.querySelector('[name="monthlyWeekday"]') as HTMLSelectElement)?.value)
+                    }))
+                });
+                if (rules.length === 0) {
+                    showMessage(i18n('pleaseSelectMonthlyWeekday'), 3000, 'error');
+                    return;
+                }
+                habit.frequency.monthlyRepeatMode = 'weekday';
+                habit.frequency.monthlyWeekRules = rules;
+            } else if (monthDays && monthDays.length > 0) {
                 habit.frequency.monthDays = monthDays.sort((a, b) => a - b);
-            } else if (interval && interval > 1) {
+            }
+            if (interval && interval > 1) {
                 habit.frequency.interval = interval;
             }
         }

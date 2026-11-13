@@ -19,6 +19,7 @@ function loadTypeScript(relativePath, dependencies = {}) {
 
 const skipDate = loadTypeScript('src/utils/reminderSkipDate.ts');
 const repeat = loadTypeScript('src/components/dataManager/repeatUtils.ts', {
+    '../../utils/monthlyRepeat': loadTypeScript('src/utils/monthlyRepeat.ts'),
     '../../utils/dateUtils': {
         compareDateStrings: (left, right) => left.localeCompare(right),
         getLocalDateTimeString: (date) => date.toISOString()

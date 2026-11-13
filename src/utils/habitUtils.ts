@@ -1,3 +1,5 @@
+import { getMonthlyWeekRules, getMonthlyWeekdayDate, type MonthlyRepeatFields } from "./monthlyRepeat";
+
 export type HabitGoalType = "count" | "pomodoro" | "either";
 
 // 自动打卡的来源标识已写入历史记录，必须固定，不能随界面语言翻译。
@@ -10,7 +12,7 @@ export type HabitMemoSyncMode = "none" | "checkin" | "note";
 
 export type HabitCheckInDaysMode = "streak" | "total";
 
-export interface HabitFrequencyLike {
+export interface HabitFrequencyLike extends MonthlyRepeatFields {
     type?: HabitFrequencyType;
     interval?: number;
     weekdays?: number[];
@@ -101,12 +103,8 @@ export interface Habit extends HabitLike {
     autoCheckInAfterPomodoro?: boolean;
     autoCheckInEmoji?: string;
     checkInButtonType?: 'pomodoro' | 'countup';
-    frequency: {
+    frequency: HabitFrequencyLike & {
         type: HabitFrequencyType;
-        interval?: number;
-        weekdays?: number[];
-        monthDays?: number[];
-        months?: number[];
     };
     startDate: string;
     endDate?: string;
@@ -181,16 +179,24 @@ export function shouldCheckInOnDate(habit: HabitLike, date: string): boolean {
             }
             return checkDate.getDay() === startDate.getDay();
 
-        case "monthly":
+        case "monthly": {
+            // 日期字符串表示本地日历日，按本地午夜解析，避免负时区落到前一天。
+            const monthlyDate = new Date(`${date}T00:00:00`);
+            const monthlyStart = new Date(`${habit?.startDate || date}T00:00:00`);
+            const monthsDiff = (monthlyDate.getFullYear() - monthlyStart.getFullYear()) * 12 +
+                monthlyDate.getMonth() - monthlyStart.getMonth();
+            const interval = Math.max(1, Math.floor(frequency.interval || 1));
+            if (date < (habit.startDate || date) || monthsDiff % interval !== 0) return false;
+            if (frequency.monthlyRepeatMode === 'weekday') {
+                return getMonthlyWeekRules(frequency).some(rule => getMonthlyWeekdayDate(
+                    monthlyDate.getFullYear(), monthlyDate.getMonth(), rule.order, rule.weekday
+                ) === monthlyDate.getDate());
+            }
             if (frequency.monthDays && frequency.monthDays.length > 0) {
-                return frequency.monthDays.includes(checkDate.getDate());
+                return frequency.monthDays.includes(monthlyDate.getDate());
             }
-            if (frequency.interval) {
-                const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 +
-                    (checkDate.getMonth() - startDate.getMonth());
-                return monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-            }
-            return checkDate.getDate() === startDate.getDate();
+            return monthlyDate.getDate() === monthlyStart.getDate();
+        }
 
         case "yearly":
             if (frequency.months && frequency.months.length > 0) {

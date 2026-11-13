@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
 const ts = require('typescript');
+const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
 
 // 加载完整通知模块，替换思源窗口、存储和系统通知运行时。
 const root = path.resolve(__dirname, '..');
@@ -16,7 +17,8 @@ const repeatSource = ts.transpileModule(fs.readFileSync(path.join(root, 'src/com
 const dates = { getLocalDateString: () => '2026-10-08', getLogicalDateString: () => '2026-10-08', getLocalDateTimeString: () => '2026-10-08 09:30:00' };
 const repeat = { exports: {} };
 new Function('require', 'module', 'exports', repeatSource)(
-    name => name === '../../utils/dateUtils' ? dates : name === '../../pluginInstance' ? { i18n: () => '' }
+    name => name === '../../utils/monthlyRepeat' ? createKernelLoader()('src/utils/monthlyRepeat.ts')
+        : name === '../../utils/dateUtils' ? dates : name === '../../pluginInstance' ? { i18n: () => '' }
         : name === '../../utils/lunarUtils' || name === '../../utils/reminderSkipDate' ? {} : require(name), repeat, repeat.exports
 );
 

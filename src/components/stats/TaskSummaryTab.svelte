@@ -4,8 +4,9 @@
     import { onMount, tick } from "svelte";
     import { i18n } from "../../pluginInstance";
     import { getLocalDateString, getLogicalDateString, getLocaleTag } from "../../utils/dateUtils";
+    import { shouldCheckInOnDate as shouldCheckInOnDateUtil } from "../../utils/habitUtils";
     import { ProjectManager } from "../dataManager/projectManager";
-    import { generateRepeatInstances, getRepeatInstanceOriginalKey } from "../dataManager/repeatUtils";
+    import { generateRepeatInstances, getRepeatInstanceOriginalKey, getRepeatDescription } from "../dataManager/repeatUtils";
     import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
     import { getLuteInstance } from "../../utils/luteSingleton";
     import { Dialog, showMessage, platformUtils } from "siyuan";
@@ -1057,6 +1058,9 @@
                 }
                 break;
             case "monthly":
+                if (frequency.monthlyRepeatMode === 'weekday') {
+                    return getRepeatDescription({ ...frequency, enabled: true });
+                }
                 if (frequency.monthDays && frequency.monthDays.length > 0) {
                     label = `${i18n("monthly")} (${frequency.monthDays.join("、")}${i18n("day")})`;
                 } else {
@@ -1136,14 +1140,7 @@
                 }
                 return checkDate.getDay() === startDate.getDay();
             case "monthly":
-                if (frequency.monthDays && frequency.monthDays.length > 0) {
-                    return frequency.monthDays.includes(checkDate.getDate());
-                }
-                if (frequency.interval) {
-                    const monthsDiff = (checkDate.getFullYear() - startDate.getFullYear()) * 12 + (checkDate.getMonth() - startDate.getMonth());
-                    return monthsDiff >= 0 && monthsDiff % frequency.interval === 0 && checkDate.getDate() === startDate.getDate();
-                }
-                return checkDate.getDate() === startDate.getDate();
+                return shouldCheckInOnDateUtil(habit, date);
             case "yearly":
                 if (frequency.months && frequency.months.length > 0) {
                     if (!frequency.months.includes(checkDate.getMonth() + 1)) return false;

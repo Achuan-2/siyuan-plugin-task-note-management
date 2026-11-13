@@ -4,13 +4,9 @@ import { solarToLunar } from "../../utils/lunarUtils";
 import { getLogicalDateString } from "../../utils/dateUtils";
 import { normalizeReminderSkipWeekendMode, type ReminderSkipWeekendMode } from "../../utils/reminderSkipDate";
 
-export type MonthlyRepeatMode = 'date' | 'weekday';
+import type { MonthlyRepeatMode, MonthlyWeekOrder, MonthlyWeekRule } from "../../utils/monthlyRepeat";
+export type { MonthlyRepeatMode, MonthlyWeekOrder, MonthlyWeekRule } from "../../utils/monthlyRepeat";
 export type RepeatSkippedDateAction = 'skip' | 'postpone';
-export type MonthlyWeekOrder = 1 | 2 | 3 | 4 | 5 | -1;
-export interface MonthlyWeekRule {
-    order: MonthlyWeekOrder;
-    weekday: number;
-}
 
 export interface RepeatInstanceState {
     completed?: boolean;

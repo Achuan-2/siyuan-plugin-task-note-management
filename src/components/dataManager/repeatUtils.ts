@@ -1,3 +1,6 @@
+import { getMonthlyWeekRules, getMonthlyWeekdayDate } from '../../utils/monthlyRepeat';
+export { getMonthlyWeekRules, getMonthlyWeekdayDate } from '../../utils/monthlyRepeat';
+
 import { RepeatConfig, RepeatInstanceState } from '../dialog/RepeatSettingsDialog';
 import { compareDateStrings, getLocalDateTimeString, getLocaleTag } from '../../utils/dateUtils';
 import { i18n } from '../../pluginInstance';
@@ -385,67 +388,6 @@ export function resolveRepeatReminderTimes(
 function getEffectiveMonthDays(year: number, month: number, monthDays: number[]): number[] {
     const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
     return Array.from(new Set(monthDays.map(day => Math.min(day, lastDayOfMonth)))).sort((a, b) => a - b);
-}
-
-function isValidMonthlyWeekOrder(order: number): boolean {
-    return order === -1 || (order >= 1 && order <= 5);
-}
-
-function isValidMonthlyWeekday(weekday: number): boolean {
-    return weekday >= 0 && weekday <= 6;
-}
-
-function getMonthlyWeekRuleSortRank(rule: { order: number; weekday: number }): number {
-    const orderRank = rule.order === -1 ? 6 : rule.order;
-    const weekdayRank = rule.weekday === 0 ? 7 : rule.weekday;
-    return orderRank * 10 + weekdayRank;
-}
-
-export function getMonthlyWeekRules(repeatConfig: RepeatConfig | any): Array<{ order: number; weekday: number }> {
-    if (repeatConfig?.monthlyRepeatMode !== 'weekday') {
-        return [];
-    }
-
-    const rules: Array<{ order: number; weekday: number }> = [];
-    const seen = new Set<string>();
-    const appendRule = (orderValue: any, weekdayValue: any) => {
-        const order = Number(orderValue);
-        const weekday = Number(weekdayValue);
-        if (!isValidMonthlyWeekOrder(order) || !isValidMonthlyWeekday(weekday)) return;
-        const key = `${order}:${weekday}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        rules.push({ order, weekday });
-    };
-
-    if (Array.isArray(repeatConfig.monthlyWeekRules)) {
-        repeatConfig.monthlyWeekRules.forEach((rule: any) => appendRule(rule?.order, rule?.weekday));
-    }
-
-    if (rules.length === 0) {
-        appendRule(repeatConfig.monthlyWeekOrder, repeatConfig.monthlyWeekday);
-    }
-
-    return rules.sort((a, b) => getMonthlyWeekRuleSortRank(a) - getMonthlyWeekRuleSortRank(b));
-}
-
-export function getMonthlyWeekdayDate(year: number, month: number, order: number, weekday: number): number | null {
-    if (!(order === -1 || (order >= 1 && order <= 5)) || weekday < 0 || weekday > 6) {
-        return null;
-    }
-
-    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-
-    if (order === -1) {
-        const lastDate = new Date(year, month, lastDayOfMonth);
-        const daysBack = (lastDate.getDay() - weekday + 7) % 7;
-        return lastDayOfMonth - daysBack;
-    }
-
-    const firstDate = new Date(year, month, 1);
-    const daysToFirstWeekday = (weekday - firstDate.getDay() + 7) % 7;
-    const targetDay = 1 + daysToFirstWeekday + (order - 1) * 7;
-    return targetDay <= lastDayOfMonth ? targetDay : null;
 }
 
 function getMonthlyWeekOrderText(order: number): string {

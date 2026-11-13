@@ -57,6 +57,19 @@ export function createHabitTool(habitManager: HabitManager): ToolDefinition {
                             interval: { type: "number" },
                             weekdays: { type: "array", items: { type: "number" } },
                             monthDays: { type: "array", items: { type: "number" } },
+                            monthlyRepeatMode: { type: "string", enum: ["date", "weekday"], description: "每月按日期或按星期重复" },
+                            monthlyWeekRules: {
+                                type: "array",
+                                description: "每月第几个星期几，可组合多条规则；例如最后一个周五为 order=-1、weekday=5",
+                                items: {
+                                    type: "object",
+                                    required: ["order", "weekday"],
+                                    properties: {
+                                        order: { type: "integer", enum: [1, 2, 3, 4, 5, -1] },
+                                        weekday: { type: "integer", minimum: 0, maximum: 6, description: "0为周日，1至6为周一至周六" }
+                                    }
+                                }
+                            },
                             months: { type: "array", items: { type: "number" } },
                         },
                     },

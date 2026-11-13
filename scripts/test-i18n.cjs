@@ -4,6 +4,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 const ts = require('typescript');
 const { auditConsoleMessages } = require('./lib/console-audit.cjs');
+const { createKernelLoader } = require('../test/helpers/kernel-loader.cjs');
 
 function loadI18n(language, logger = console) {
     const filename = path.join(__dirname, '../src/pluginInstance.ts');
@@ -84,6 +85,7 @@ function loadRepeatDescription(language) {
     const api = loadI18n(language);
     const localRequire = name => {
         if (name.endsWith('pluginInstance')) return api;
+        if (name.endsWith('monthlyRepeat')) return createKernelLoader()('src/utils/monthlyRepeat.ts');
         if (name.endsWith('dateUtils')) return { getLocaleTag: () => language.replace('_', '-') };
         if (name.endsWith('lunarUtils')) return {
             formatLunarDay: () => '十五', formatLunarMonth: () => '正月',
@@ -118,6 +120,9 @@ test('按星期及农历的重复描述在英文界面不残留中文', () => {
         assert.equal(/[\u4e00-\u9fff]|\$\{/.test(text), false, text);
     }
     assert.equal(describe(configs[0]), 'Every month on First Monday');
+    const lastFriday = { enabled: true, type: 'monthly', monthlyRepeatMode: 'weekday', monthlyWeekRules: [{ order: -1, weekday: 5 }] };
+    assert.equal(describe(lastFriday), 'Every month on Last Friday');
+    assert.equal(loadRepeatDescription('zh_CN')(lastFriday), '每月最后一个周五');
 });
 
 // 执行源码中的真实函数或方法；只替换网络、思源窗口和存储依赖。
@@ -165,14 +170,12 @@ test('节假日 ICS 的中文补班及英文假日分类不随界面语言改变
 
 function loadHabitDayDialog(language) {
     const filename = path.join(__dirname, '../src/components/dialog/HabitDayDialog.ts');
-    const habitUtilsFilename = path.join(__dirname, '../src/utils/habitUtils.ts');
     function transpile(file) {
         return ts.transpileModule(fs.readFileSync(file, 'utf8'), {
             compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
         }).outputText;
     }
-    const habitUtilsModule = { exports: {} };
-    new Function('module', 'exports', transpile(habitUtilsFilename))(habitUtilsModule, habitUtilsModule.exports);
+    const habitUtilsModule = { exports: createKernelLoader()('src/utils/habitUtils.ts') };
     const module = { exports: {} };
     const localRequire = name => {
         if (name.endsWith('habitUtils')) return habitUtilsModule.exports;

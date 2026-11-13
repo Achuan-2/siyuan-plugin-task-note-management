@@ -6,13 +6,7 @@ export interface CreateHabitInput {
     goalType?: HabitGoalType;
     pomodoroTargetHours?: number;
     pomodoroTargetMinutes?: number;
-    frequency?: {
-        type: "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
-        interval?: number;
-        weekdays?: number[];
-        monthDays?: number[];
-        months?: number[];
-    };
+    frequency?: Habit['frequency'];
     startDate: string;
     endDate?: string;
     icon?: string;
@@ -26,13 +20,7 @@ export interface UpdateHabitInput {
     goalType?: HabitGoalType;
     pomodoroTargetHours?: number;
     pomodoroTargetMinutes?: number;
-    frequency?: {
-        type: "daily" | "weekly" | "monthly" | "yearly" | "ebbinghaus" | "custom";
-        interval?: number;
-        weekdays?: number[];
-        monthDays?: number[];
-        months?: number[];
-    };
+    frequency?: Habit['frequency'];
     startDate?: string;
     endDate?: string;
     icon?: string;
