@@ -11,7 +11,7 @@ const timerClass = ast.statements.find(node => ts.isClassDeclaration(node) && no
 const names = ['completePhase', 'completeBreakPhase', 'autoSwitchToBreak', 'autoSwitchToWork',
     'reconcileTimerState', 'stopForAutoTransition', 'getWorkSessionStartDate', 'ensureActiveWorkSessionStarted',
     'finishActiveWorkSession', 'recordCompletedWorkPhase', 'recordCompletedBreakPhase',
-    'playAudioWithoutBlocking', 'playPhaseBackgroundAudio', 'resetPhaseTracking'];
+    'playAudioWithoutBlocking', 'playPhaseBackgroundAudio', 'resetPhaseTracking', 'startTimer', 'resumeTimer'];
 const methods = timerClass.members.filter(node => names.includes(node.name?.getText(ast)))
     .map(node => node.getText(ast)).join('\n');
 const code = ts.transpileModule(`class PomodoroTimer { ${methods} }`, {
@@ -170,4 +170,35 @@ test('阶段切换后不再播放上一阶段尚未初始化的背景音', async
     f.init.resolve();
     await flush();
     assert.deepEqual(f.calls.sounds, []);
+});
+
+for (const phase of ['work', 'break', 'longBreak']) {
+    test(`点击开始 ${phase} 时不等待记录保存就请求播放并启动计时`, async () => {
+        const f = fixture({ isWorkPhase: phase === 'work', isLongBreak: phase === 'longBreak' });
+        Object.assign(f.timer, { isRunning: false, startTime: 0, phaseStartTime: 0, activeWorkSessionId: null,
+            activeWorkSessionStartTime: 0, timeLeft: f.timer.totalTime });
+        f.init.resolve();
+        await f.timer.startTimer();
+        await flush();
+        assert.deepEqual(f.calls.sounds, [phase]);
+        assert.equal(f.calls.starts.length, phase === 'work' ? 1 : 0);
+        assert.equal(f.timer.isRunning, true);
+        assert.equal(f.intervals.size, 1);
+        f.advance(2);
+        assert.equal(f.timer.timeLeft, f.timer.totalTime - 2);
+    });
+}
+
+test('暂停后恢复不等待音频就更新按钮和计时，音频就绪即请求播放', async () => {
+    const f = fixture();
+    Object.assign(f.timer, { isPaused: true, pausedTime: 30 });
+    await f.timer.resumeTimer();
+    assert.equal(f.timer.isPaused, false);
+    assert.equal(f.intervals.size, 1);
+    assert.equal(f.calls.displays.length, 1);
+    f.advance(2);
+    assert.equal(f.timer.timeLeft, 1500 - 32);
+    f.init.resolve();
+    await flush();
+    assert.deepEqual(f.calls.sounds, ['work']);
 });

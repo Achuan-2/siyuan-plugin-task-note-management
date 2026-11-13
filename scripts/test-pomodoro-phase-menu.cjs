@@ -80,6 +80,7 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         reminder: { title: '测试任务' },
         recordManager: { getTodayFocusTime: () => 0, getWeekFocusTime: () => 0, formatTime: () => '0m' },
         updateBrowserWindowDisplay: () => {},
+        preloadBrowserWindowBackgroundAudio: async () => {},
         plugin: { openSetting: key => actions.push(['openSetting', key]) } });
     Timer.browserWindowTimer = timer;
     timer.setupBrowserWindowFullscreen(owner);

@@ -616,10 +616,10 @@ export class PomodoroTimer {
         });
     }
 
-    private async playPhaseBackgroundAudio() {
+    private async playPhaseBackgroundAudio(force: boolean = false) {
         const generation = this.audioPlaybackGeneration;
         try {
-            if (!this.audioInitialized) await this.initializeAudioPlayback();
+            if (force || !this.audioInitialized) await this.initializeAudioPlayback(force);
             if (this.isWindowClosed || generation !== this.audioPlaybackGeneration) return;
             const audio = this.isWorkPhase ? this.workAudio : (this.isLongBreak ? this.longBreakAudio : this.breakAudio);
             this.playAudioWithoutBlocking(audio);
@@ -878,9 +878,11 @@ export class PomodoroTimer {
         this.workEndAudio = workEndAudio;
         this.breakEndAudio = breakEndAudio;
 
-        // 在计时期间准备独立弹窗可直接使用的音频，结束时不再下载或转换。
-        if (this.settings.pomodoroEndPopupWindow && typeof (window as any).require === 'function') {
-            for (const audio of [workEndAudio, breakEndAudio]) {
+        // 独立窗口使用 data URL；背景音也提前转换，不能等到点击开始后再下载。
+        if (typeof (window as any).require === 'function') {
+            const audios = [workAudio, breakAudio, longBreakAudio];
+            if (this.settings.pomodoroEndPopupWindow) audios.push(workEndAudio, breakEndAudio);
+            for (const audio of audios) {
                 if (audio) void this.getAudioDataUrlForBW(audio.src);
             }
         }
@@ -2591,7 +2593,8 @@ export class PomodoroTimer {
                     };
 
                     const sourceChanged = a._pomodoroSourceKey !== sourceKey || a.src !== nextSrc;
-                    const needsLoad = sourceChanged || a.readyState === 0 || !!a.error;
+                    // readyState 为 0 时也可能正在预加载，重新 load 会丢掉预加载进度。
+                    const needsLoad = sourceChanged || !!a.error || (a.readyState === 0 && a.networkState === 3);
                     if (needsLoad || !shouldLoop) {
                         a._userPaused = true;
                         a.pause();
@@ -2735,11 +2738,36 @@ export class PomodoroTimer {
         }
     }
 
+    /** 提前加载独立窗口的背景音，播放时复用媒体元素。 */
+    private async preloadBrowserWindowBackgroundAudio(pomodoroWindow: any): Promise<void> {
+        try {
+            await Promise.all([this.workAudio, this.breakAudio, this.longBreakAudio].filter(Boolean).map(async audio => {
+                const src = audio.src;
+                const dataUrl = await this.getAudioDataUrlForBW(src);
+                if (this.isWindowClosed || pomodoroWindow.isDestroyed() ||
+                    PomodoroTimer.browserWindowInstance !== pomodoroWindow || PomodoroTimer.browserWindowTimer !== this) return;
+                // 只加载，不播放；播放入口复用相同的元素和已解码数据。
+                await pomodoroWindow.webContents.executeJavaScript(`(() => {
+                    const sourceKey = ${JSON.stringify(src)};
+                    const id = 'pomodoro-audio-' + encodeURIComponent(sourceKey).replace(/[^a-zA-Z0-9]/g, '_');
+                    if (!document.body || document.getElementById(id)) return;
+                    const audio = document.createElement('audio');
+                    audio.id = id;
+                    audio.preload = 'auto';
+                    audio._pomodoroSourceKey = sourceKey;
+                    audio._userPaused = true;
+                    audio.src = ${JSON.stringify(dataUrl)};
+                    document.body.appendChild(audio);
+                    audio.load();
+                })();`);
+            }));
+        } catch (error) {
+            console.warn('[PomodoroTimer] Failed to preload BrowserWindow background audio:', error);
+        }
+    }
+
     /**
-     * 在主进程中获取音频数据并转换为 data URL，用于 BrowserWindow 可靠播放。
-     * BW 加载自 data:text/html，无法访问 blob:（主窗口创建，跨源不可用）
-     * 及 HTTP URL（可能因 SiYuan 鉴权或 null-origin 拒绝而失败）。
-     * 在主进程 fetch 后转为 base64 data URL，完全自包含，BW 无需网络访问。
+     * 在主窗口获取音频并转换为 data URL，避免独立窗口的跨源和鉴权限制。
      */
     private async getAudioDataUrlForBW(src: string): Promise<string> {
         if (!src) return src;
@@ -5846,6 +5874,8 @@ export class PomodoroTimer {
         this.closePomodoroEndWindow();
         this.isRunning = true;
         this.isPaused = false;
+        // 播放不等待专注记录落盘，也不阻塞计时和按钮更新。
+        void this.playPhaseBackgroundAudio(true);
 
         // 改进的时间继承逻辑
         if (this.startTime === 0) {
@@ -5881,24 +5911,10 @@ export class PomodoroTimer {
 
         this.phaseStartTime = this.phaseStartTime || this.startTime || Date.now();
         if (this.isWorkPhase) {
-            await this.ensureActiveWorkSessionStarted(this.phaseStartTime);
+            void this.ensureActiveWorkSessionStarted(this.phaseStartTime);
         } else {
             this.activeWorkSessionId = null;
             this.activeWorkSessionStartTime = 0;
-        }
-
-        // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
-        await this.initializeAudioPlayback(true);
-
-        // 播放对应的背景音
-        if (this.isWorkPhase && this.workAudio) {
-            await this.safePlayAudio(this.workAudio);
-        } else if (!this.isWorkPhase) {
-            if (this.isLongBreak && this.longBreakAudio) {
-                await this.safePlayAudio(this.longBreakAudio);
-            } else if (!this.isLongBreak && this.breakAudio) {
-                await this.safePlayAudio(this.breakAudio);
-            }
         }
 
         // 启动随机微休息定时器（仅在工作时间）
@@ -6051,26 +6067,12 @@ export class PomodoroTimer {
 
     private async resumeTimer() {
         this.isPaused = false;
+        void this.playPhaseBackgroundAudio(true);
 
         // 重新计算开始时间，保持已暂停的时间
         // 注意：startTime 应该是"如果从0开始计时应该在什么时候开始"
         // 所以是 现在 - pausedTime（已经过的秒数）
         this.startTime = Date.now() - (this.pausedTime * 1000);
-
-        // 确保音频播放权限已被获取（特别是为了结束提示音），强制重新初始化以处理权限丢失
-        await this.initializeAudioPlayback(true);
-
-
-        // 恢复对应的背景音
-        if (this.isWorkPhase && this.workAudio) {
-            await this.safePlayAudio(this.workAudio);
-        } else if (!this.isWorkPhase) {
-            if (this.isLongBreak && this.longBreakAudio) {
-                await this.safePlayAudio(this.longBreakAudio);
-            } else if (!this.isLongBreak && this.breakAudio) {
-                await this.safePlayAudio(this.breakAudio);
-            }
-        }
 
         // 重新启动随机微休息定时器（仅在工作时间）
         if (this.isWorkPhase) {
@@ -9129,7 +9131,9 @@ export class PomodoroTimer {
             PomodoroTimer.browserWindowTimer = this;
             this.setupBrowserWindowFullscreen(pomodoroWindow);
 
-            pomodoroWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+            void pomodoroWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent)).then(() => {
+                void this.preloadBrowserWindowBackgroundAudio(pomodoroWindow);
+            }).catch(error => console.warn('[PomodoroTimer] Failed to load timer window:', error));
 
             // 恢复逻辑计时循环（修复切换吸附模式/窗口重建后丢失计时功能和数据记录的问题）
             if (this.isRunning && !this.isPaused) {
@@ -11568,6 +11572,7 @@ document.body.classList.remove('docked-mode');
 
             // 重新加载窗口内容
             await pomodoroWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+            void this.preloadBrowserWindowBackgroundAudio(pomodoroWindow);
 
             // 加载完成后，根据当前实例的模式（迷你/吸附）修正窗口大小、bounds 和 DOM class
             try {
