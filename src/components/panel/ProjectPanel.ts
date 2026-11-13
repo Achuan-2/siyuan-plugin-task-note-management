@@ -1710,14 +1710,9 @@ export class ProjectPanel {
         const createStatusMenuItems = () => {
             const statuses = this.statusManager.getStatuses();
             const currentStatus = project.status || 'active';
-            const statusIcons: Record<string, string> = {
-                active: 'iconClock',
-                someday: 'iconLight',
-                archived: 'iconInbox'
-            };
 
             return statuses.map(status => ({
-                icon: status.isArchived ? 'iconInbox' : (statusIcons[status.id] || 'iconTNStatus'),
+                iconHTML: `<span class="b3-menu__icon" style="display: inline-flex; align-items: center; justify-content: center; font-size: 16px;">${this.escapeHTML(status.icon || '')}</span>`,
                 label: status.name,
                 current: currentStatus === status.id,
                 click: () => {
