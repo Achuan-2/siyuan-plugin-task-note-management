@@ -11,9 +11,10 @@ const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
-function fixture(data, { failSave = false } = {}) {
+function fixture(data, { failSave = false, failBinding = false } = {}) {
     const events = [];
     const saves = [];
+    const bindings = [];
     const plugin = {
         loadProjectData: async () => data,
         saveProjectData: async next => {
@@ -25,13 +26,19 @@ function fixture(data, { failSave = false } = {}) {
     };
     const module = { exports: {} };
     const dependencies = {
-        '../../api': {},
+        '../../api': {
+            addBlockProjectId: async (blockId, projectId) => {
+                assert.equal(saves.length, 1, 'Bind only after project has been saved');
+                if (failBinding) throw new Error('Binding failed');
+                bindings.push({ blockId, projectId });
+            },
+        },
         './statusManager': { StatusManager: { getInstance: () => ({}) } },
         '../../pluginInstance': {
             i18n: (key, params = {}) => zh[key].replace(/\$\{([^}]+)\}/g, (_, name) => params[name]),
         },
     };
-    new Function('require', 'exports', 'window', 'CustomEvent', code)(
+    new Function('require', 'exports', 'window', 'CustomEvent', 'console', code)(
         name => {
             assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
             return dependencies[name];
@@ -39,12 +46,13 @@ function fixture(data, { failSave = false } = {}) {
         module.exports,
         { dispatchEvent: event => events.push(event) },
         class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+        { warn() {} },
     );
     const manager = new module.exports.ProjectManager(plugin);
-    return { manager, events, saves };
+    return { manager, events, saves, bindings };
 }
 
-test('空副本保留分组、标签和看板设置，并清除任务关联、绑定、里程碑和运行状态', async () => {
+test('空副本保留绑定块、日期、备注、分组、标签和看板设置，并清除任务、里程碑和运行状态', async () => {
     const source = {
         id: 'source', title: '🧪 实验', folderId: 'research', status: 'active', archived: false,
         categoryId: 'work', priority: 'high', color: '#123456', sort: 20,
@@ -66,13 +74,17 @@ test('空副本保留分组、标签和看板设置，并清除任务关联、�
     };
     const data = { source, sibling: { id: 'sibling', folderId: 'research', sort: 80 }, _settings: { saved: true } };
     const original = structuredClone(data);
-    const { manager, saves, events } = fixture(data);
+    const { manager, saves, events, bindings } = fixture(data);
     const result = await manager.duplicateEmptyProject('source');
     const copy = saves[0][result.id];
     assert.notEqual(copy.id, source.id);
     assert.equal(copy.title, '🧪 实验（副本）');
     assert.equal(copy.sort, 90);
-    assert.equal(copy.note, '');
+    assert.equal(copy.note, source.note);
+    assert.equal(copy.blockId, source.blockId);
+    assert.equal(copy.startDate, source.startDate);
+    assert.equal(copy.endDate, source.endDate);
+    assert.deepEqual(bindings, [{ blockId: source.blockId, projectId: copy.id }]);
     assert.equal(copy.folderId, 'research');
     assert.equal(copy.priority, 'high');
     assert.equal(copy.customGroupTabsMode, true);
@@ -87,7 +99,7 @@ test('空副本保留分组、标签和看板设置，并清除任务关联、�
     assert.notEqual(copy.tags[0].id, 'tag');
     assert.equal(copy.tags[0].name, '实验');
     assert.equal(copy.tags[0].color, '#112233');
-    for (const key of ['blockId', 'milestones', 'startDate', 'endDate', 'isSubscription', 'subscriptionId',
+    for (const key of ['milestones', 'isSubscription', 'subscriptionId',
         'activeCustomGroupTabId', 'activeStatusTabId', 'milestoneFilterState', 'tasks']) {
         assert.equal(Object.hasOwn(copy, key), false, key);
     }
@@ -111,7 +123,7 @@ test('空副本保留分组、标签和看板设置，并清除任务关联、�
 });
 
 test('重复创建时避开同名项目，排序仅参考同文件夹且忽略元数据', async () => {
-    const { manager, saves } = fixture({
+    const { manager, saves, bindings } = fixture({
         source: { title: '项目', sort: 10 },
         copy: { title: '项目（副本）', sort: 20 },
         other: { title: '其他', folderId: 'elsewhere', sort: 999 },
@@ -123,6 +135,7 @@ test('重复创建时避开同名项目，排序仅参考同文件夹且忽略�
     assert.equal(copy.sort, 30);
     assert.deepEqual(copy.customGroups, []);
     assert.deepEqual(copy.tags, []);
+    assert.deepEqual(bindings, []);
     assert.equal(Object.hasOwn(copy, 'showTaskCategories'), false, 'Unset settings should keep inheriting defaults');
 });
 
@@ -142,11 +155,25 @@ test('原项目已被删除时不保存也不发送更新', async () => {
 });
 
 test('保存失败时不更改原项目、管理器缓存或发送成功事件', async () => {
-    const data = { source: { id: 'source', title: '项目', tags: [] } };
-    const { manager, saves, events } = fixture(data, { failSave: true });
+    const data = { source: { id: 'source', title: '项目', tags: [], blockId: 'block' } };
+    const { manager, saves, events, bindings } = fixture(data, { failSave: true });
     await assert.rejects(manager.duplicateEmptyProject('source'), /Save failed/);
     assert.deepEqual(Object.keys(data), ['source']);
     assert.equal(manager.projects.length, 0);
     assert.equal(saves.length, 0);
     assert.equal(events.length, 0);
+    assert.equal(bindings.length, 0);
+});
+
+test('保留未设截止日期的空值，块属性更新失败时仍保留已保存的项目副本', async () => {
+    const data = { source: { id: 'source', title: '项目', blockId: 'block', startDate: '', endDate: null, note: '' } };
+    const { manager, saves, events } = fixture(data, { failBinding: true });
+    const result = await manager.duplicateEmptyProject('source');
+    const copy = saves[0][result.id];
+    assert.equal(copy.blockId, 'block');
+    assert.equal(copy.startDate, '');
+    assert.equal(copy.endDate, null);
+    assert.equal(copy.note, '');
+    assert.equal(events.length, 1);
+    assert.equal(result.blockId, 'block');
 });

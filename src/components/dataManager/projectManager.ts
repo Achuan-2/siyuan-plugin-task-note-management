@@ -1,4 +1,4 @@
-import { getFile, putFile, removeFile } from '../../api';
+import { getFile, putFile, removeFile, addBlockProjectId } from '../../api';
 import { StatusManager } from './statusManager';
 import { i18n } from '../../pluginInstance';
 
@@ -1101,7 +1101,7 @@ export class ProjectManager {
     }
 
     /**
-     * 仅复制项目配置，不读取或改写任务，也不继承原项目的块绑定和里程碑。
+     * 复制项目属性和配置，保留块绑定及日期，不读取或改写任务，也不复制里程碑。
      */
     public async duplicateEmptyProject(projectId: string): Promise<Project | undefined> {
         const projectData = await this.plugin.loadProjectData() || {};
@@ -1122,6 +1122,7 @@ export class ProjectManager {
         // 使用配置白名单，避免把订阅、任务关联或以后新增的运行数据带入空副本。
         const settingKeys = [
             'status', 'archived', 'priority', 'color', 'categoryId', 'folderId',
+            'blockId', 'startDate', 'endDate', 'note',
             'kanbanMode', 'kanbanStatuses', 'sortRule', 'sortOrder', 'sortCriteria',
             'doneSort', 'doneSortOrder', 'showCompletedSubtasks', 'showTaskCategories',
             'clipTitleToOneLine', 'hideEmptyStatusBars', 'hideNoDoingGroups', 'hideNoTodayGroups',
@@ -1135,7 +1136,7 @@ export class ProjectManager {
         const copy = JSON.parse(JSON.stringify(settings));
         const now = new Date().toISOString();
         Object.assign(copy, {
-            id, title, note: '', createdTime: now, updatedTime: now,
+            id, title, createdTime: now, updatedTime: now,
             sort: entries.reduce((max, [, project]) => {
                 return (project.folderId || '') === (source.folderId || '') && typeof project.sort === 'number'
                     ? Math.max(max, project.sort) : max;
@@ -1155,6 +1156,14 @@ export class ProjectManager {
         });
 
         await this.plugin.saveProjectData({ ...projectData, [id]: copy });
+        // 保存成功后将副本追加到原块的项目绑定列表，保留原项目关联。
+        if (copy.blockId) {
+            try {
+                await addBlockProjectId(copy.blockId, id);
+            } catch (error) {
+                console.warn('Failed to add copied project to bound block:', error);
+            }
+        }
         const project = { ...copy, name: title } as Project;
         this.projects.push(project);
         if (copy.color) this.projectColors[id] = copy.color;
