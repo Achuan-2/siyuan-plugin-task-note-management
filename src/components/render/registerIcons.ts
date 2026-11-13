@@ -5,8 +5,10 @@ export function registerCustomIcons(plugin: Plugin) {
     // 任务菜单图标：复用宿主 SVG 尺寸与主题色，优先级保留颜色区分。
     plugin.addIcons(`
         <symbol id="iconTNMerge" viewBox="0 0 24 24">
-            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4h3a5 5 0 0 1 5 5v6a5 5 0 0 0 5 5h3M4 20h3a5 5 0 0 0 5-5m5 2 3 3-3 3"/>
+            <g transform="rotate(90 12 12)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m8 6 4-4 4 4"/>
+                <path d="M12 2v10.3a4 4 0 0 1-1.172 2.872L4 22"/>
+                <path d="m20 22-5-5"/>
             </g>
         </symbol>
         <symbol id="iconTNPaste" viewBox="0 0 24 24">
