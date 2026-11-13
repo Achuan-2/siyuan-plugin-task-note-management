@@ -6882,11 +6882,10 @@ export class CalendarView {
         }
     }
 
-    private shouldKeepSingleDayEndDateAfterResize(info: any, isResize: boolean): boolean {
-        if (!isResize) return false;
-
+    private shouldKeepSingleDayEndDate(info: any): boolean {
+        // 同日的结束日期也是显式时间段信息，拖动和拉伸都应保留。
         const props = info?.oldEvent?.extendedProps || info?.event?.extendedProps || {};
-        return !!(props.date && props.endDate && props.endDate !== props.date);
+        return !!props.endDate;
     }
 
     private async updateRecurringEventSeries(info: any, isResize: boolean = false) {
@@ -6942,7 +6941,7 @@ export class CalendarView {
             // 3. 根据拖放信息更新这个新系列的日期/时间。
             const newStart = info.event.start;
             const newEnd = info.event.end;
-            const keepSingleDayEndDate = this.shouldKeepSingleDayEndDateAfterResize(info, isResize);
+            const keepSingleDayEndDate = this.shouldKeepSingleDayEndDate(info);
 
             const { dateStr, timeStr } = getLocalDateTime(newStart);
             newReminder.date = dateStr; // 这是新系列的开始日期
@@ -6983,7 +6982,11 @@ export class CalendarView {
                     newReminder.endTime = endTimeStr || null;
                 }
             } else {
-                delete newReminder.endDate;
+                if (keepSingleDayEndDate) {
+                    newReminder.endDate = dateStr;
+                } else {
+                    delete newReminder.endDate;
+                }
                 delete newReminder.endTime;
             }
 
@@ -7202,7 +7205,7 @@ export class CalendarView {
 
             // 使用本地时间处理日期和时间
             const { dateStr: startDateStr, timeStr: startTimeStr } = getLocalDateTime(newStartDate);
-            const keepSingleDayEndDate = this.shouldKeepSingleDayEndDateAfterResize(info, isResize);
+            const keepSingleDayEndDate = this.shouldKeepSingleDayEndDate(info);
 
             if (newEndDate) {
                 if (info.event.allDay) {
@@ -7254,6 +7257,9 @@ export class CalendarView {
             } else {
                 // 单日事件
                 instanceModification.date = startDateStr;
+                if (keepSingleDayEndDate) {
+                    instanceModification.endDate = startDateStr;
+                }
                 if (!info.event.allDay && startTimeStr) {
                     instanceModification.time = startTimeStr;
                 }
@@ -7403,7 +7409,7 @@ export class CalendarView {
 
                 // 使用本地时间处理日期和时间
                 const { dateStr: startDateStr, timeStr: startTimeStr } = getLocalDateTime(newStartDate);
-                const keepSingleDayEndDate = this.shouldKeepSingleDayEndDateAfterResize(info, isResize);
+                const keepSingleDayEndDate = this.shouldKeepSingleDayEndDate(info);
 
                 // 检查是否需要重置通知状态
                 const shouldResetNotified = this.shouldResetNotification(newStartDate, info.event.allDay);
@@ -7475,7 +7481,11 @@ export class CalendarView {
                 } else {
                     // 单日事件
                     reminderData[reminderId].date = startDateStr;
-                    delete reminderData[reminderId].endDate;
+                    if (keepSingleDayEndDate) {
+                        reminderData[reminderId].endDate = startDateStr;
+                    } else {
+                        delete reminderData[reminderId].endDate;
+                    }
                     delete reminderData[reminderId].endTime;
 
                     if (!info.event.allDay && startTimeStr) {
