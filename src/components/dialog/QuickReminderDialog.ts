@@ -6551,7 +6551,7 @@ export class QuickReminderDialog {
                 allowedProjectIds: this.allowedProjectIds,
                 includeNoProject: true,
                 onSelect: async (projectId) => {
-                    await this.onProjectChange(projectId);
+                    await this.onProjectChange(projectId, true);
                 }
             });
             await popup.initialize();
@@ -6578,14 +6578,14 @@ export class QuickReminderDialog {
     /**
      * 项目选择器改变时的处理方法
      */
-    private async onProjectChange(projectId: string) {
+    private async onProjectChange(projectId: string, isUserSelection: boolean = false) {
         const customGroupContainer = this.dialog.element.querySelector('#quickCustomGroup') as HTMLElement;
         if (!customGroupContainer) return;
 
         if (projectId) {
-            // 新建任务时，自动填充项目所属分类
-            // 仅在当前没有显式分类（如父任务继承/defaultCategoryId）时才自动填充，避免覆盖父任务分类
-            if (this.mode !== 'edit' && this.mode !== 'batch_edit') {
+            // 新建任务或编辑时主动选择项目，补充项目分类；初始化已有任务时保留原分类。
+            // 仅在当前没有分类时填充，避免覆盖手动选择或父任务继承的分类。
+            if (this.mode !== 'batch_edit' && (this.mode !== 'edit' || isUserSelection)) {
                 const project = this.projectManager.getProjectById(projectId);
                 if (project && project.categoryId && this.selectedCategoryIds.length === 0) {
                     this.selectedCategoryIds = project.categoryId.split(',')
