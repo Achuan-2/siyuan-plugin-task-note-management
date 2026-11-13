@@ -1114,13 +1114,7 @@ export class ReminderPanel {
 
             case 'priority':
                 result = this.compareByPriorityValue(a, b);
-                // 同优先级内始终按手动 sort 升序，不受优先级升降序影响。
-                if (result === 0) {
-                    const sortA = this.getReminderSortValue(a);
-                    const sortB = this.getReminderSortValue(b);
-                    return sortA - sortB;
-                }
-                return criterion.order === 'desc' ? -result : result;
+                break;
 
             case 'project':
                 return this.compareByProject(a, b, criterion.order);
@@ -1176,13 +1170,10 @@ export class ReminderPanel {
             }
         }
 
-        // 非优先级排序模式下，相同值按手动 sort 升序
-        const hasPriorityCriterion = criteria.some(c => c.method === 'priority');
-        if (!hasPriorityCriterion) {
-            const sortDiff = this.getReminderSortValue(a) - this.getReminderSortValue(b);
-            if (sortDiff !== 0) {
-                return sortDiff;
-            }
+        // 所有显式条件相同时，再按手动 sort 升序兜底，不受各条件升降序影响。
+        const sortDiff = this.getReminderSortValue(a) - this.getReminderSortValue(b);
+        if (sortDiff !== 0) {
+            return sortDiff;
         }
 
         // 所有排序条件都相同时，按创建时间作为兜底排序（确保排序的稳定性）
