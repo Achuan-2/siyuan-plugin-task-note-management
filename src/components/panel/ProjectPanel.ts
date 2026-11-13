@@ -1618,7 +1618,7 @@ export class ProjectPanel {
 
             categories.forEach(category => {
                 menuItems.push({
-                    icon: "iconTags",
+                    iconHTML: `<span class="b3-menu__icon" style="display: inline-flex; align-items: center; justify-content: center; font-size: 16px;">${this.escapeHTML(category.icon || '')}</span>`,
                     label: category.name,
                     current: currentCategoryId === category.id,
                     click: () => {
