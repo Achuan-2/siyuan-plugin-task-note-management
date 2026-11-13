@@ -1,6 +1,7 @@
 import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
+import { duplicateTaskTree } from "../../utils/taskDuplication";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
@@ -8287,6 +8288,16 @@ export class ReminderPanel {
         return element.outerHTML;
     }
 
+    private async createTaskCopy(reminder: any) {
+        try {
+            const undo = await duplicateTaskTree(this.plugin, reminder);
+            undo.show(i18n('copyCreated'));
+        } catch (error) {
+            console.error('Failed to copy task:', error);
+            showMessage(i18n('operationFailed'));
+        }
+    }
+
     private async showReminderContextMenu(event: { clientX: number; clientY: number }, reminder: any) {
         const menu = new Menu("reminderContextMenu");
         const today = getLogicalDateString();
@@ -8558,8 +8569,13 @@ export class ReminderPanel {
                 });
             }
         }
-        // --- 创建子任务 (订阅任务不允许创建子任务) ---
+        // --- 创建副本和子任务 (订阅任务不允许创建子任务) ---
         if (!reminder.isSubscribed) {
+            menu.addItem({
+                icon: 'iconTNCopy',
+                label: i18n('createCopy'),
+                click: () => this.createTaskCopy(reminder)
+            });
             menu.addItem({
                 icon: "iconAdd",
                 label: i18n("createSubtask"),

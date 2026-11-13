@@ -1,6 +1,7 @@
 import { setTaskMetadataText, renderTaskMetadataText } from "../render/taskMetadataIcons";
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
+import { duplicateTaskTree } from "../../utils/taskDuplication";
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
 import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { getLuteInstance } from "../../utils/luteSingleton";
@@ -9572,6 +9573,16 @@ export class ProjectKanbanView {
         });
     }
 
+    private async createTaskCopy(task: any) {
+        try {
+            const undo = await duplicateTaskTree(this.plugin, task);
+            undo.show(i18n('copyCreated'));
+        } catch (error) {
+            console.error('Failed to copy task:', error);
+            showMessage(i18n('operationFailed'));
+        }
+    }
+
     public async showTaskContextMenu(event: { clientX: number; clientY: number }, task: any) {
         const menu = new Menu("kanbanTaskContextMenu");
 
@@ -9685,6 +9696,11 @@ export class ProjectKanbanView {
         }
 
         if (!task.isSubscribed) {
+            menu.addItem({
+                icon: 'iconTNCopy',
+                label: i18n('createCopy'),
+                click: () => this.createTaskCopy(task)
+            });
             menu.addItem({
                 icon: "iconAdd",
                 label: i18n('createSubtask'),
