@@ -852,10 +852,21 @@ export default class ReminderPlugin extends Plugin {
             read: date => this.protectedStorage.load(`pomodoroRecords/${date}.json`, 'object'),
             commit: async input => {
                 if (this.storageDisposed || window.siyuan.config.readonly || (window.siyuan as any).isPublish) throw new Error('当前插件不可写');
-                if (this.kernel?.rpc) return this.kernel.rpc.call['commit-pomodoro-records'](input);
-                // 旧版宿主无内核插件时，浏览器共享锁仍覆盖读取、合并和写入。
+                if (this.kernel?.rpc) {
+                    try {
+                        return await this.kernel.rpc.call['commit-pomodoro-records'](input);
+                    } catch (error) {
+                        // 仅在宿主明确拒绝执行时回退。超时、断连或业务错误可能已写入，不能另起写入队列。
+                        if (error?.code !== -32001 && error?.code !== -32002) throw error;
+                    }
+                }
+                // RPC 对象存在不代表内核已运行；未加载/未运行时也通过共享锁完成读取、合并和写入。
                 if (!navigator.locks) throw new Error('番茄钟写入服务尚未就绪，请稍后重试');
-                return navigator.locks.request(this.getWorkspaceScopedChannelName('pomodoro-records-write'), () => fallback.commit(input));
+                return navigator.locks.request(this.getWorkspaceScopedChannelName('pomodoro-records-write'), () => {
+                    // 等待锁期间可能已卸载插件或切换为只读。
+                    if (this.storageDisposed || window.siyuan.config.readonly || (window.siyuan as any).isPublish) throw new Error('当前插件不可写');
+                    return fallback.commit(input);
+                });
             },
             readLegacy: () => this.loadData(POMODORO_RECORD_DATA_FILE),
             ...createPomodoroCache(this.name, 'frontend', (path, init) => fetch(path, init)),

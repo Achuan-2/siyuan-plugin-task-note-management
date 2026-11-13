@@ -873,7 +873,7 @@ test('目录权限、服务、格式及网络错误保留历史，失败初始�
     assert.deepEqual(f.stats.writes, []);
 });
 
-test('前端提交始终路由到内核 RPC，RPC 失败不绕开队列写入，且遵守只读状态', async () => {
+test('前端优先路由到内核 RPC，未知 RPC 错误不绕开队列写入，且遵守只读状态', async () => {
     const requests = []; let fallback = 0;
     const locks = { request: async () => { fallback++; } };
     const kernel = { rpc: { call: { 'commit-pomodoro-records': async input => { requests.push(input); return {}; } } } };
@@ -883,6 +883,53 @@ test('前端提交始终路由到内核 RPC，RPC 失败不绕开队列写入，
     await assert.rejects(frontendAdapter({ kernel, locks }).commit({ changes: [] }), /kernel unavailable/);
     assert.equal(fallback, 0);
     await assert.rejects(frontendAdapter({ kernel, locks, readonly: true }).commit({ changes: [] }), /不可写/);
+});
+
+for (const code of [-32001, -32002]) test(`内核拒绝执行 (${code}) 时通过共享锁保存计时开始和结束`, async () => {
+    const files = new Map(), names = [];
+    const kernel = { rpc: { call: { 'commit-pomodoro-records': async () => {
+        throw Object.assign(new Error('Plugin not running'), { code });
+    } } } };
+    const locks = { request: async (name, run) => { names.push(name); return run(); } };
+    const adapter = frontendAdapter({ kernel, locks, files });
+    const manager = new PomodoroRecordManager({ createPomodoroStoreAdapter: () => ({
+        ...adapter, readCache: async () => null, writeCache: async () => {},
+    }) });
+    const id = await manager.startWorkSession('task', '专注', 25, false, '2026-11-04T12:00:00');
+    assert.equal(files.get('pomodoroRecords/2026-11-04.json').sessions[0].inProgress, true);
+    await manager.finishWorkSession(id, 25, 'task', '专注', 25, true, false);
+    const saved = files.get('pomodoroRecords/2026-11-04.json');
+    assert.equal(saved.sessions.length, 1);
+    assert.equal(saved.sessions[0].inProgress, false);
+    assert.equal(saved.totalWorkTime, 25);
+    assert.equal(saved.workSessions, 1);
+    assert.deepEqual(names, Array(2).fill('workspace:pomodoro-records-write'));
+    await manager.closeStorage();
+});
+
+test('内核未运行时多个前端仍通过同一个共享锁合并记录', async () => {
+    const date = '2026-11-04', base = record(date, [session(date, 'original')]);
+    const files = new Map([[`pomodoroRecords/${date}.json`, base]]);
+    const kernel = { rpc: { call: { 'commit-pomodoro-records': async () => { throw { code: -32002 }; } } } };
+    let tail = Promise.resolve(); const names = [];
+    const locks = { request(name, run) { names.push(name); const result = tail.then(run); tail = result.catch(() => {}); return result; } };
+    const adapters = [frontendAdapter({ kernel, locks, files }), frontendAdapter({ kernel, locks, files })];
+    await Promise.all(adapters.map((adapter, i) => adapter.commit({ changes: [{ date, base,
+        next: record(date, [...base.sessions, session(date, `added-${i}`)]),
+    }] })));
+    assert.equal(new Set(names).size, 1);
+    assert.deepEqual(files.get(`pomodoroRecords/${date}.json`).sessions.map(s => s.id).sort(), ['added-0', 'added-1', 'original']);
+});
+
+test('内核拒绝执行但无共享锁时拒绝写入，其他 RPC 错误保持原样', async () => {
+    const files = new Map(); let failure = { code: -32002 };
+    const kernel = { rpc: { call: { 'commit-pomodoro-records': async () => { throw failure; } } } };
+    await assert.rejects(frontendAdapter({ kernel, files }).commit({ changes: [] }), /尚未就绪/);
+    for (const error of [{ code: -32603 }, new Error('timeout'), new Error('Plugin not running')]) {
+        failure = error;
+        await assert.rejects(frontendAdapter({ kernel, files }).commit({ changes: [] }), e => e === error);
+    }
+    assert.equal(files.size, 0);
 });
 
 test('无内核的旧宿主使用共享 Web Lock，两个前端也不会覆盖彼此的补录', async () => {
