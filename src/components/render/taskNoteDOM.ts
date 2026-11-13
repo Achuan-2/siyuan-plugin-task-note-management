@@ -1113,6 +1113,9 @@ export class TaskNoteDOMManager {
         }
 
         const linkedReminderIds = this.normalizeReminderIds(info.bindReminderIds).filter((id) => id !== blockId);
+        const hideBoundTaskMetadata = this.plugin.areAllBoundRemindersAbandoned?.(
+            this.normalizeReminderIds(info.bindReminderIds)
+        ) === true;
         const existingBindBtn = container.querySelector(`.block-bind-reminders-btn[data-block-id="${blockId}"]`) as HTMLElement;
         const existingBindDateBtn = container.querySelector(`.block-bind-reminder-date[data-block-id="${blockId}"]`) as HTMLElement | null;
         if (linkedReminderIds.length > 0) {
@@ -1125,11 +1128,8 @@ export class TaskNoteDOMManager {
             if (existingBindDateBtn && existingBindDateBtn.parentElement !== container) {
                 container.appendChild(existingBindDateBtn);
             }
-            const syncDisplayInfo =
-                this.getBoundReminderDateDisplayInfoSyncFromPlugin(linkedReminderIds) ||
-                this.lastBoundReminderDateDisplayByBlock.get(blockId) ||
-                null;
-            if (syncDisplayInfo?.displayType === "completed") {
+            const syncDisplayInfo = this.getBoundReminderDateDisplayInfoSyncFromPlugin(linkedReminderIds);
+            if (!syncDisplayInfo || syncDisplayInfo.displayType === "completed") {
                 this.lastBoundReminderDateDisplayByBlock.delete(blockId);
                 if (existingBindDateBtn) {
                     existingBindDateBtn.remove();
@@ -1168,7 +1168,13 @@ export class TaskNoteDOMManager {
 
         const existingMilestoneBtn = container.querySelector(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement;
         const existingMilestoneDateBtn = container.querySelector(`.block-milestone-date[data-block-id="${blockId}"]`) as HTMLElement | null;
-        if (info.milestoneIds && info.milestoneIds.length > 0 && info.milestoneProjectId) {
+        if (hideBoundTaskMetadata) {
+            // 使放弃前发起的异步刷新失效，避免旧里程碑重新显示。
+            this.latestMilestoneDateTaskByBlock.set(blockId, (this.latestMilestoneDateTaskByBlock.get(blockId) || 0) + 1);
+            existingMilestoneBtn?.remove();
+            existingMilestoneDateBtn?.remove();
+            this.lastMilestoneDateDisplayByBlock.delete(blockId);
+        } else if (info.milestoneIds && info.milestoneIds.length > 0 && info.milestoneProjectId) {
             if (!existingMilestoneBtn) {
                 const milestoneBtn = this._createMilestoneButton(blockId, info.milestoneProjectId, info.milestoneIds);
                 container.appendChild(milestoneBtn);
@@ -1596,6 +1602,13 @@ export class TaskNoteDOMManager {
         const legacyDateBtn = container.querySelector(`.block-milestone-date[data-block-id="${blockId}"]`) as HTMLElement | null;
         if (legacyDateBtn) legacyDateBtn.remove();
         const existingBtn = container.querySelector(`.block-milestone-btn[data-block-id="${blockId}"]`) as HTMLElement | null;
+        if (this.plugin.areAllBoundRemindersAbandoned?.(
+            this.normalizeReminderIds(trackedSource.getAttribute("custom-bind-reminders"))
+        ) === true) {
+            this.lastMilestoneDateDisplayByBlock.delete(blockId);
+            existingBtn?.remove();
+            return;
+        }
         if (!displayInfo) {
             this.lastMilestoneDateDisplayByBlock.delete(blockId);
             if (existingBtn) {

@@ -4565,6 +4565,13 @@ export default class ReminderPlugin extends Plugin {
         return !!endLogicalDate && compareDateStrings(endLogicalDate, logicalToday) < 0;
     }
 
+    public areAllBoundRemindersAbandoned(reminderIds: string[]): boolean {
+        const reminders = (reminderIds || [])
+            .map((id) => this.reminderDataCache?.[String(id || "").trim()])
+            .filter((reminder: any) => reminder?.id);
+        return reminders.length > 0 && reminders.every((reminder: any) => reminder.kanbanStatus === "abandoned");
+    }
+
     private buildBoundReminderDateDisplayInfo(
         reminderIds: string[],
         reminderData: any
@@ -4578,7 +4585,7 @@ export default class ReminderPlugin extends Plugin {
 
         const reminders = normalizedIds
             .map((id) => reminderData[id])
-            .filter((reminder: any) => reminder && reminder.id);
+            .filter((reminder: any) => reminder && reminder.id && reminder.kanbanStatus !== "abandoned");
         if (reminders.length === 0) return null;
 
         const allCompleted = reminders.every((reminder: any) => !!reminder.completed);
