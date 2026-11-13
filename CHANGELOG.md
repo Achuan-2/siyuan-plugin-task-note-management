@@ -1,3 +1,163 @@
+## v7.2.0 / 20261113
+
+- ✨ 任务侧栏与编辑
+  - 支持按项目、分类、日期或优先级分组任务。
+  - 今日视图支持在“今日任务”和“每日可做”下继续分组。
+  - 分组标题支持显示任务数量和折叠展开。
+  - 按项目分组和排序时优先遵循项目文件夹顺序。
+  - 支持双击侧栏任务打开编辑弹窗。
+  - 任务编辑弹窗新增删除任务及全部子任务的入口。
+  - 任务编辑弹窗删除操作支持撤回。
+  - 任务标题默认保持多行显示。
+  - 侧栏与项目看板统一使用相对日期显示完成时间。
+  - 缩短任务操作撤回提示的停留时间。
+  - 修复完成子任务后父任务被意外折叠的问题。
+  - 修复表单初始化期间保存导致所属项目被清空的问题。
+- ✨ 项目管理与看板
+  - 项目侧栏统一使用文件夹树展示项目。
+  - 项目统计面板默认按文件夹展示项目。
+  - 项目选择器统一使用文件夹树。
+  - 项目选择器支持按自定义项目状态筛选。
+  - 移除项目侧栏的“进行中”筛选开关。
+  - 项目侧栏新增日期、任务数量、番茄与专注时间、进度的独立显示开关。
+  - 项目侧栏默认隐藏任务数量统计。
+  - 项目侧栏默认隐藏番茄与专注时间统计。
+  - 项目统计补充开始日期与已开始天数。
+  - 项目统计按项目配置显示状态名称和图标。
+  - 看板里程碑筛选默认单选，可切换为多选。
+  - 看板按项目记忆各状态列和分组的里程碑筛选状态。
+  - 标签子菜单新增“编辑标签”入口。
+  - 标签修改后自动刷新相关看板。
+  - 项目标签统一为井号前缀的实色胶囊样式。
+  - 标签文字根据背景颜色自动切换黑色或白色。
+  - 修复项目专注时间统计未显示的问题。
+  - 修复新建任务未立即显示默认里程碑的问题。
+  - 修复看板完成子任务后滚动位置跳动的问题。
+- ✨ 日历视图
+  - 日历侧栏补充显示设置入口。
+  - 显示设置按功能组织为默认收起的多级选项。
+  - 任务状态筛选收纳到“显示任务”下方。
+  - 任务样式、上色方案和透明度统一收纳到样式设置。
+  - 跨天任务与重复任务限制改为“不限制 / 限制”选择。
+  - 显示设置浮层根据可用空间定位并支持内部滚动。
+  - 项目与分类筛选统一通过筛选按钮打开。
+  - 项目与分类筛选控件仅在启用对应筛选后显示。
+- ✨ 手机端
+  - 项目看板支持长按任务拖动排序。
+  - 项目看板支持拖动任务调整父子层级。
+  - 项目看板拖动任务时支持横向和纵向边缘滚动。
+  - 日历周期与视图样式选择统一使用思源菜单。
+  - 优化日历工具栏的窄屏布局。
+  - 任务快捷窗口默认铺满可用屏幕。
+  - 任务快捷窗口页签支持长按拖动并记忆顺序。
+  - 修复快捷窗口页签长按拖动排序失效的问题。
+  - 修复任务快捷按钮遮挡键盘工具栏的问题。
+  - 优化插件设置面板的高度与内容区间距。
+- ✨ 习惯打卡
+  - 习惯侧栏支持右键归档。
+  - 习惯侧栏支持取消归档。
+  - 习惯侧栏默认显示一周打卡情况。
+  - 周视图与补打卡视图高亮今日日期。
+- 🎨 番茄钟与界面
+  - 番茄钟背景音量入口移入更多菜单。
+  - 正计时与倒计时切换入口移入状态菜单。
+  - 统一番茄钟各阶段与随机微休息的图标。
+  - 统一右键菜单的 SVG 操作图标。
+  - 统一任务详情、绑定块与统计界面的元信息图标。
+  - 统一设置页签与任务编辑表单的 SVG 图标。
+  - 任务状态菜单使用对应状态颜色的圆点。
+  - 任务完成复选框统一为绿底白勾。
+  - 保留里程碑、分类和习惯的自定义 emoji。
+  - 修复随机微休息结束时停止番茄钟背景音的问题。
+  - 修复笔记内番茄统计图标错位的问题。
+- 🎨 通知与其他设置
+  - 邮箱与 Webhook 通知关闭时收起对应配置。
+  - 修复未启用 SMTP 时仍请求邮件服务并报错的问题。
+  - 兼容提醒与邮件列表的空响应。
+  - 七牛云 ICS 配置新增外链域名提示。
+  - 过滤器管理调整为会员功能。
+  - 手机任务快捷窗口调整为会员功能。
+
+---
+
+- ✨ Task sidebar and editor
+  - Group tasks by project, category, date or priority.
+  - Add nested groups within Today and Available Today sections.
+  - Show task counts and allow groups to collapse or expand.
+  - Follow project folder order when grouping or sorting by project.
+  - Open the task editor by double-clicking a sidebar task.
+  - Delete a task and all its subtasks from the task editor.
+  - Undo deletions made from the task editor.
+  - Keep task titles multiline by default.
+  - Use consistent relative completion dates in the sidebar and project boards.
+  - Reduce how long task undo prompts stay visible.
+  - Fix parent tasks unexpectedly collapsing after a subtask is completed.
+  - Prevent saving during form initialization from clearing the task's project.
+- ✨ Project management and boards
+  - Use a folder tree throughout the project sidebar.
+  - Group project statistics by folder by default.
+  - Use a folder tree throughout the project selector.
+  - Filter the project selector by custom project statuses.
+  - Remove the In Progress filter switch from the project sidebar.
+  - Add independent display switches for dates, task counts, Pomodoro statistics and progress in the project sidebar.
+  - Hide project task counts by default.
+  - Hide project Pomodoro counts and focus time by default.
+  - Add start dates and elapsed days to project statistics.
+  - Use configured project status names and icons in statistics.
+  - Default milestone filters to single selection with an option for multiple selection.
+  - Remember milestone filters for each status column and group within a project.
+  - Add an Edit Tags entry to tag submenus.
+  - Refresh affected boards after tag changes.
+  - Use solid capsule tags with hash prefixes.
+  - Automatically choose black or white tag text based on the background color.
+  - Fix missing project focus-time statistics.
+  - Show the default milestone immediately on newly created tasks.
+  - Fix board scroll positions jumping after completing subtasks.
+- ✨ Calendar
+  - Add display settings access to the calendar sidebar.
+  - Organize display settings into nested options collapsed by default.
+  - Move task status filtering under Show Tasks.
+  - Group task appearance, coloring and opacity under style settings.
+  - Use Unlimited and Limited choices for multi-day and recurring task limits.
+  - Position display settings within the available space and allow internal scrolling.
+  - Open project and category filters from a shared filter button.
+  - Show project and category filter controls only when their filters are active.
+- ✨ Mobile
+  - Long-press board tasks to drag and reorder them.
+  - Drag board tasks to adjust parent-child relationships.
+  - Scroll board edges horizontally and vertically while dragging tasks.
+  - Use SiYuan menus for calendar period and view-style selection.
+  - Improve the calendar toolbar layout on narrow screens.
+  - Fill the available screen with the task shortcut window by default.
+  - Long-press shortcut tabs to reorder them and remember their order.
+  - Fix long-press tab reordering failing in the shortcut window.
+  - Prevent the task shortcut button from overlapping the keyboard toolbar.
+  - Improve the settings panel height and content spacing.
+- ✨ Habits
+  - Archive habits from the sidebar context menu.
+  - Unarchive habits from the sidebar context menu.
+  - Show weekly check-ins in the habit sidebar by default.
+  - Highlight today's date in weekly and past check-in views.
+- 🎨 Pomodoro and interface
+  - Move background volume controls into the More menu.
+  - Move count-up and countdown switching into the phase menu.
+  - Unify icons for Pomodoro phases and random micro-breaks.
+  - Unify SVG action icons across context menus.
+  - Unify metadata icons in task details, bound blocks and statistics.
+  - Unify SVG icons in settings tabs and task editor fields.
+  - Use each task status's configured color for its menu dot.
+  - Use green backgrounds and white ticks for completed task checkboxes.
+  - Preserve custom emoji for milestones, categories and habits.
+  - Keep Pomodoro background audio playing when a random micro-break ends.
+  - Fix misaligned Pomodoro statistics icons inside notes.
+- 🎨 Notifications and other settings
+  - Collapse email and Webhook configuration when their notifications are disabled.
+  - Avoid requesting the mail service and reporting errors when SMTP is disabled.
+  - Handle empty reminder and email-list responses.
+  - Add an external-domain hint for Qiniu ICS configuration.
+  - Make filter management a VIP feature.
+  - Make the mobile task shortcut window a VIP feature.
+
 ## v7.1.13 / 20261109
 
 - 🐛 番茄钟：修复没有历史记录时补录、开始番茄钟或正计时及保存记录失败的问题，兼容 Windows 中英文文件和目录缺失提示；读取异常时继续保护已有数据。
