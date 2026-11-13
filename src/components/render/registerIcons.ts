@@ -4,6 +4,23 @@ import { renderTomatoIconContent } from "./tomatoIcon";
 export function registerCustomIcons(plugin: Plugin) {
     // 任务菜单图标：复用宿主 SVG 尺寸与主题色，优先级保留颜色区分。
     plugin.addIcons(`
+        <symbol id="iconTNToday" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42m0-14.14-1.42 1.42m-11.3 11.3-1.42 1.42"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNTomorrow" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 18a7 7 0 0 1 14 0M3 21h18M12 16V9m-3 3 3-3 3 3M12 2v2M4.22 6.22l1.42 1.42m12.72 0 1.42-1.42M2 16h2m16 0h2"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNPostponeWeek" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <path d="M3 8h18M6 15h5m-2.5-2.5v5M14 12.5h4l-3.5 6"/>
+            </g>
+        </symbol>
         <symbol id="iconTNCopy" viewBox="0 0 24 24">
             <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>

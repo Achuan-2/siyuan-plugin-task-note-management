@@ -142,8 +142,8 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
         getBaseDate?: () => string | undefined
     ) => {
         const submenuItems: any[] = [
-            { icon, label: todayLabel, click: () => applyDate(todayStr) },
-            { icon, label: tomorrowLabel, click: () => applyDate(tomorrowStr) },
+            { icon: 'iconTNToday', label: todayLabel, click: () => applyDate(todayStr) },
+            { icon: 'iconTNTomorrow', label: tomorrowLabel, click: () => applyDate(tomorrowStr) },
             { icon, label: dayAfterLabel, click: () => applyDate(dayAfterStr) },
         ];
 
@@ -158,7 +158,7 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
 
         submenuItems.push(
             { icon, label: i18n("moveToNextWeek") || "移至下周", submenu: createNextWeekSubmenu(applyDate) },
-            { icon, label: i18n("postponeSevenDays") || "推迟7天", click: () => applyDate(addDaysToDate((getBaseDate ? getBaseDate() : null) || targetTask.date || targetTask.endDate || todayStr, 7)) }
+            { icon: 'iconTNPostponeWeek', label: i18n("postponeSevenDays") || "推迟7天", click: () => applyDate(addDaysToDate((getBaseDate ? getBaseDate() : null) || targetTask.date || targetTask.endDate || todayStr, 7)) }
         );
 
         return submenuItems;
@@ -188,14 +188,14 @@ export function buildQuickDateMenuItems(options: QuickDateMenuOptions): any[] {
         items.push({ icon: removeIcon, label: i18n("clearDate") || "清除日期", click: () => onApplyStartDate(null) });
         items.push({ icon: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
     } else {
-        items.push({ icon, label: todayLabel, click: () => onApplyStartDate(todayStr) });
-        items.push({ icon, label: tomorrowLabel, click: () => onApplyStartDate(tomorrowStr) });
+        items.push({ icon: 'iconTNToday', label: todayLabel, click: () => onApplyStartDate(todayStr) });
+        items.push({ icon: 'iconTNTomorrow', label: tomorrowLabel, click: () => onApplyStartDate(tomorrowStr) });
         items.push({ icon, label: dayAfterLabel, click: () => onApplyStartDate(dayAfterStr) });
         if (currentIsoDay < 5) {
             items.push({ icon, label: i18n("moveToThisWeek") || "移至本周", submenu: createThisWeekSubmenu(onApplyStartDate) });
         }
         items.push({ icon, label: i18n("moveToNextWeek") || "移至下周", submenu: createNextWeekSubmenu(onApplyStartDate) });
-        items.push({ icon, label: i18n("postponeSevenDays") || "推迟7天", click: () => onApplyStartDate(addDaysToDate(targetTask.date || targetTask.endDate || todayStr, 7)) });
+        items.push({ icon: 'iconTNPostponeWeek', label: i18n("postponeSevenDays") || "推迟7天", click: () => onApplyStartDate(addDaysToDate(targetTask.date || targetTask.endDate || todayStr, 7)) });
         items.push({ icon: removeIcon, label: i18n("clearDate") || "清除日期", click: () => onApplyStartDate(null) });
         items.push({ icon: editIcon, label: i18n("editDate") || "编辑日期", click: editDate });
     }

@@ -8698,10 +8698,10 @@ export class ReminderPanel {
                 }
             };
 
-            items.push({ icon: "iconCalendar", label: i18n("moveToToday") || "移至今天", click: () => apply(todayStr) });
-            items.push({ icon: "iconCalendar", label: i18n("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
+            items.push({ icon: "iconTNToday", label: i18n("moveToToday") || "移至今天", click: () => apply(todayStr) });
+            items.push({ icon: "iconTNTomorrow", label: i18n("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
             items.push({ icon: "iconCalendar", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
-            items.push({ icon: "iconCalendar", label: i18n("postponeSevenDays") || "推迟7天", click: () => apply(addDaysToDate(targetReminder.date || targetReminder.endDate || todayStr, 7)) });
+            items.push({ icon: "iconTNPostponeWeek", label: i18n("postponeSevenDays") || "推迟7天", click: () => apply(addDaysToDate(targetReminder.date || targetReminder.endDate || todayStr, 7)) });
             items.push({ icon: "iconClose", label: i18n("clearDate") || "清除日期", click: () => apply(null) });
             items.push({
                 icon: "iconEdit", label: i18n("editDate") || "编辑日期", click: () => {
@@ -12056,10 +12056,10 @@ export class ReminderPanel {
             icon: 'iconCalendar',
             label: i18n('setDate') || '设置日期',
             submenu: [
-                { icon: 'iconCalendar', label: i18n('moveToToday') || '移至今天', click: () => this.panelBatchSetDate(todayStr) },
-                { icon: 'iconCalendar', label: i18n('moveToTomorrow') || '移至明天', click: () => this.panelBatchSetDate(tomorrowStr) },
+                { icon: 'iconTNToday', label: i18n('moveToToday') || '移至今天', click: () => this.panelBatchSetDate(todayStr) },
+                { icon: 'iconTNTomorrow', label: i18n('moveToTomorrow') || '移至明天', click: () => this.panelBatchSetDate(tomorrowStr) },
                 { icon: 'iconCalendar', label: i18n('moveToDayAfterTomorrow') || '移至后天', click: () => this.panelBatchSetDate(dayAfterStr) },
-                { icon: 'iconCalendar', label: i18n('postponeSevenDays') || '推迟7天', click: () => this.panelBatchSetDate(nextWeekStr) },
+                { icon: 'iconTNPostponeWeek', label: i18n('postponeSevenDays') || '推迟7天', click: () => this.panelBatchSetDate(nextWeekStr) },
                 { icon: 'iconClose', label: i18n('clearDate') || '清除日期', click: () => this.panelBatchSetDate(null) },
                 { icon: 'iconCalendar', label: i18n('batchSetDate') || '批量设置日期…', click: () => this.panelBatchSetDateDialog() }
             ]
