@@ -1170,8 +1170,10 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any, provide
         }
 
         // ----- 1. 计算 bookmark 和 custom-task-done -----
-        const hasIncompleteReminders = blockReminders.some((reminder: any) => !reminder.completed);
-        const allCompleted = blockReminders.length > 0 && blockReminders.every((reminder: any) => reminder.completed);
+        // 已放弃任务保留绑定关系，但不参与书签状态计算。
+        const bookmarkReminders = blockReminders.filter((reminder: any) => reminder.kanbanStatus !== 'abandoned');
+        const hasIncompleteReminders = bookmarkReminders.some((reminder: any) => !reminder.completed);
+        const allCompleted = bookmarkReminders.length > 0 && bookmarkReminders.every((reminder: any) => reminder.completed);
 
         if (allCompleted) {
             attrs['bookmark'] = '✅';
@@ -1181,7 +1183,7 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any, provide
             // 如果从完成变成未完成，是否清除 completion time? 保持现状或者根据需要清除
             // attrs['custom-task-done'] = ''; 
         } else {
-            // 理论上不会走到这里，因为 blockReminders.length > 0
+            // 所有绑定任务均已放弃时移除书签。
             attrs['bookmark'] = '';
         }
 

@@ -125,3 +125,50 @@ test('放弃前发起的异步里程碑刷新不会恢复旧显示', async () =>
     assert.equal(f.buttons.has('block-milestone-btn'), false);
     assert.equal(f.manager.lastMilestoneDateDisplayByBlock.has('block'), false);
 });
+
+const apiSource = ts.createSourceFile('api.ts', fs.readFileSync(path.join(__dirname, '../src/api.ts'), 'utf8'), ts.ScriptTarget.Latest, true);
+const updateBindingSource = apiSource.statements.find(node => node.name?.getText(apiSource) === 'updateBindBlockAtrrs').getText(apiSource);
+
+async function updateBookmark(reminderData) {
+    const writes = [];
+    const update = new Function('require', 'exports', 'setBlockAttrs', 'formatDate', 'syncTaskListBlockCompletion',
+        transpile(updateBindingSource) + '\nreturn updateBindBlockAtrrs;')(
+        name => {
+            assert.equal(name, './components/dataManager/pomodoroRecord');
+            return { PomodoroRecordManager: { getInstance: () => null } };
+        }, {}, async (id, attrs) => writes.push({ id, attrs }), () => '2026-11-13', async () => {}
+    );
+    await update('20261113000000-abcdefg', { reminderDataCache: reminderData });
+    assert.equal(writes.length, 1);
+    return writes[0].attrs;
+}
+
+test('已放弃任务移除书签并保留绑定，恢复后重新添加提醒书签', async () => {
+    const task = { id: 'task', blockId: '20261113000000-abcdefg', kanbanStatus: 'abandoned' };
+    const abandoned = await updateBookmark({ task });
+    assert.equal(abandoned.bookmark, '');
+    assert.equal(abandoned['custom-bind-reminders'], 'task');
+    task.kanbanStatus = 'doing';
+    assert.equal((await updateBookmark({ task })).bookmark, '⏰');
+});
+
+test('混合绑定根据未放弃任务保留提醒或完成书签', async () => {
+    const abandoned = { id: 'abandoned', blockId: '20261113000000-abcdefg', kanbanStatus: 'abandoned' };
+    const active = { id: 'active', blockId: abandoned.blockId };
+    assert.equal((await updateBookmark({ abandoned, active })).bookmark, '⏰');
+    active.completed = true;
+    assert.equal((await updateBookmark({ abandoned, active })).bookmark, '✅');
+    active.kanbanStatus = 'abandoned';
+    assert.equal((await updateBookmark({ abandoned, active })).bookmark, '');
+});
+
+test('绑定重复实例放弃后移除书签，实例恢复状态覆盖系列状态', async () => {
+    const series = { id: 'series', kanbanStatus: 'abandoned', repeat: { instances: {
+        '2026-11-13': { blockId: '20261113000000-abcdefg', kanbanStatus: 'abandoned' },
+    } } };
+    const abandoned = await updateBookmark({ series });
+    assert.equal(abandoned.bookmark, '');
+    assert.equal(abandoned['custom-bind-reminders'], 'series_2026-11-13');
+    series.repeat.instances['2026-11-13'].kanbanStatus = 'doing';
+    assert.equal((await updateBookmark({ series })).bookmark, '⏰');
+});
