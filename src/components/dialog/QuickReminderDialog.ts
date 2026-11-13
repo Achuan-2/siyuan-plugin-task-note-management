@@ -570,6 +570,7 @@ export class QuickReminderDialog {
     private tempSubtasks: any[] = []; // 新建模式下的临时子任务列表
     private skipSave: boolean = false; // 是否跳过保存到数据库（用于临时子任务创建）
     private dateOnly: boolean = false; // 是否只显示日期相关设置（用于快速编辑日期）
+    private isFormInitializing: boolean = false; // 异步填充完成前禁止用空字段覆盖任务
     private eventSource?: string; // 事件来源标识（用于避免同源视图重复刷新）
     private tempParentName?: string;
     private reminderSkipHolidayData: HolidayData = {};
@@ -2979,6 +2980,7 @@ export class QuickReminderDialog {
             throw error;
         }
 
+        this.isFormInitializing = true;
         const langTag = (window as any).siyuan?.config?.lang?.replace('_', '-') || 'en-US';
 
         this.dialog = new Dialog({
@@ -3426,7 +3428,7 @@ export class QuickReminderDialog {
                             <svg style="width: 16px; height: 16px;" aria-hidden="true"><use xlink:href="#iconTrashcan"></use></svg>
                         </button>` : ''}
                         <button class="b3-button b3-button--cancel" id="quickCancelBtn">${this.readOnly ? i18n("close") : i18n("cancel")}</button>
-                        ${this.readOnly ? '' : `<button class="b3-button b3-button--primary" id="quickConfirmBtn">${i18n("save")}</button>`}
+                        ${this.readOnly ? '' : `<button class="b3-button b3-button--primary" id="quickConfirmBtn" disabled>${i18n("save")}</button>`}
                     </div>
                 </div>
             `,
@@ -3989,6 +3991,9 @@ export class QuickReminderDialog {
 
             // 初始化预设下拉状态
             this.updatePresetSelectState();
+            this.isFormInitializing = false;
+            const confirmBtn = this.dialog.element.querySelector('#quickConfirmBtn') as HTMLButtonElement;
+            if (confirmBtn) confirmBtn.disabled = false;
             this.applyReadOnlyMode();
         }, 50);
     }
@@ -6529,6 +6534,11 @@ export class QuickReminderDialog {
 
         if (!searchInput || !hiddenInput || !dropdown) return;
 
+        // 项目列表读取失败或尚未完成时，也必须保留入口传入的项目。
+        // 显式选择“无项目”仍由选择器写入空值，保存时不能用默认项目兜底。
+        const initialProjectId = this.defaultProjectId || this.allowedProjectIds?.[0] || '';
+        hiddenInput.value = initialProjectId;
+
         try {
             const popup = new ProjectSelectorPopup({
                 plugin: this.plugin,
@@ -6548,13 +6558,9 @@ export class QuickReminderDialog {
             this.projectSelectorPopup = popup;
 
             // 初始化默认值
-            if (this.defaultProjectId) {
-                popup.updateSelection(this.defaultProjectId);
-                await this.onProjectChange(this.defaultProjectId);
-            } else if (this.allowedProjectIds?.length) {
-                const firstProjectId = this.allowedProjectIds[0];
-                popup.updateSelection(firstProjectId);
-                await this.onProjectChange(firstProjectId);
+            if (initialProjectId) {
+                popup.updateSelection(initialProjectId);
+                await this.onProjectChange(initialProjectId);
             }
         } catch (error) {
             console.error("Failed to render project selector:", error);
@@ -7119,6 +7125,8 @@ export class QuickReminderDialog {
             await this.saveNoteOnly();
             return;
         }
+        // 按钮与 Ctrl/Cmd+Enter 共用此入口，均等待异步表单填充完成。
+        if (this.isFormInitializing) return;
 
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
         const blockInput = this.dialog.element.querySelector('#quickBlockInput') as HTMLInputElement;
