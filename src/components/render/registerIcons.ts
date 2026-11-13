@@ -4,6 +4,12 @@ import { renderTomatoIconContent } from "./tomatoIcon";
 export function registerCustomIcons(plugin: Plugin) {
     // 任务菜单图标：复用宿主 SVG 尺寸与主题色，优先级保留颜色区分。
     plugin.addIcons(`
+        <symbol id="iconTNCopy" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </g>
+        </symbol>
         <symbol id="iconTNMerge" viewBox="0 0 24 24">
             <g transform="rotate(90 12 12)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m8 6 4-4 4 4"/>

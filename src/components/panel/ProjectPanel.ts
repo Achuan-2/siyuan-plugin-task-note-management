@@ -1561,7 +1561,7 @@ export class ProjectPanel {
 
         // 创建空项目副本
         menu.addItem({
-            icon: "iconCopy",
+            icon: "iconTNCopy",
             label: i18n("createCopy"),
             click: () => this.createProjectCopy(project.id)
         });
