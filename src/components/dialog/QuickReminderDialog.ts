@@ -7210,7 +7210,7 @@ export class QuickReminderDialog {
             showMessage(i18n('timeRequiresDate') || '设置时间前请先选择日期');
             return;
         }
-        if (!endDate && endTime) {
+        if (!endDate && !date && endTime) {
             showMessage(i18n('timeRequiresDate') || '设置时间前请先选择日期');
             return;
         }
@@ -7237,10 +7237,11 @@ export class QuickReminderDialog {
 
         // 允许不设置日期
 
-        // 验证结束日期时间不能早于开始日期时间
-        if (endDate && date) {
+        // 结束日期留空时，结束时间属于开始日期；仅用于校验，保留用户的空结束日期。
+        const effectiveEndDate = endDate || (endTime ? date : '');
+        if (effectiveEndDate && date) {
             const startDateTime = time ? `${date}T${time}` : `${date}T00:00:00`;
-            const endDateTime = endTime ? `${endDate}T${endTime}` : `${endDate}T23:59:59`;
+            const endDateTime = endTime ? `${effectiveEndDate}T${endTime}` : `${effectiveEndDate}T23:59:59`;
 
             if (new Date(endDateTime) < new Date(startDateTime)) {
                 showMessage(i18n("endDateCannotBeEarlier"));
