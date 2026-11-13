@@ -8279,6 +8279,14 @@ export class ReminderPanel {
         }
     }
 
+    private createCategoryMenuIcon(icon?: string): string {
+        const element = document.createElement('span');
+        element.className = 'b3-menu__icon';
+        element.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; font-size: 16px;';
+        element.textContent = icon || '';
+        return element.outerHTML;
+    }
+
     private async showReminderContextMenu(event: { clientX: number; clientY: number }, reminder: any) {
         const menu = new Menu("reminderContextMenu");
         const today = getLogicalDateString();
@@ -8644,7 +8652,7 @@ export class ReminderPanel {
             // 添加已有分类
             categories.forEach(category => {
                 menuItems.push({
-                    icon: "iconTags",
+                    iconHTML: this.createCategoryMenuIcon(category.icon),
                     label: category.name,
                     current: currentCategoryId === category.id,
                     click: () => {
@@ -12084,7 +12092,7 @@ export class ReminderPanel {
             }];
             categories.forEach((cat: any) => {
                 catItems.push({
-                    icon: 'iconTags',
+                    iconHTML: this.createCategoryMenuIcon(cat.icon),
                     label: cat.name,
                     click: () => this.panelBatchSetCategory(cat.id)
                 });
