@@ -1666,8 +1666,9 @@ export class ProjectPanel {
             const createNestedFolderItems = (parentId: string): any[] => {
                 return (childrenByParent.get(parentId) || []).map((folder: any) => {
                     const childItems = createNestedFolderItems(folder.id);
+                    const iconHTML = `<span class="b3-menu__icon" style="display: inline-flex; align-items: center; justify-content: center; font-size: 16px;">${this.escapeHTML(folder.icon || '📂')}</span>`;
                     const item: any = {
-                        icon: "iconFolder",
+                        iconHTML,
                         label: folder.name,
                         current: currentFolderId === folder.id
                     };
@@ -1675,7 +1676,7 @@ export class ProjectPanel {
                     if (childItems.length > 0) {
                         item.submenu = [
                             {
-                                icon: "iconFolder",
+                                iconHTML,
                                 label: i18n("selectThisFolder"),
                                 current: currentFolderId === folder.id,
                                 click: () => {
