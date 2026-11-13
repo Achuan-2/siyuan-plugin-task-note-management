@@ -2823,6 +2823,44 @@ export class ReminderPanel {
         return { ...group, key: `${section}/${group.key}`, parent: { key: section, order: section === 'today' ? 0 : 1 } };
     }
 
+    /** 拖入块创建任务时，目标的可见根决定分组，分组属性优先于筛选和块继承值。 */
+    private applyDropTargetGroupAttributes(reminder: any, target: any, dropAsDaily: boolean): void {
+        if (!target || this.reminderGroupMode === 'none') return;
+        const visible = new Map(this.currentRemindersCache.map(task => [task.id, task]));
+        const visited = new Set<string>();
+        while (target.parentId && visible.has(target.parentId) && !visited.has(target.id)) {
+            visited.add(target.id);
+            target = visible.get(target.parentId);
+        }
+
+        switch (this.reminderGroupMode) {
+            case 'project': {
+                const projectId = target.projectId || undefined;
+                if (reminder.projectId !== projectId) {
+                    // 块继承的项目内分组、里程碑不能带到另一个项目。
+                    delete reminder.customGroupId;
+                    delete reminder.milestoneId;
+                }
+                reminder.projectId = projectId;
+                break;
+            }
+            case 'category':
+                reminder.categoryId = this.getReminderGroup(target, getLogicalDateString()).key.slice('category:'.length);
+                break;
+            case 'priority':
+                reminder.priority = this.getReminderGroup(target, getLogicalDateString()).key.slice('priority:'.length);
+                break;
+            case 'date':
+                if (dropAsDaily) break;
+                // 一并继承截止日期、时间及仅开始日期设置，保持跨天和逻辑日分组一致。
+                for (const key of ['date', 'endDate', 'time', 'endTime', 'treatStartDateAsDeadline']) {
+                    if (target[key] === undefined) delete reminder[key];
+                    else reminder[key] = target[key];
+                }
+                break;
+        }
+    }
+
     private createReminderGroupHeader(group: ReminderGroup, count: number): HTMLElement {
         const header = document.createElement('div');
         header.className = 'reminder-section-header';
@@ -6639,7 +6677,7 @@ export class ReminderPanel {
                                 // 重复实例使用实例 ID，使新任务只属于当前这一次
                                 const pId = targetRemObject.id;
                                 optReminder.parentId = pId;
-                                if (targetRemObject.projectId) optReminder.projectId = targetRemObject.projectId;
+                                if (targetRemObject.projectId && this.reminderGroupMode !== 'project') optReminder.projectId = targetRemObject.projectId;
                                 if (targetRemObject.categoryId) optReminder.categoryId = targetRemObject.categoryId;
                             } else {
                                 if (targetRemObject.parentId) {
@@ -6648,6 +6686,7 @@ export class ReminderPanel {
                                 if (targetRemObject.categoryId) optReminder.categoryId = targetRemObject.categoryId;
                                 optReminder.priority = targetRemObject.priority || 'none';
                             }
+                            this.applyDropTargetGroupAttributes(optReminder, targetRemObject, dropAsDaily);
                         }
 
                         // 关键锁：写入乐观更新缓存 Map，防止随后的 loadReminders() 用旧 JSON 覆盖清空新任务！
@@ -7132,7 +7171,7 @@ export class ReminderPanel {
                         // 重复实例使用实例 ID，使新任务只属于当前这一次
                         const parentId = targetRemObject.id;
                         newReminder.parentId = parentId;
-                        if (targetRemObject.projectId) newReminder.projectId = targetRemObject.projectId;
+                        if (targetRemObject.projectId && this.reminderGroupMode !== 'project') newReminder.projectId = targetRemObject.projectId;
                         if (targetRemObject.categoryId) newReminder.categoryId = targetRemObject.categoryId;
                     } else {
                         // 拖到目标的上下方 (before / after)
@@ -7143,6 +7182,7 @@ export class ReminderPanel {
                         if (targetRemObject.categoryId) newReminder.categoryId = targetRemObject.categoryId;
                         newReminder.priority = targetRemObject.priority || 'none';
                     }
+                    this.applyDropTargetGroupAttributes(newReminder, targetRemObject, dropAsDaily);
                 }
             }
 
@@ -7151,7 +7191,10 @@ export class ReminderPanel {
             const t3 = performance.now();
             // Apply sorting if target exists (not set-parent), passing skipSaveAndLoad=true
             if (targetInfo && targetRemObject && targetInfo.dropType !== 'set-parent') {
-                await this.reorderReminders(newReminder, targetRemObject, targetInfo.isBefore, reminderData, true);
+                // 优先级分组按可见根继承，排序时不能再被目标子任务自身的优先级覆盖。
+                const sortTarget = this.reminderGroupMode === 'priority'
+                    ? { ...targetRemObject, priority: newReminder.priority } : targetRemObject;
+                await this.reorderReminders(newReminder, sortTarget, targetInfo.isBefore, reminderData, true);
             }
             // 异步后台保存落盘，不阻塞主流程
             void saveReminders(this.plugin, reminderData);
