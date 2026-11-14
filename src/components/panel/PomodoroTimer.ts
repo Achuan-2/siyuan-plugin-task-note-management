@@ -7145,6 +7145,10 @@ export class PomodoroTimer {
 
         const addedMinutes = Math.max(1, Math.round(Number(focusMinutes) || 0));
         try {
+            if (!await getBlockByID(blockId)) {
+                this.blockPomodoroMetricCache = null;
+                return false;
+            }
             let currentCount = 0;
             let currentMinutes = 0;
             if (this.blockPomodoroMetricCache && this.blockPomodoroMetricCache.blockId === blockId) {
@@ -7159,10 +7163,14 @@ export class PomodoroTimer {
             const nextCount = currentCount + 1;
             const nextMinutes = currentMinutes + addedMinutes;
 
-            await setBlockAttrs(blockId, {
+            const result = await setBlockAttrs(blockId, {
                 [BLOCK_POMODORO_COUNT_ATTR]: String(nextCount),
                 [BLOCK_POMODORO_MINUTES_ATTR]: String(nextMinutes),
             });
+            if (result === null) {
+                this.blockPomodoroMetricCache = null;
+                return false;
+            }
             this.blockPomodoroMetricCache = { blockId, count: nextCount, minutes: nextMinutes };
             return true;
         } catch (error) {

@@ -6,13 +6,20 @@
  * API 文档见 [API_zh_CN.md](https://github.com/siyuan-note/siyuan/blob/master/API_zh_CN.md)
  */
 
-import { fetchPost, fetchSyncPost, IWebSocketData, openTab, Constants, platformUtils } from "siyuan";
+import { fetchPost, fetchSyncPost, IWebSocketData, openTab, Constants, platformUtils, showMessage } from "siyuan";
 
 import { getFrontend, openMobileFileById } from 'siyuan';
 import { getPluginInstance, i18n } from "./pluginInstance";
 import { createDocumentWithMarkdown } from "./utils/documentCreation";
-export async function request(url: string, data: any) {
-    let response: IWebSocketData = await fetchSyncPost(url, data);
+export async function request(url: string, data: any, allowMissingBlock = false) {
+    // 绑定块可能在后台同步前被删除。关闭宿主的自动提示后，只静默处理明确的块缺失错误。
+    const response: IWebSocketData = allowMissingBlock
+        ? await fetchSyncPost(url, data, undefined, false)
+        : await fetchSyncPost(url, data);
+    if (allowMissingBlock && response.code !== 0 && response.msg &&
+        !/^(?:block(?: tree)?|tree) not found(?:\s*\[[^\]]*\])?$/i.test(response.msg.trim())) {
+        showMessage(response.msg, 7000, "error");
+    }
     let res = response.code === 0 ? response.data : null;
     return res;
 }
@@ -283,7 +290,7 @@ export async function getBlockKramdown(id: BlockId, mode: string = 'md'): Promis
         mode: mode
     }
     let url = '/api/block/getBlockKramdown';
-    return request(url, data);
+    return (await request(url, data, true)) || { id, kramdown: "" };
 }
 export async function getBlockDOM(id: BlockId) {
     let data = {
@@ -337,7 +344,7 @@ export async function setBlockAttrs(id: BlockId, attrs: { [key: string]: string 
         attrs: attrs
     }
     let url = '/api/attr/setBlockAttrs';
-    return request(url, data);
+    return request(url, data, true);
 }
 
 
@@ -349,7 +356,7 @@ export async function getBlockAttrs(id: BlockId): Promise<{ [key: string]: strin
         id: id
     }
     let url = '/api/attr/getBlockAttrs';
-    return request(url, data);
+    return (await request(url, data, true)) || {};
 }
 
 // **************************************** Block Project IDs Helpers ****************************************
@@ -1105,6 +1112,8 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any, provide
         return;
     }
     try {
+        // 不修改任务的绑定信息：块可能被移入回收站，恢复后应能继续同步。
+        if (!await getBlockByID(blockId)) return;
         const reminderData = providedReminderData || (plugin && plugin.reminderDataCache) || await plugin.loadReminderData();
 
         // 查找该块的所有提醒
