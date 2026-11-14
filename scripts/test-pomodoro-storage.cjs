@@ -107,6 +107,31 @@ const twoDays = () => ({
     '2026-11-04': record('2026-11-04', [session('2026-11-04', 'today')]),
 });
 
+test('补录和删除后的列表只读取受影响物理分片，不重载长历史，且保留提交版本', async () => {
+    const history = {};
+    for (let i = 0; i < 100; i++) {
+        const date = new Date(Date.UTC(2026, 0, i + 1)).toISOString().slice(0, 10);
+        history[date] = record(date, [session(date, `s${i}`)]);
+    }
+    const f = fixture(history), manager = f.manager();
+    await manager.initialize();
+    await manager.getSessionsMatchingEvent(id => id === 'task');
+    const date = '2026-01-01';
+    await manager.updateSession(session(date, 'new'));
+    f.reset();
+    const saved = await manager.getStorageDateSessions([date]);
+    assert.deepEqual(saved.map(value => value.id).sort(), ['new', 's0']);
+    assert.equal(saved.find(value => value.id === 'new').revision, 1);
+    assert.deepEqual(f.stats.reads, [], '直接复用刚提交的分片');
+    assert.equal(f.stats.lists, 0);
+    await manager.deleteSession('new');
+    f.reset();
+    assert.deepEqual((await manager.getStorageDateSessions([date])).map(value => value.id), ['s0']);
+    assert.deepEqual(f.stats.reads, [], '删除后直接复用刚提交的分片');
+    assert.equal(f.stats.lists, 0);
+    await manager.closeStorage();
+});
+
 test('1000 日首次建摘要限制为 6 并发，释放明细；重启只读目录和缓存', async () => {
     const history = {};
     for (let i = 0; i < 1000; i++) {

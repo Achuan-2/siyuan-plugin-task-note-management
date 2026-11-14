@@ -161,6 +161,14 @@ export class PomodoroRecordManager {
         return sessions;
     }
 
+    /** 编辑后只取受影响的物理分片，保留协调器合并的其他窗口记录，无需重读全部历史。 */
+    async getStorageDateSessions(dates: string[]): Promise<PomodoroSession[]> {
+        return this.serialize(async () => {
+            await this.ensureStorageDatesLoaded(dates);
+            return dates.flatMap(date => this.records[date]?.sessions || []);
+        });
+    }
+
     private async loadSessionDate(id: string): Promise<void> {
         const date = this.store?.dateForSession(id);
         if (date) await this.ensureStorageDatesLoaded([date]);
