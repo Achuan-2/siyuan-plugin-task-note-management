@@ -701,15 +701,16 @@ test('跨天写入部分失败的恢复期间发现外部修改，不用旧快�
     assert.equal(m.store.needsReload, false);
 });
 
-function frontendAdapter({ kernel, locks, readonly = false, files = new Map(), directory = async () => [], legacy = null }) {
+function frontendAdapter({ kernel, locks, readonly = false, files = new Map(), directory = async () => [], legacy = null, transport }) {
     const relative = 'src/index.ts';
     const source = fs.readFileSync(path.join(root, relative), 'utf8');
     const ast = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true);
     const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'ReminderPlugin');
     const method = cls.members.find(node => node.name?.getText(ast) === 'createPomodoroStoreAdapter').getText(ast);
     const compiled = ts.transpileModule(`class Fixture { ${method} }`, { compilerOptions: { target: ts.ScriptTarget.ES2021 } }).outputText;
-    const Fixture = new Function('PomodoroRecordManager', 'PomodoroWriteCoordinator', 'createPomodoroCache', 'readDir', 'window', 'navigator', 'POMODORO_RECORD_DATA_FILE',
-        `${compiled}; return Fixture;`)({ getInstance: () => ({ locateSessionForWrite: async id => [...files].find(([, record]) => record.sessions?.some(s => s.id === id) || record.tombstones?.[id])?.[0].match(/([^/]+)\.json$/)?.[1] }) }, PomodoroWriteCoordinator, () => ({}), directory, { siyuan: { config: { readonly } } }, { locks }, 'legacy.json');
+    const singleCall = transport || (async (_url, body) => ({ result: await kernel.rpc.call[body.method](...body.params) }));
+    const Fixture = new Function('PomodoroRecordManager', 'PomodoroWriteCoordinator', 'createPomodoroCache', 'readDir', 'window', 'navigator', 'POMODORO_RECORD_DATA_FILE', 'fetchSyncPost', 'Constants',
+        `${compiled}; return Fixture;`)({ getInstance: () => ({ locateSessionForWrite: async id => [...files].find(([, record]) => record.sessions?.some(s => s.id === id) || record.tombstones?.[id])?.[0].match(/([^/]+)\.json$/)?.[1] }) }, PomodoroWriteCoordinator, () => ({}), directory, { siyuan: { config: { readonly } } }, { locks }, 'legacy.json', singleCall, { SIYUAN_APPID: 'frontend-app' });
     const instance = Object.assign(new Fixture(), {
         name: 'test', kernel, storageDisposed: false,
         protectedStorage: { load: async file => clone(files.get(file)) || null },
@@ -729,6 +730,40 @@ function directoryApi(fetchSyncPost) {
     }).outputText;
     return new Function('fetchSyncPost', `${compiled}; return readDir;`)(fetchSyncPost);
 }
+
+test('原始 RPC 仅发一次，未运行时不调用宿主的自动重试接口，立即走共享锁', async () => {
+    const calls = [], files = new Map();
+    let lockCalls = 0;
+    const kernel = { rpc: { call: { 'commit-pomodoro-records': () => assert.fail('不能调用宿主重试接口') } } };
+    const adapter = frontendAdapter({ kernel, files,
+        locks: { request: async (_name, run) => { lockCalls++; return run(); } },
+        transport: async (url, body, headers, process) => {
+            calls.push({ url, body, headers, process });
+            return { jsonrpc: '2.0', error: { code: -32002, message: 'Plugin not running' }, id: body.id };
+        },
+    });
+    const date = '2026-11-04';
+    await adapter.commit({ changes: [{ date, base: null, next: record(date, [session(date, 'fast-fallback')]) }] });
+    assert.equal(calls.length, 1);
+    assert.equal(lockCalls, 1);
+    assert.equal(new URL(calls[0].url, 'http://localhost').searchParams.get('appId'), 'frontend-app');
+    assert.equal(calls[0].body.method, 'commit-pomodoro-records');
+    assert.equal(calls[0].body.params.length, 1);
+    assert.equal(calls[0].process, false);
+    assert.equal(files.get(`pomodoroRecords/${date}.json`).sessions.length, 1);
+});
+
+test('原始 RPC 成功返回合并记录；超时、格式错误和业务错误均不另起写入', async () => {
+    const kernel = { rpc: {} };
+    const result = { '2026-11-04': record('2026-11-04', []) };
+    const locks = { request: () => assert.fail('未知执行结果不能启动回退写入') };
+    assert.deepEqual(await frontendAdapter({ kernel, locks, transport: async () => ({ result }) }).commit({ changes: [] }), result);
+    for (const response of [null, {}, { result: null }, { result: [] }, { error: { code: -32603, message: 'write failed' } }]) {
+        await assert.rejects(frontendAdapter({ kernel, locks, transport: async () => response }).commit({ changes: [] }));
+    }
+    const timeout = new Error('network timeout');
+    await assert.rejects(frontendAdapter({ kernel, locks, transport: async () => { throw timeout; } }).commit({ changes: [] }), error => error === timeout);
+});
 
 // 模拟原生内核存储：缺少父目录和仅缺少文件时，Windows 的报错不同。
 function freshKernelStorage(t) {

@@ -854,7 +854,21 @@ export default class ReminderPlugin extends Plugin {
                 if (this.storageDisposed || window.siyuan.config.readonly || (window.siyuan as any).isPublish) throw new Error('当前插件不可写');
                 if (this.kernel?.rpc) {
                     try {
-                        return await this.kernel.rpc.call['commit-pomodoro-records'](input);
+                        // 宿主的 kernel.rpc.call 会对未运行的插件重试约 5 秒。
+                        // 写入只发一次原始 RPC，明确未执行时才能立即切换到共享锁回退。
+                        const response = await fetchSyncPost(
+                            `/api/plugin/rpc?name=${encodeURIComponent(this.name)}&appId=${encodeURIComponent(Constants.SIYUAN_APPID)}`,
+                            { jsonrpc: '2.0', id: `pomodoro-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                                method: 'commit-pomodoro-records', params: [input] },
+                            undefined, false
+                        ) as any;
+                        if (response?.error) {
+                            throw Object.assign(new Error(response.error.message), response.error);
+                        }
+                        if (!response?.result || typeof response.result !== 'object' || Array.isArray(response.result)) {
+                            throw new Error('番茄钟写入服务返回无效响应');
+                        }
+                        return response.result;
                     } catch (error) {
                         // 仅在宿主明确拒绝执行时回退。超时、断连或业务错误可能已写入，不能另起写入队列。
                         if (error?.code !== -32001 && error?.code !== -32002) throw error;
