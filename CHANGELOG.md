@@ -1,3 +1,19 @@
+## v7.2.2 / 20261114
+
+- 🍅 番茄钟
+  - 优化补录、编辑和删除记录的响应速度，仅刷新受影响日期并在后台同步任务与块属性，避免重复读写及重复提交。
+  - 修复内核插件启动失败及内核不可用时保存记录前长时间重试等待的问题，保留安全的前端保存回退。
+- 🔗 任务绑定块
+  - 绑定块被删除后跳过无效同步，避免弹出块或文档树不存在的错误，保留任务与番茄记录并支持块恢复后继续同步。
+
+---
+
+- 🍅 Pomodoro
+  - Improve responsiveness when adding, editing and deleting sessions by refreshing only affected dates and synchronizing tasks and block attributes in the background, avoiding redundant reads, writes and duplicate submissions.
+  - Fix kernel plugin startup failures and lengthy retries before saving sessions when the kernel is unavailable, while retaining the safe frontend save fallback.
+- 🔗 Bound task blocks
+  - Skip synchronization when a bound block has been deleted to prevent missing-block and missing-tree errors, preserving tasks and Pomodoro records and resuming synchronization after the block is restored.
+
 ## v7.2.0 / 20261113
 
 - ✨ 任务侧栏与编辑
