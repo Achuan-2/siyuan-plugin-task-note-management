@@ -225,5 +225,5 @@ test('保存按钮和快捷键共用初始化保护，编辑字段填充完成�
     assert.match(show, /this\.isFormInitializing = true/);
     assert.match(show, /id="quickConfirmBtn" disabled/);
     assert.ok(show.indexOf('this.isFormInitializing = false') > show.indexOf('await this.populateEditForm()'));
-    assert.match(show, /confirmBtn\.disabled = false/);
+    assert.ok(show.indexOf('this.updateQuickDialogSaveButtonState()', show.indexOf('this.isFormInitializing = false')) > show.indexOf('await this.populateEditForm()'));
 });

@@ -24,6 +24,14 @@ interface PomodoroSessionsDialogOptions {
     defaultAddEventId?: string;
 }
 
+interface AddSessionFormOptions {
+    startTime?: Date;
+    endTime?: Date;
+    allowTaskSelection?: boolean;
+    saveButton?: HTMLButtonElement;
+    onSaved?: () => void;
+}
+
 export class PomodoroSessionsDialog {
     private dialog: Dialog;
     private reminderId: string;
@@ -635,6 +643,10 @@ export class PomodoroSessionsDialog {
             console.error("Failed to reload saved pomodoro records:", error);
             showMessage(i18n("loadingFailed"), 3000, "error");
         }
+        this.queueDerivedUpdates();
+    }
+
+    private queueDerivedUpdates() {
         this.updateTail = this.updateTail.then(async () => {
             // 让当前弹窗先完成绘制；连续操作仍按顺序更新，避免旧统计覆盖新统计。
             await new Promise<void>(resolve => setTimeout(resolve, 0));
@@ -710,6 +722,11 @@ export class PomodoroSessionsDialog {
      * 添加新的番茄钟会话（补录）
      */
     private async addNewSession() {
+        await this.mountAddSessionForm();
+    }
+
+    /** 同一补录表单既可独立打开，也可嵌入日历的新建窗口。 */
+    public async mountAddSessionForm(container?: HTMLElement, options: AddSessionFormOptions = {}): Promise<() => Promise<void>> {
         // 获取插件设置中的番茄钟时长
         let workDuration = 25;
         let breakDuration = 5;
@@ -726,10 +743,19 @@ export class PomodoroSessionsDialog {
             }
         }
 
-        const addDialog = new Dialog({
-            title: "➕ " + (i18n("addPomodoro") || "补录番茄钟"),
-            content: `
-                <div class="add-pomodoro-dialog" style="padding: 16px;">
+        const content = `
+                <div class="add-pomodoro-dialog" style="padding: ${container ? '0' : '16px'};">
+                    ${options.allowTaskSelection ? `
+                    <div class="b3-form__group">
+                        <label class="b3-form__label" for="sessionTask">${i18n("pomodoroRelatedTask")}</label>
+                        <select id="sessionTask" class="b3-select" style="width: 100%;">
+                            <option value="">${i18n("pomodoroNoRelatedTask")}</option>
+                        </select>
+                    </div>
+                    <div class="b3-form__group" id="sessionTitleGroup">
+                        <label class="b3-form__label" for="sessionTitle">${i18n("pomodoroRecordTitle")}</label>
+                        <input id="sessionTitle" class="b3-text-field" style="width: 100%;" required>
+                    </div>` : ''}
                     <div class="b3-form__group">
                         <label class="b3-form__label">${i18n("sessionType") || "会话类型"}</label>
                         <select id="sessionType" class="b3-select" style="width: 100%;">
@@ -763,23 +789,37 @@ export class PomodoroSessionsDialog {
                         <label class="b3-form__label">${i18n("note") || "备注"}</label>
                         <textarea id="sessionNote" class="b3-text-field" rows="3" style="width: 100%; resize: vertical;" placeholder="${i18n("pomodoroNotePlaceholder")}"></textarea>
                     </div>
-                    <div class="b3-dialog__action">
+                    ${container ? '' : `<div class="b3-dialog__action">
                         <button class="b3-button b3-button--cancel">${i18n("cancel")}</button>
                         <button class="b3-button b3-button--primary" id="confirmAddPomodoro">${i18n("save")}</button>
-                    </div>
+                    </div>`}
                 </div>
-            `,
-            width: "400px"
-        });
+            `;
+        let addDialog: Dialog | undefined;
+        let form: HTMLElement;
+        if (container) {
+            container.innerHTML = content;
+            form = container;
+        } else {
+            addDialog = new Dialog({
+                title: "➕ " + (i18n("addPomodoro") || "补录番茄钟"),
+                content,
+                width: "400px"
+            });
+            form = addDialog.element;
+        }
 
-        // 设置默认时间为当前时间
-        const timeInput = addDialog.element.querySelector("#sessionTimePoint") as HTMLInputElement;
-        const now = new Date();
+        // 日历划选时预填范围，独立补录时默认当前时间。
+        const timeInput = form.querySelector("#sessionTimePoint") as HTMLInputElement;
+        const selectedDuration = options.startTime && options.endTime
+            ? (options.endTime.getTime() - options.startTime.getTime()) / 60000 : 0;
+        const now = options.endTime || (options.startTime
+            ? new Date(options.startTime.getTime() + workDuration * 60000) : new Date());
         timeInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
         // 绑定模式切换事件
-        const timeModeSelect = addDialog.element.querySelector("#timeMode") as HTMLSelectElement;
-        const timeLabel = addDialog.element.querySelector("#timePointLabel") as HTMLElement;
+        const timeModeSelect = form.querySelector("#timeMode") as HTMLSelectElement;
+        const timeLabel = form.querySelector("#timePointLabel") as HTMLElement;
 
         timeModeSelect.addEventListener("change", () => {
             if (timeModeSelect.value === 'end') {
@@ -790,11 +830,11 @@ export class PomodoroSessionsDialog {
         });
 
         // 类型选择改变时更新默认时长
-        const typeSelect = addDialog.element.querySelector("#sessionType") as HTMLSelectElement;
-        const durationInput = addDialog.element.querySelector("#sessionDuration") as HTMLInputElement;
-        const countUpGroup = addDialog.element.querySelector("#countUpGroup") as HTMLDivElement;
+        const typeSelect = form.querySelector("#sessionType") as HTMLSelectElement;
+        const durationInput = form.querySelector("#sessionDuration") as HTMLInputElement;
+        const countUpGroup = form.querySelector("#countUpGroup") as HTMLDivElement;
 
-        const isCountUpCheckbox = addDialog.element.querySelector("#sessionIsCountUp") as HTMLInputElement;
+        const isCountUpCheckbox = form.querySelector("#sessionIsCountUp") as HTMLInputElement;
 
         const updateUIState = () => {
             const isWork = typeSelect.value === 'work';
@@ -804,11 +844,33 @@ export class PomodoroSessionsDialog {
                 countUpGroup.style.display = 'none';
             }
         };
+        if (Number.isFinite(selectedDuration) && selectedDuration >= 1) {
+            durationInput.value = String(selectedDuration);
+        }
+        if (container) isCountUpCheckbox.checked = true;
         // Initialize
         updateUIState();
 
+        const taskSelect = options.allowTaskSelection ? form.querySelector('#sessionTask') as HTMLSelectElement : null;
+        const titleInput = form.querySelector('#sessionTitle') as HTMLInputElement;
+        if (taskSelect) {
+            const reminders = await this.plugin.loadReminderData();
+            for (const [id, reminder] of Object.entries(reminders || {}) as [string, any][]) {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = reminder.title || i18n('unnamedTask');
+                taskSelect.appendChild(option);
+            }
+            taskSelect.addEventListener('change', () => {
+                const hasTask = !!taskSelect.value;
+                (form.querySelector('#sessionTitleGroup') as HTMLElement).style.display = hasTask ? 'none' : '';
+                titleInput.required = !hasTask;
+            });
+        }
+
         typeSelect.addEventListener("change", () => {
-            switch (typeSelect.value) {
+            // 日历中以划选时长为准，切换工作/休息类型不重置时间范围。
+            if (!container) switch (typeSelect.value) {
                 case "work":
                     durationInput.value = String(workDuration);
                     break;
@@ -825,33 +887,41 @@ export class PomodoroSessionsDialog {
         isCountUpCheckbox.addEventListener("change", updateUIState);
 
         // 取消按钮
-        addDialog.element.querySelector(".b3-button--cancel")?.addEventListener("click", () => {
-            addDialog.destroy();
+        form.querySelector(".b3-button--cancel")?.addEventListener("click", () => {
+            addDialog?.destroy();
         });
 
         // 确认按钮
-        const saveButton = addDialog.element.querySelector("#confirmAddPomodoro") as HTMLButtonElement;
-        saveButton?.addEventListener("click", async () => {
-            if (saveButton.disabled) return;
-            const type = (addDialog.element.querySelector("#sessionType") as HTMLSelectElement).value as 'work' | 'shortBreak' | 'longBreak';
-            const timeMode = (addDialog.element.querySelector("#timeMode") as HTMLSelectElement).value;
-            const timePointStr = (addDialog.element.querySelector("#sessionTimePoint") as HTMLInputElement).value;
-            const duration = parseInt((addDialog.element.querySelector("#sessionDuration") as HTMLInputElement).value);
+        const saveButton = options.saveButton || form.querySelector("#confirmAddPomodoro") as HTMLButtonElement;
+        let saving = false;
+        let saved = false;
+        const save = async () => {
+            if (saving || saved) return;
+            const type = (form.querySelector("#sessionType") as HTMLSelectElement).value as 'work' | 'shortBreak' | 'longBreak';
+            const timeMode = (form.querySelector("#timeMode") as HTMLSelectElement).value;
+            const timePointStr = (form.querySelector("#sessionTimePoint") as HTMLInputElement).value;
+            const duration = Number((form.querySelector("#sessionDuration") as HTMLInputElement).value);
             const completed = true; // 强制为已完成
-            const isCountUp = (addDialog.element.querySelector("#sessionIsCountUp") as HTMLInputElement).checked;
-            const note = (addDialog.element.querySelector("#sessionNote") as HTMLTextAreaElement).value.trim();
+            const isCountUp = type === 'work' && (form.querySelector("#sessionIsCountUp") as HTMLInputElement).checked;
+            const note = (form.querySelector("#sessionNote") as HTMLTextAreaElement).value.trim();
 
-            if (!timePointStr || !duration || duration <= 0) {
+            if (!timePointStr || !Number.isFinite(new Date(timePointStr).getTime()) || !Number.isFinite(duration) || duration <= 0) {
                 showMessage(i18n("pleaseEnterValidInfo") || "请输入有效信息", 3000, "error");
                 return;
             }
 
+            if (taskSelect && !taskSelect.value && !titleInput.value.trim()) {
+                showMessage(i18n('enterReminderTitle'), 3000, 'error');
+                titleInput.focus();
+                return;
+            }
+            saving = true;
             saveButton.disabled = true;
             saveButton.textContent = i18n("processing");
-            let saved = false;
             try {
-                const targetEventId = this.getDefaultAddTargetEventId();
-                const eventTitle = await this.resolveEventTitle(targetEventId);
+                const targetEventId = taskSelect?.value || this.getDefaultAddTargetEventId();
+                const eventTitle = taskSelect && !taskSelect.value
+                    ? titleInput.value.trim() : await this.resolveEventTitle(targetEventId);
 
                 // 计算开始和结束时间
                 const timePoint = new Date(timePointStr);
@@ -897,18 +967,28 @@ export class PomodoroSessionsDialog {
 
                 showMessage("✅ " + (i18n("addPomodoroSuccess") || "补录番茄钟成功"), 3000, "info");
 
-                addDialog.destroy();
-                await this.refreshAfterSessionChange([this.recordManager.getSessionStorageDate(session.id)]);
+                addDialog?.destroy();
+                if (container) {
+                    this.reminderId = targetEventId;
+                    this.defaultAddEventId = targetEventId;
+                    this.queueDerivedUpdates();
+                    options.onSaved?.();
+                } else {
+                    await this.refreshAfterSessionChange([this.recordManager.getSessionStorageDate(session.id)]);
+                }
             } catch (error) {
                 console.error("Failed to add past pomodoro record:", error);
                 showMessage("❌ " + (i18n("addPomodoroFailed") || "补录番茄钟失败"), 3000, "error");
             } finally {
+                saving = false;
                 if (!saved) {
                     saveButton.disabled = false;
                     saveButton.textContent = i18n("save");
                 }
             }
-        });
+        };
+        if (!container) saveButton.addEventListener('click', save);
+        return save;
     }
 
     /**

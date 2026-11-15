@@ -7921,7 +7921,8 @@ export class CalendarView {
         }, {
             defaultProjectId: (!this.currentProjectFilter.has('all') && !this.currentProjectFilter.has('none') && this.currentProjectFilter.size === 1) ? Array.from(this.currentProjectFilter)[0] : undefined,
             defaultCategoryId: (!this.currentCategoryFilter.has('all') && !this.currentCategoryFilter.has('none') && this.currentCategoryFilter.size === 1) ? Array.from(this.currentCategoryFilter)[0] : undefined,
-            plugin: this.plugin // 传入plugin实例
+            plugin: this.plugin, // 传入plugin实例
+            allowPomodoroRecord: true
         });
 
         quickDialog.show();
@@ -8041,7 +8042,8 @@ export class CalendarView {
             {
                 defaultProjectId: !this.currentProjectFilter.has('all') && !this.currentProjectFilter.has('none') && this.currentProjectFilter.size === 1 ? Array.from(this.currentProjectFilter)[0] : undefined,
                 defaultCategoryId: !this.currentCategoryFilter.has('all') && !this.currentCategoryFilter.has('none') && this.currentCategoryFilter.size === 1 ? Array.from(this.currentCategoryFilter)[0] : undefined,
-                plugin: this.plugin // 传入plugin实例
+                plugin: this.plugin, // 传入plugin实例
+                allowPomodoroRecord: true
             }
         );
 

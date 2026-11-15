@@ -1,3 +1,8 @@
+## 未发布 / Unreleased
+
+- 🍅 日历划选时间段或双击日期后，可在新建窗口切换至“补录番茄钟”页签，自动填入所选时间。支持独立记时或关联已有任务，保存后同步番茄统计与日历。
+- 🍅 After selecting a calendar time range or double-clicking a date, switch to the Add Pomodoro tab in the creation dialog to record time. The selected time is prefilled; sessions can stand alone or link to an existing task, with statistics and calendar updates after saving.
+
 ## v7.2.2 / 20261114
 
 - 🍅 番茄钟

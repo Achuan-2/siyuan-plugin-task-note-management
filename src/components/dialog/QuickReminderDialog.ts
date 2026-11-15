@@ -576,7 +576,11 @@ export class QuickReminderDialog {
     private reminderSkipHolidayData: HolidayData = {};
     private projectSelectorPopup?: ProjectSelectorPopup;
     private subtasksDialog?: SubtasksDialog;
-    private activeDialogTab: 'task' | 'subtasks' = 'task';
+    private activeDialogTab: 'task' | 'subtasks' | 'pomodoro' = 'task';
+    private allowPomodoroRecord = false;
+    private savePomodoroSession?: () => Promise<void>;
+    private pomodoroFormMount?: Promise<void>;
+    private isSavingPomodoro = false;
     private activeDetailTab: 'settings' | 'notes' = 'settings';
     private editFutureInstancesOnly: boolean = false;
     private futureEditOriginalReminder?: any;
@@ -591,6 +595,7 @@ export class QuickReminderDialog {
         timeRangeOptions?: { isTimeRange: boolean; endDate?: string; endTime?: string },
         options?: {
             blockId?: string;
+            allowPomodoroRecord?: boolean;
             reminder?: any;
             onSaved?: (modifiedReminder?: any) => void;
             mode?: 'quick' | 'block' | 'edit' | 'batch_edit' | 'note';
@@ -635,6 +640,7 @@ export class QuickReminderDialog {
         // 处理额外选项
         if (options) {
             this.plugin = options.plugin;
+            this.allowPomodoroRecord = options.allowPomodoroRecord === true && !options.reminder && !options.readOnly;
             this.blockId = options.blockId;
             this.reminder = options.reminder;
             if (options.onSaved) this.onSaved = options.onSaved;
@@ -2170,6 +2176,7 @@ export class QuickReminderDialog {
 
         applyTabStyle(currentTaskTab, this.activeDialogTab === 'task');
         applyTabStyle(subtasksTab, this.activeDialogTab === 'subtasks');
+        applyTabStyle(this.dialog.element.querySelector('#quickPomodoroTab'), this.activeDialogTab === 'pomodoro');
     }
 
     private createSubtasksDialogForTab(): SubtasksDialog {
@@ -2254,15 +2261,47 @@ export class QuickReminderDialog {
         await this.updateSubtasksDisplay();
     }
 
-    private async switchQuickDialogTab(tab: 'task' | 'subtasks') {
+    private updateQuickDialogSaveButtonState() {
+        const button = this.dialog?.element.querySelector('#quickConfirmBtn') as HTMLButtonElement;
+        if (button) button.disabled = this.isFormInitializing || this.isSavingPomodoro
+            || (this.activeDialogTab === 'pomodoro' && !this.savePomodoroSession);
+    }
+
+    private async mountPomodoroTab() {
+        if (this.savePomodoroSession) return;
+        if (this.pomodoroFormMount) return this.pomodoroFormMount;
+        this.pomodoroFormMount = (async () => {
+            const dialog = this.dialog;
+            const panel = this.dialog.element.querySelector('#quickPomodoroTabPanel') as HTMLElement;
+            const startTime = new Date(`${this.initialDate}T${this.initialTime || '09:00'}`);
+            const endTime = this.initialTime && this.initialEndTime
+                ? new Date(`${this.initialEndDate || this.initialDate}T${this.initialEndTime}`) : undefined;
+            const form = new PomodoroSessionsDialog(`manual-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`, this.plugin, () => this.onSaved?.());
+            const save = await form.mountAddSessionForm(panel, {
+                startTime,
+                endTime,
+                allowTaskSelection: true,
+                saveButton: dialog.element.querySelector('#quickConfirmBtn') as HTMLButtonElement,
+                onSaved: () => { if (this.dialog === dialog) this.destroyDialog(); }
+            });
+            if (this.dialog === dialog) this.savePomodoroSession = save;
+        })().catch(error => {
+            this.pomodoroFormMount = undefined;
+            console.error('Failed to initialize calendar pomodoro form:', error);
+            showMessage(i18n('loadingFailed'), 3000, 'error');
+        }).finally(() => this.updateQuickDialogSaveButtonState());
+        return this.pomodoroFormMount;
+    }
+
+    private async switchQuickDialogTab(tab: 'task' | 'subtasks' | 'pomodoro') {
         const taskPanel = this.dialog.element.querySelector('#quickTaskTabPanel') as HTMLElement;
         const subtasksPanel = this.dialog.element.querySelector('#quickSubtasksTabPanel') as HTMLElement;
         const subtasksTab = this.dialog.element.querySelector('#quickSubtasksTab') as HTMLElement;
         const contentEl = this.dialog.element.querySelector('.b3-dialog__content') as HTMLElement;
 
-        const nextTab = tab === 'subtasks' && subtasksTab?.style.display !== 'none'
-            ? 'subtasks'
-            : 'task';
+        const nextTab = tab === 'pomodoro' && this.allowPomodoroRecord
+            ? 'pomodoro'
+            : tab === 'subtasks' && subtasksTab?.style.display !== 'none' ? 'subtasks' : 'task';
 
         this.activeDialogTab = nextTab;
         if (taskPanel) {
@@ -2271,6 +2310,8 @@ export class QuickReminderDialog {
                 : 'none';
         }
         if (subtasksPanel) subtasksPanel.style.display = nextTab === 'subtasks' ? '' : 'none';
+        const pomodoroPanel = this.dialog.element.querySelector('#quickPomodoroTabPanel') as HTMLElement;
+        if (pomodoroPanel) pomodoroPanel.style.display = nextTab === 'pomodoro' ? '' : 'none';
 
         if (contentEl) {
             if (nextTab === 'task' && this.activeDetailTab === 'notes') {
@@ -2285,8 +2326,11 @@ export class QuickReminderDialog {
         }
 
         this.updateQuickDialogTabStyles();
+        this.updateQuickDialogSaveButtonState();
 
-        if (nextTab === 'subtasks') {
+        if (nextTab === 'pomodoro') {
+            await this.mountPomodoroTab();
+        } else if (nextTab === 'subtasks') {
             await this.mountSubtasksTab();
         } else {
             this.applyReadOnlyMode();
@@ -3008,6 +3052,9 @@ export class QuickReminderDialog {
                             <button type="button" id="quickSubtasksTab" role="tab" aria-selected="false" class="b3-button b3-button--text" style="display: none; border-radius: 0; border-bottom: 2px solid transparent; color: var(--b3-theme-on-surface); background: transparent; padding: 6px 8px;">
                                 ${i18n("subtasks") || "子任务"} <span id="quickSubtasksCountText">(0)</span>
                             </button>
+                            ${this.allowPomodoroRecord ? `<button type="button" id="quickPomodoroTab" role="tab" aria-controls="quickPomodoroTabPanel" aria-selected="false" class="b3-button b3-button--text" style="border-radius: 0; border-bottom: 2px solid transparent; padding: 6px 8px;">
+                                ${i18n("addPomodoro")}
+                            </button>` : ''}
                         </div>
                         <div id="quickTaskTabPanel" role="tabpanel" style="min-height: 0;">
                         <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
@@ -3422,6 +3469,7 @@ export class QuickReminderDialog {
                         
                         </div> <!-- End of quickTaskTabPanel -->
                         <div id="quickSubtasksTabPanel" role="tabpanel" style="display: none; min-height: 220px;"></div>
+                        ${this.allowPomodoroRecord ? '<div id="quickPomodoroTabPanel" role="tabpanel" aria-labelledby="quickPomodoroTab" style="display: none; min-height: 220px;"></div>' : ''}
                     </div>
                     <div class="b3-dialog__action" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
                         ${this.mode === 'edit' && !this.readOnly && !this.skipSave ? `<button type="button" class="b3-button b3-button--text ariaLabel" id="quickDeleteBtn" aria-label="${i18n('deleteTaskAndSubtasks')}" style="margin-right: auto; color: var(--b3-theme-error); padding: 8px;">
@@ -3992,8 +4040,7 @@ export class QuickReminderDialog {
             // 初始化预设下拉状态
             this.updatePresetSelectState();
             this.isFormInitializing = false;
-            const confirmBtn = this.dialog.element.querySelector('#quickConfirmBtn') as HTMLButtonElement;
-            if (confirmBtn) confirmBtn.disabled = false;
+            this.updateQuickDialogSaveButtonState();
             this.applyReadOnlyMode();
         }, 50);
     }
@@ -5187,6 +5234,9 @@ export class QuickReminderDialog {
 
         subtasksTab?.addEventListener('click', () => {
             void this.switchQuickDialogTab('subtasks');
+        });
+        this.dialog.element.querySelector('#quickPomodoroTab')?.addEventListener('click', () => {
+            void this.switchQuickDialogTab('pomodoro');
         });
         this.updateQuickDialogTabStyles();
 
@@ -7126,7 +7176,17 @@ export class QuickReminderDialog {
             return;
         }
         // 按钮与 Ctrl/Cmd+Enter 共用此入口，均等待异步表单填充完成。
-        if (this.isFormInitializing) return;
+        if (this.isFormInitializing || this.isSavingPomodoro) return;
+        if (this.activeDialogTab === 'pomodoro') {
+            this.isSavingPomodoro = true;
+            try {
+                await this.savePomodoroSession?.();
+            } finally {
+                this.isSavingPomodoro = false;
+                this.updateQuickDialogSaveButtonState();
+            }
+            return;
+        }
 
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
         const blockInput = this.dialog.element.querySelector('#quickBlockInput') as HTMLInputElement;

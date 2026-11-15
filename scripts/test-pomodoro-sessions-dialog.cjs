@@ -24,6 +24,8 @@ function fixture() {
         value = ''; checked = false; disabled = false; style = {}; listeners = {};
         addEventListener(name, listener) { this.listeners[name] = listener; }
         click() { return this.listeners.click?.(); }
+        appendChild(child) { (this.children ||= []).push(child); }
+        focus() { this.focused = true; }
     }
     class Dialog {
         constructor(options) {
@@ -46,20 +48,20 @@ function fixture() {
         getSessionStorageDate: () => '2026-11-14', getStorageDateSessions: async () => [],
     };
     const exports = {};
-    new Function('require', 'exports', 'window', 'CustomEvent', 'console', code)(name => {
+    new Function('require', 'exports', 'window', 'CustomEvent', 'console', 'document', code)(name => {
         if (name === 'siyuan') return { Dialog, confirm: (...args) => confirmations.push(args), showMessage: text => messages.push(text) };
         if (name.endsWith('/pomodoroRecord')) return { PomodoroRecordManager: { getInstance: () => recordManager } };
         if (name.endsWith('/pluginInstance')) return { i18n: key => key };
         if (name.endsWith('/dateUtils')) return { getLocaleTag: () => 'zh-CN' };
         if (name.endsWith('/api')) return { getBlockByID: async () => null };
         return {};
-    }, exports, { dispatchEvent() {} }, class {}, { error: (...args) => errors.push(args), warn() {} });
+    }, exports, { dispatchEvent() {} }, class {}, { error: (...args) => errors.push(args), warn() {} }, { createElement: () => new Element() });
     const view = new exports.PomodoroSessionsDialog('task', { loadSettings: async () => ({}) });
     view.resolveEventTitle = async () => '任务';
     view.renderSessions = () => {};
     view.syncReminderPomodoroCount = async () => {};
     view.dispatchUpdateEvents = async () => {};
-    return { view, recordManager, dialogs, confirmations, messages, errors };
+    return { view, recordManager, dialogs, confirmations, messages, errors, createForm: () => new Dialog({}).element };
 }
 
 test('仅刷新改动日期，保留其他历史并使用合并后的版本，慢速派生同步不阻塞列表', async () => {
@@ -186,4 +188,102 @@ test('同步任务数量使用最新摘要，包含全部重复实例且不依�
     assert.equal(f.view.getWorkCountForEventId('task'), 5);
     f.view.includeInstances = false;
     assert.equal(f.view.getWorkCountForEventId('task'), 2);
+});
+
+
+test('日历补录保留跨午夜划选范围，独立标题与备注落盘且仅刷新派生统计', async () => {
+    const f = fixture(), panel = f.createForm();
+    f.view.plugin.loadReminderData = async () => ({ task: { title: '已有任务' } });
+    const saved = [];
+    let closed = 0, synchronized = 0;
+    f.recordManager.updateSession = async session => { saved.push(session); return true; };
+    f.view.queueDerivedUpdates = () => { synchronized++; };
+    f.view.refreshAfterSessionChange = () => assert.fail('嵌入表单不能刷新未打开的历史列表');
+    const start = new Date('2026-11-14T23:30'), end = new Date('2026-11-15T01:00');
+    const button = panel.querySelector('#sharedSave');
+    const save = await f.view.mountAddSessionForm(panel, {
+        startTime: start, endTime: end, allowTaskSelection: true, saveButton: button,
+        onSaved: () => { closed++; },
+    });
+    assert.equal(panel.querySelector('#sessionDuration').value, '90');
+    assert.equal(panel.querySelector('#sessionTimePoint').value, '2026-11-15T01:00');
+    assert.equal(panel.querySelector('#sessionIsCountUp').checked, true);
+    assert.equal(panel.querySelector('#sessionTask').children[0].textContent, '已有任务');
+    panel.querySelector('#sessionTitle').value = '  阅读  ';
+    panel.querySelector('#sessionNote').value = '  补录备注  ';
+    await save();
+    await save();
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].startTime, start.toISOString());
+    assert.equal(saved[0].endTime, end.toISOString());
+    assert.equal(saved[0].eventTitle, '阅读');
+    assert.equal(saved[0].duration, 90);
+    assert.equal(saved[0].plannedDuration, 25);
+    assert.equal(saved[0].count, 4);
+    assert.equal(saved[0].note, '补录备注');
+    assert.equal(closed, 1);
+    assert.equal(synchronized, 1);
+});
+
+test('日历关联已有任务不要求独立标题，切换休息类型保留划选时长', async () => {
+    const f = fixture(), panel = f.createForm();
+    f.view.plugin.loadReminderData = async () => ({ linked: { title: '关联任务' } });
+    let saved;
+    f.recordManager.updateSession = async session => { saved = session; return true; };
+    f.view.queueDerivedUpdates = () => {};
+    const save = await f.view.mountAddSessionForm(panel, {
+        startTime: new Date('2026-11-14T10:00'), endTime: new Date('2026-11-14T10:45'),
+        allowTaskSelection: true, saveButton: panel.querySelector('#sharedSave'),
+    });
+    const task = panel.querySelector('#sessionTask');
+    task.value = 'linked';
+    task.listeners.change();
+    assert.equal(panel.querySelector('#sessionTitleGroup').style.display, 'none');
+    assert.equal(panel.querySelector('#sessionTitle').required, false);
+    const type = panel.querySelector('#sessionType');
+    type.value = 'shortBreak';
+    type.listeners.change();
+    assert.equal(panel.querySelector('#sessionDuration').value, '45');
+    await save();
+    assert.equal(saved.eventId, 'linked');
+    assert.equal(saved.type, 'shortBreak');
+    assert.equal(saved.isCountUp, false);
+    assert.equal(saved.duration, 45);
+});
+
+test('仅有开始日期时从指定日期补录，默认时长来自番茄设置', async () => {
+    const f = fixture(), panel = f.createForm();
+    f.view.plugin.loadSettings = async () => ({ pomodoroWorkDuration: 40 });
+    const start = new Date('2026-10-01T09:00');
+    await f.view.mountAddSessionForm(panel, { startTime: start, saveButton: panel.querySelector('#sharedSave') });
+    assert.equal(panel.querySelector('#sessionTimePoint').value, '2026-10-01T09:40');
+});
+
+test('日历补录验证空标题、无效时间和时长，落盘失败后允许重试', async () => {
+    const f = fixture(), panel = f.createForm();
+    f.view.plugin.loadReminderData = async () => ({});
+    let writes = 0;
+    f.recordManager.updateSession = async () => { writes++; if (writes === 1) throw new Error('disk full'); return true; };
+    f.view.queueDerivedUpdates = () => {};
+    const button = panel.querySelector('#sharedSave');
+    const save = await f.view.mountAddSessionForm(panel, { allowTaskSelection: true, saveButton: button });
+    await save();
+    assert.equal(writes, 0);
+    assert.equal(panel.querySelector('#sessionTitle').focused, true);
+    panel.querySelector('#sessionTitle').value = '独立记录';
+    const time = panel.querySelector('#sessionTimePoint'), duration = panel.querySelector('#sessionDuration');
+    const initial = time.value;
+    time.value = 'invalid';
+    await save();
+    time.value = initial;
+    duration.value = 'Infinity';
+    await save();
+    assert.equal(writes, 0);
+    duration.value = '30';
+    await save();
+    assert.equal(writes, 1);
+    assert.equal(button.disabled, false);
+    await save();
+    assert.equal(writes, 2);
+    assert.equal(button.disabled, true);
 });
