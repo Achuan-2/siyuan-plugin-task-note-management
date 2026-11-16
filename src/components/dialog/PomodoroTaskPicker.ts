@@ -8,7 +8,6 @@ import { ReminderTaskLogic } from '../../utils/reminderTaskLogic';
 export async function mountPomodoroTaskPicker(container: HTMLElement, plugin: any,
     onSelected: (task: any) => Promise<void>): Promise<{ destroy(): void }> {
     container.replaceChildren();
-    container.style.height = '55vh';
     return new ReminderPanel(container, plugin, undefined, {
         onSelectTask: async task => {
             const [data, settings, holidays] = await Promise.all([

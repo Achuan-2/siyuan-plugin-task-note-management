@@ -2274,7 +2274,7 @@ export class QuickReminderDialog {
         panel.id = 'quickSelectTaskPanel';
         panel.setAttribute('role', 'tabpanel');
         panel.setAttribute('aria-labelledby', tab.id);
-        panel.style.cssText = 'display:none;min-height:220px';
+        panel.style.cssText = 'display:none;flex:1;min-height:0;height:auto;overflow:hidden';
         this.dialog.element.querySelector('#quickReminderTabs').appendChild(tab);
         this.dialog.element.querySelector('.b3-dialog__content').appendChild(panel);
         tab.addEventListener('click', () => { void this.switchQuickDialogTab('select-task'); });
@@ -2334,7 +2334,7 @@ export class QuickReminderDialog {
         }
 
         if (contentEl) {
-            if (nextTab === 'task' && this.activeDetailTab === 'notes') {
+            if (nextTab === 'select-task' || (nextTab === 'task' && this.activeDetailTab === 'notes')) {
                 contentEl.style.overflow = 'hidden';
                 contentEl.style.display = 'flex';
                 contentEl.style.flexDirection = 'column';
