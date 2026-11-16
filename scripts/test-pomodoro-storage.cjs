@@ -107,6 +107,26 @@ const twoDays = () => ({
     '2026-11-04': record('2026-11-04', [session('2026-11-04', 'today')]),
 });
 
+test('绑定任务只更新当前会话归属，保留开始时间、备注、分类和进行中状态', async () => {
+    const day = '2026-11-04';
+    const original = session(day, 'active', 'pomodoro-standalone', {
+        inProgress: true, completed: false, duration: 0, count: 0, note: '正在写作', categoryId: 'writing'
+    });
+    const f = fixture({ [day]: record(day, [original]) }), manager = f.manager();
+    await manager.initialize();
+    assert.equal(await manager.updateSessionTask('active', 'existing-task', '已有任务'), true);
+    const saved = (await manager.getFocusById('active')).session;
+    assert.equal(saved.eventId, 'existing-task');
+    assert.equal(saved.eventTitle, '已有任务');
+    for (const key of ['id', 'inProgress', 'duration', 'note', 'categoryId']) {
+        assert.equal(saved[key], original[key], key);
+    }
+    for (const key of ['startTime', 'endTime']) assert.equal(new Date(saved[key]).getTime(), new Date(original[key]).getTime(), key);
+    assert.equal((await manager.getSessionsMatchingEvent(id => id === 'pomodoro-standalone')).length, 0);
+    assert.equal((await manager.getSessionsMatchingEvent(id => id === 'existing-task')).length, 1);
+    assert.equal(await manager.updateSessionTask('missing', 'existing-task', '已有任务'), false);
+});
+
 test('补录和删除后的列表只读取受影响物理分片，不重载长历史，且保留提交版本', async () => {
     const history = {};
     for (let i = 0; i < 100; i++) {

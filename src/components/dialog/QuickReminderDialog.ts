@@ -576,7 +576,8 @@ export class QuickReminderDialog {
     private reminderSkipHolidayData: HolidayData = {};
     private projectSelectorPopup?: ProjectSelectorPopup;
     private subtasksDialog?: SubtasksDialog;
-    private activeDialogTab: 'task' | 'subtasks' = 'task';
+    private activeDialogTab: 'task' | 'subtasks' | 'select-task' = 'task';
+    private onSelectExistingTask?: (task: any) => Promise<void>;
     private activeDetailTab: 'settings' | 'notes' = 'settings';
     private editFutureInstancesOnly: boolean = false;
     private futureEditOriginalReminder?: any;
@@ -2170,6 +2171,7 @@ export class QuickReminderDialog {
 
         applyTabStyle(currentTaskTab, this.activeDialogTab === 'task');
         applyTabStyle(subtasksTab, this.activeDialogTab === 'subtasks');
+        applyTabStyle(this.dialog.element.querySelector('#quickSelectTaskTab'), this.activeDialogTab === 'select-task');
     }
 
     private createSubtasksDialogForTab(): SubtasksDialog {
@@ -2254,13 +2256,60 @@ export class QuickReminderDialog {
         await this.updateSubtasksDisplay();
     }
 
-    private async switchQuickDialogTab(tab: 'task' | 'subtasks') {
+    public async enableTaskSelection(onSelected: (task: any) => Promise<void>, initiallySelected = false) {
+        this.onSelectExistingTask = onSelected;
+        if (this.mode === 'quick') {
+            this.dialog.element.querySelector('#quickCurrentTaskTab').textContent = i18n('newTask');
+        }
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.id = 'quickSelectTaskTab';
+        tab.className = 'b3-button b3-button--text';
+        tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-controls', 'quickSelectTaskPanel');
+        tab.textContent = i18n('pomodoroSelectTask');
+        tab.style.cssText = 'border-radius:0;border-bottom:2px solid transparent;padding:6px 8px';
+        const panel = document.createElement('div');
+        panel.id = 'quickSelectTaskPanel';
+        panel.setAttribute('role', 'tabpanel');
+        panel.setAttribute('aria-labelledby', tab.id);
+        panel.style.cssText = 'display:none;min-height:220px';
+        this.dialog.element.querySelector('#quickReminderTabs').appendChild(tab);
+        this.dialog.element.querySelector('.b3-dialog__content').appendChild(panel);
+        tab.addEventListener('click', () => { void this.switchQuickDialogTab('select-task'); });
+        if (initiallySelected) await this.switchQuickDialogTab('select-task');
+        else this.updateQuickDialogTabStyles();
+    }
+
+    private async mountTaskSelectionTab() {
+        const dialog = this.dialog;
+        const panel = dialog.element.querySelector('#quickSelectTaskPanel') as HTMLElement;
+        if (!panel || panel.dataset.mounted) return;
+        panel.dataset.mounted = 'loading';
+        try {
+            const { mountPomodoroTaskPicker } = await import('./PomodoroTaskPicker');
+            if (this.dialog !== dialog) return;
+            await mountPomodoroTaskPicker(panel, this.plugin, async task => {
+                if (this.dialog !== dialog) return;
+                await this.onSelectExistingTask(task);
+                if (this.dialog === dialog) this.destroyDialog();
+            });
+            panel.dataset.mounted = 'true';
+        } catch (error) {
+            delete panel.dataset.mounted;
+            console.error('Failed to initialize task selection tab:', error);
+            showMessage(i18n('loadingFailed'), 3000, 'error');
+        }
+    }
+
+    private async switchQuickDialogTab(tab: 'task' | 'subtasks' | 'select-task') {
         const taskPanel = this.dialog.element.querySelector('#quickTaskTabPanel') as HTMLElement;
         const subtasksPanel = this.dialog.element.querySelector('#quickSubtasksTabPanel') as HTMLElement;
         const subtasksTab = this.dialog.element.querySelector('#quickSubtasksTab') as HTMLElement;
         const contentEl = this.dialog.element.querySelector('.b3-dialog__content') as HTMLElement;
 
-        const nextTab = tab === 'subtasks' && subtasksTab?.style.display !== 'none'
+        const nextTab = tab === 'select-task' && this.onSelectExistingTask ? 'select-task'
+            : tab === 'subtasks' && subtasksTab?.style.display !== 'none'
             ? 'subtasks'
             : 'task';
 
@@ -2271,6 +2320,12 @@ export class QuickReminderDialog {
                 : 'none';
         }
         if (subtasksPanel) subtasksPanel.style.display = nextTab === 'subtasks' ? '' : 'none';
+        const selectionPanel = this.dialog.element.querySelector('#quickSelectTaskPanel') as HTMLElement;
+        if (selectionPanel) selectionPanel.style.display = nextTab === 'select-task' ? '' : 'none';
+        for (const id of ['quickConfirmBtn', 'quickDeleteBtn']) {
+            const button = this.dialog.element.querySelector(`#${id}`) as HTMLElement;
+            if (button) button.style.display = nextTab === 'select-task' ? 'none' : '';
+        }
 
         if (contentEl) {
             if (nextTab === 'task' && this.activeDetailTab === 'notes') {
@@ -2286,7 +2341,9 @@ export class QuickReminderDialog {
 
         this.updateQuickDialogTabStyles();
 
-        if (nextTab === 'subtasks') {
+        if (nextTab === 'select-task') {
+            await this.mountTaskSelectionTab();
+        } else if (nextTab === 'subtasks') {
             await this.mountSubtasksTab();
         } else {
             this.applyReadOnlyMode();
@@ -7017,6 +7074,7 @@ export class QuickReminderDialog {
 
         // 1. 禁用所有输入框、文本域和选择框
         container.querySelectorAll('input, textarea, select').forEach((el: any) => {
+            if (el.closest?.('#quickSelectTaskPanel')) return;
             el.disabled = true;
             if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
                 el.readOnly = true;
@@ -7045,8 +7103,9 @@ export class QuickReminderDialog {
             '#quickProjectSearchInput',
             '#quickHabitSearchInput',
             '.quick-reminder-dialog__add-time',
-            '.b3-button:not(#quickCancelBtn):not(#quickCurrentTaskTab):not(#quickSubtasksTab):not(#quickViewParentBtn):not(#quickTaskSettingsTab):not(#quickTaskNotesTab)'
+            '.b3-button:not(#quickCancelBtn):not(#quickCurrentTaskTab):not(#quickSubtasksTab):not(#quickSelectTaskTab):not(#quickViewParentBtn):not(#quickTaskSettingsTab):not(#quickTaskNotesTab)'
         ].join(', ')).forEach((el: any) => {
+            if (el.closest?.('#quickSelectTaskPanel')) return;
             el.style.pointerEvents = 'none';
             el.style.opacity = '0.6';
         });
@@ -7116,6 +7175,7 @@ export class QuickReminderDialog {
     }
 
     private async saveReminder() {
+        if (this.activeDialogTab === 'select-task') return;
         if (this.isDeletingTask) return;
         if (this.readOnly) {
             this.destroyDialog();
