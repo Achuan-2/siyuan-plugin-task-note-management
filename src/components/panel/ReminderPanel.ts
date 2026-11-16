@@ -646,8 +646,7 @@ export class ReminderPanel {
         moreBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (this.selectionOptions) void this.showFilterManagement();
-            else this.showMoreMenu(e);
+            this.showMoreMenu(e);
         });
         actionContainer.appendChild(moreBtn);
         if (this.selectionOptions) actionContainer.replaceChildren(this.sortButton, moreBtn);
@@ -11754,7 +11753,7 @@ export class ReminderPanel {
             });
 
             // 多选模式
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: this.isMultiSelectMode ? 'iconClose' : 'iconCheck',
                 label: this.isMultiSelectMode
                     ? (i18n('exitBatchSelect') || '退出多选')
@@ -11769,7 +11768,7 @@ export class ReminderPanel {
             });
 
             // 添加粘贴新建任务
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: 'iconTNPaste',
                 label: i18n("pasteCreateTask") || "粘贴新建任务",
                 click: () => {
@@ -11787,7 +11786,7 @@ export class ReminderPanel {
             });
 
             // 添加分类管理
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: 'iconTags',
                 label: i18n("manageCategories"),
                 click: () => this.showCategoryManageDialog()
