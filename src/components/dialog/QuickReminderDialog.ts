@@ -578,6 +578,7 @@ export class QuickReminderDialog {
     private subtasksDialog?: SubtasksDialog;
     private activeDialogTab: 'task' | 'subtasks' | 'select-task' = 'task';
     private onSelectExistingTask?: (task: any) => Promise<void>;
+    private taskSelectionPanel?: { destroy(): void };
     private activeDetailTab: 'settings' | 'notes' = 'settings';
     private editFutureInstancesOnly: boolean = false;
     private futureEditOriginalReminder?: any;
@@ -2289,11 +2290,16 @@ export class QuickReminderDialog {
         try {
             const { mountPomodoroTaskPicker } = await import('./PomodoroTaskPicker');
             if (this.dialog !== dialog) return;
-            await mountPomodoroTaskPicker(panel, this.plugin, async task => {
+            const selectionPanel = await mountPomodoroTaskPicker(panel, this.plugin, async task => {
                 if (this.dialog !== dialog) return;
                 await this.onSelectExistingTask(task);
                 if (this.dialog === dialog) this.destroyDialog();
             });
+            if (this.dialog !== dialog) {
+                selectionPanel.destroy();
+                return;
+            }
+            this.taskSelectionPanel = selectionPanel;
             panel.dataset.mounted = 'true';
         } catch (error) {
             delete panel.dataset.mounted;
@@ -3492,6 +3498,8 @@ export class QuickReminderDialog {
             width: "min(500px, 90%)",
             height: (this.mode === 'note' || this.dateOnly) ? "auto" : "81vh",
             destroyCallback: () => {
+                this.taskSelectionPanel?.destroy();
+                this.taskSelectionPanel = undefined;
                 if (this.editor) {
                     this.editor.destroy();
                     this.editor = undefined;

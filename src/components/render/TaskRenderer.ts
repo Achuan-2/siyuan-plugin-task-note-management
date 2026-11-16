@@ -24,6 +24,7 @@ export type TaskPriorityDisplayStyle = 'background' | 'checkboxBorder';
 
 export interface TaskRenderContext {
     plugin: any;
+    selectionMode?: boolean;
     today: string;
     collapsedTasks?: Set<string>;
     selectedTaskIds?: Set<string>;
@@ -714,7 +715,7 @@ export class TaskRenderer {
             progressContainer.appendChild(percentLabel);
             infoEl.appendChild(progressContainer);
 
-            const canEditCustomProgress = customPercent !== undefined && !task.completed;
+            const canEditCustomProgress = customPercent !== undefined && !task.completed && !context.selectionMode;
             if (canEditCustomProgress) {
                 progressContainer.classList.add('reminder-progress-container--editable');
                 progressBarWrap.classList.add('reminder-progress-wrap--editable');

@@ -18,68 +18,89 @@ function members(file, className, names) {
     return compile(`class ${className} { ${selected.map(node => node.getText(ast)).join('\n')} }`);
 }
 class Element {
-    constructor() { this.children = []; this.style = {}; this.dataset = {}; this.listeners = {}; this.isConnected = true; this.value = ''; }
+    constructor() { this.children = []; this.style = {}; this.dataset = {}; this.listeners = {}; this.capture = {}; this.isConnected = true; this.value = ''; }
     append(...elements) { this.children.push(...elements); }
     appendChild(element) { this.append(element); return element; }
     replaceChildren(...elements) { this.children = elements; this.textContent = ''; }
     setAttribute(name, value) { this[name] = value; }
-    addEventListener(name, callback) { this.listeners[name] = callback; }
+    removeAttribute(name) { delete this[name]; }
+    addEventListener(name, callback, capture) { this.listeners[name] = callback; this.capture[name] = capture; }
 }
 const pickerCode = compile(fs.readFileSync(path.join(root, 'src/components/dialog/PomodoroTaskPicker.ts'), 'utf8'));
 function pickerFixture() {
-    const notices = [], selected = [];
+    const selected = [], panels = [];
     const data = {
-        a: { id: 'a', title: '<b>写作</b>', date: '2026-11-16', completed: false, projectId: 'p' },
-        b: { id: 'b', title: '阅读', completed: false },
-        done: { id: 'done', title: '完成', completed: true },
-        abandoned: { id: 'abandoned', title: '放弃', kanbanStatus: 'abandoned' },
-        custom: { id: 'custom', title: '完成状态', kanbanStatus: 'completed' }
+        a: { id: 'a', title: 'Writing', completed: false },
+        done: { id: 'done', title: 'Completed', completed: true }
     };
-    const plugin = { loadProjectData: async () => ({ p: { name: '研究项目' } }) };
+    const plugin = {};
+    class ReminderPanel {
+        constructor(container, sourcePlugin, closeCallback, options) {
+            Object.assign(this, { container, plugin: sourcePlugin, closeCallback, options });
+            panels.push(this);
+        }
+        destroy() { this.destroyed = true; }
+    }
     const exports = {};
-    new Function('require', 'exports', 'document', pickerCode)(name => {
-        if (name === 'siyuan') return { showMessage: (...args) => notices.push(args) };
+    new Function('require', 'exports', pickerCode)(name => {
+        if (name.endsWith('/ReminderPanel')) return { ReminderPanel };
         if (name.endsWith('/pluginInstance')) return { i18n: key => key };
         if (name.endsWith('/dateUtils')) return { getLogicalDateString: () => '2026-11-16' };
         if (name.endsWith('/reminderLoadUtils')) return { getEnvironmentSafeAllReminders: async () => structuredClone(data) };
         if (name.endsWith('/reminderTaskLogic')) return { ReminderTaskLogic };
         throw new Error(name);
-    }, exports, { createElement: () => new Element() });
-    return { ...exports, container: new Element(), plugin, data, notices, selected };
+    }, exports);
+    return { ...exports, container: new Element(), plugin, data, selected, panels };
 }
 
-test('选择列表只列出未完成任务，支持按标题和项目搜索并以文本显示任务标题', async () => {
+test('任务选择直接挂载现有任务侧栏，过滤、搜索、排序及展示交给同一面板', async () => {
     const view = pickerFixture();
-    await view.mountPomodoroTaskPicker(view.container, view.plugin, async task => view.selected.push(task));
-    const [search, list] = view.container.children;
-    assert.equal(list.children.length, 2);
-    assert.equal(list.children[0].children[0].textContent, '<b>写作</b>');
-    search.value = '研究项目'; search.listeners.input();
-    assert.equal(list.children.length, 1);
-    search.value = '阅读'; search.listeners.input();
-    assert.equal(list.children.length, 1);
-    await list.children[0].listeners.click();
-    assert.equal(view.selected[0].id, 'b');
+    const panel = await view.mountPomodoroTaskPicker(view.container, view.plugin, async task => view.selected.push(task));
+    assert.equal(panel, view.panels[0]);
+    assert.equal(panel.container, view.container);
+    assert.equal(panel.plugin, view.plugin);
+    assert.equal(typeof panel.options.onSelectTask, 'function');
+    panel.destroy();
+    assert.equal(panel.destroyed, true);
 });
 
-test('任务在弹窗打开后已完成或删除时拒绝绑定，刷新列表且保留弹窗', async () => {
-    for (const remove of [false, true]) {
-        const view = pickerFixture();
-        await view.mountPomodoroTaskPicker(view.container, view.plugin, async task => view.selected.push(task));
-        if (remove) delete view.data.a; else view.data.a.completed = true;
-        await view.container.children[1].children[0].listeners.click();
-        assert.equal(view.selected.length, 0);
-        assert.equal(view.notices[0][0], 'pomodoroTaskUnavailable');
-        assert.equal(view.container.children[1].children.length, 1);
-    }
+test('所选任务可为已完成状态，不额外施加未完成任务限制', async () => {
+    const view = pickerFixture();
+    const panel = await view.mountPomodoroTaskPicker(view.container, view.plugin, async task => view.selected.push(task));
+    await panel.options.onSelectTask(view.data.done);
+    assert.equal(view.selected[0].id, 'done');
+    assert.equal(view.selected[0].completed, true);
 });
 
-test('空列表和无匹配搜索显示空状态，不创建新任务', async () => {
+test('仅在所选任务已删除时拒绝绑定，保留已完成任务的可选状态', async () => {
     const view = pickerFixture();
-    await view.mountPomodoroTaskPicker(view.container, view.plugin, async () => assert.fail('No selection expected'));
-    view.container.children[0].value = 'does not exist';
-    view.container.children[0].listeners.input();
-    assert.equal(view.container.children[1].textContent, 'noAllUncompletedReminders');
+    const panel = await view.mountPomodoroTaskPicker(view.container, view.plugin, async task => view.selected.push(task));
+    const removed = view.data.a;
+    delete view.data.a;
+    await assert.rejects(panel.options.onSelectTask(removed), /pomodoroTaskUnavailable/);
+    assert.equal(view.selected.length, 0);
+});
+
+const panelCode = members('src/components/panel/ReminderPanel.ts', 'ReminderPanel', ['configureTaskSelection', 'selectTask']);
+test('选择模式点击和键盘选中任务，阻止原有完成或编辑操作，保留折叠按钮', async () => {
+    const Panel = new Function('showMessage', 'i18n', `${panelCode}; return ReminderPanel;`)(() => {}, key => key);
+    const calls = [];
+    const panel = Object.assign(new Panel(), { selectionOptions: { onSelectTask: async task => calls.push(task.id) } });
+    const element = new Element();
+    panel.configureTaskSelection(element, { id: 'chosen', title: 'Chosen' });
+    let prevented = 0, stopped = 0;
+    const event = { target: { closest: () => null }, preventDefault: () => prevented++, stopImmediatePropagation: () => stopped++ };
+    element.listeners.click(event);
+    await Promise.resolve(); await Promise.resolve();
+    assert.deepEqual(calls, ['chosen']);
+    assert.equal(element.capture.click, true);
+    assert.equal(element.draggable, false);
+    assert.equal(prevented, 1); assert.equal(stopped, 1);
+    element.listeners.click({ ...event, target: { closest: () => ({}) } });
+    assert.equal(calls.length, 1);
+    element.listeners.keydown({ ...event, key: 'Enter' });
+    await Promise.resolve(); await Promise.resolve();
+    assert.deepEqual(calls, ['chosen', 'chosen']);
 });
 
 const timerCode = members('src/components/panel/PomodoroTimer.ts', 'PomodoroTimer', ['bindTaskToTimer', 'openTaskEditDialog']);
@@ -107,7 +128,7 @@ function timerFixture({ existing = false } = {}) {
     return { timer, task, dialogs, updates, events };
 }
 
-test('独立番茄钟标题弹窗提供创建任务和选择未完成任务入口，默认选择已有任务', async () => {
+test('独立番茄钟标题弹窗提供新建和选择任务入口，默认选择已有任务', async () => {
     const view = timerFixture();
     await view.timer.openTaskEditDialog();
     const dialog = view.dialogs[0];
@@ -123,7 +144,7 @@ test('独立番茄钟标题弹窗提供创建任务和选择未完成任务入�
     assert.equal(view.timer.isPaused, true);
 });
 
-test('已有任务仍可编辑，并提供选择其他未完成任务页签', async () => {
+test('已有任务仍可编辑，并提供选择其他任务页签', async () => {
     const view = timerFixture({ existing: true });
     await view.timer.openTaskEditDialog();
     assert.equal(view.dialogs[0].options.mode, 'edit');
