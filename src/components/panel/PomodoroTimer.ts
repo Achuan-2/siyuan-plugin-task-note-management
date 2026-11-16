@@ -9378,6 +9378,23 @@ document.body.classList.remove('docked-mode');
         }
     }
 
+    public async showFloatingWindow(): Promise<boolean> {
+        await this.componentsReady;
+        if (this.isTabMode || !this.isWindowActive() || this.isStandaloneWindow()) return false;
+        this.container.hidden = false;
+        if (this.container.style.display === 'none') this.container.style.display = '';
+        if (this.container.style.visibility === 'hidden') this.container.style.visibility = '';
+        if (this.isDocked) this.exitDOMWindowDock();
+        if (this.isMinimized) this.restore();
+        this.ensureDomContainerWithinBounds(8);
+        const siyuan = (window as any).siyuan;
+        if (siyuan) {
+            siyuan.zIndex = Math.max(20, Number(siyuan.zIndex) || 0) + 1;
+            this.container.style.zIndex = String(siyuan.zIndex);
+        }
+        return true;
+    }
+
     public isStandaloneWindow(): boolean {
         const win = this.container as any;
         return !this.isTabMode && !this.isWindowClosed &&

@@ -167,7 +167,7 @@ export const DEFAULT_SETTINGS = {
     enableHabitDock: true, // 侧边栏：习惯管理
     enableCalendarDock: true, // 侧边栏：日历视图
     enableCalendarTopBar: false, // 顶栏：日历视图
-    enablePomodoroTopBar: true, // 顶栏：番茄钟独立窗口
+    enablePomodoroTopBar: true, // 桌面顶栏/移动端菜单：番茄钟快捷入口
     enableMobileTaskShortcut: true, // 手机端显示任务快捷按钮（不包含平板端）
     mobileTaskShortcutBadgeMode: 'separate', // 手机端快捷按钮徽标：merged | separate
     mobileTaskShortcutPosition: 'right', // 手机端快捷按钮默认停靠位置：right | left
@@ -4282,13 +4282,13 @@ export default class ReminderPlugin extends Plugin {
 
     private syncPomodoroTopBar(settings: any): void {
         const frontend = getFrontend();
-        const enabled = !this.isInMobileApp && !frontend.endsWith('mobile') &&
-            !frontend.startsWith('browser') && typeof (window as any).require === 'function' &&
+        const mobile = this.isInMobileApp || frontend.endsWith('mobile');
+        const enabled = (mobile || (!frontend.startsWith('browser') && typeof (window as any).require === 'function')) &&
             settings.enablePomodoroTopBar !== false;
         if (enabled && !this.pomodoroTopBarEl) {
             this.pomodoroTopBarEl = this.addTopBar({
                 icon: 'iconTNPomodoro',
-                title: i18n('togglePomodoroWindow'),
+                title: i18n(mobile ? 'showPomodoroFloatingWindow' : 'togglePomodoroWindow'),
                 position: 'left',
                 callback: () => { void this.togglePomodoroWindow(); }
             });
@@ -4302,17 +4302,23 @@ export default class ReminderPlugin extends Plugin {
         const manager = PomodoroManager.getInstance();
         let newTimer: PomodoroTimer | null = null;
         try {
+            const mobile = this.isInMobileApp || getFrontend().endsWith('mobile');
             // 等待正在创建的计时器，避免连点或任务启动期间重复开窗。
             const current = manager.getCurrentPomodoroTimer();
             if (current) await current.show(false);
             if (this.storageDisposed) return;
 
             const { PomodoroTimer } = await import('./components/panel/PomodoroTimer');
-            // 也查找其他思源窗口持有的计时器；只控制原生窗口，不接管其计时。
-            if (await PomodoroTimer.toggleExistingStandaloneWindow(this)) return;
+            if (mobile) {
+                // 移动端只唤出已有内部悬浮窗，不改变计时或暂停状态。
+                if (current && await current.showFloatingWindow()) return;
+            } else {
+                // 也查找其他思源窗口持有的计时器；只控制原生窗口，不接管其计时。
+                if (await PomodoroTimer.toggleExistingStandaloneWindow(this)) return;
+            }
             if (this.storageDisposed) return;
             if (manager.hasActivePomodoroTimer()) {
-                showMessage(i18n('pomodoroWindowNotStandalone'), 5000);
+                showMessage(i18n(mobile ? 'pomodoroWindowInOtherView' : 'pomodoroWindowNotStandalone'), 5000);
                 return;
             }
 
@@ -4321,12 +4327,13 @@ export default class ReminderPlugin extends Plugin {
             manager.cleanupInactiveTimer();
             newTimer = new PomodoroTimer({
                 id: 'pomodoro-standalone', title: i18n('pomodoroFocusDefault')
-            }, { ...settings, globalWindowEnabled: true }, false, undefined, this);
+            }, { ...settings, globalWindowEnabled: !mobile }, false, undefined, this);
             manager.setCurrentPomodoroTimer(newTimer);
             // 顶栏仅打开待开始的窗口；任务菜单的 show() 仍直接开始计时。
             await newTimer.show(false);
-            if (this.storageDisposed || !newTimer.isStandaloneWindow()) {
-                throw new Error('Standalone pomodoro window was not created');
+            const windowReady = mobile ? await newTimer.showFloatingWindow() : newTimer.isStandaloneWindow();
+            if (this.storageDisposed || !windowReady) {
+                throw new Error('Pomodoro window was not created');
             }
         } catch (error) {
             if (newTimer) {
@@ -4334,7 +4341,7 @@ export default class ReminderPlugin extends Plugin {
                 if (manager.getCurrentPomodoroTimer() === newTimer) manager.setCurrentPomodoroTimer(null);
             }
             if (!this.storageDisposed) {
-                console.error('Failed to toggle standalone pomodoro window:', error);
+                console.error('Failed to open or toggle pomodoro window:', error);
                 showMessage(i18n('operationFailed'), 3000);
             }
         } finally {
