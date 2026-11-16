@@ -522,6 +522,13 @@
                             title: i18n('enableCalendarTopBar'),
                             description: i18n('enableCalendarTopBarDesc'),
                         },
+                        {
+                            key: 'enablePomodoroTopBar',
+                            value: settings.enablePomodoroTopBar,
+                            type: 'checkbox',
+                            title: i18n('enablePomodoroTopBar'),
+                            description: i18n('enablePomodoroTopBarDesc'),
+                        },
                     ],
                 },
             ],

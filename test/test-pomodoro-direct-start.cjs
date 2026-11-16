@@ -98,6 +98,37 @@ test('初始化未完成时等待准备就绪，再启动一次', async () => {
     assert.equal(view.intervals.size, 1);
 });
 
+test('顶栏仅打开窗口不创建记录，点击开始后再正常计时', async () => {
+    const view = fixture();
+    const opened = view.timer.show(false);
+    view.audioReady.resolve();
+    await opened;
+    assert.equal(view.windowsCreated, 1);
+    assert.equal(view.timer.isRunning, false);
+    assert.equal(view.sessions.length, 0);
+    assert.equal(view.intervals.size, 0);
+    await view.timer.show();
+    assert.equal(view.timer.isRunning, true);
+    assert.equal(view.sessions.length, 1);
+    assert.equal(view.intervals.size, 1);
+});
+
+test('顶栏等待现有计时器就绪时，不重置计时或恢复暂停', async () => {
+    const view = fixture();
+    view.audioReady.resolve();
+    await view.timer.show();
+    view.advance(7);
+    await view.timer.show(false);
+    assert.equal(view.timer.timeLeft, 25 * 60 - 7);
+    assert.equal(view.sessions.length, 1);
+    assert.equal(view.intervals.size, 1);
+    view.intervals.clear();
+    view.timer.isPaused = true;
+    await view.timer.show(false);
+    assert.equal(view.timer.isPaused, true);
+    assert.equal(view.intervals.size, 0);
+});
+
 test('重复显示不会重置进度，也不会恢复用户之后暂停的计时', async () => {
     const view = fixture();
     view.audioReady.resolve();

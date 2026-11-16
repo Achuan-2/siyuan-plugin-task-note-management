@@ -36,6 +36,7 @@ import { ProjectDialog } from "./components/dialog/ProjectDialog";
 import { ProjectPanel } from "./components/panel/ProjectPanel";
 import { ProjectKanbanView } from "./components/panel/ProjectKanbanView";
 import { PomodoroManager } from "./components/dataManager/pomodoroManager";
+import type { PomodoroTimer } from "./components/panel/PomodoroTimer";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile } from "./utils/icsExport";
 import { getFile, cancelNotification, pushErrMsg, pushMsg, isInMobileApp } from "./api";
@@ -166,6 +167,7 @@ export const DEFAULT_SETTINGS = {
     enableHabitDock: true, // 侧边栏：习惯管理
     enableCalendarDock: true, // 侧边栏：日历视图
     enableCalendarTopBar: false, // 顶栏：日历视图
+    enablePomodoroTopBar: true, // 顶栏：番茄钟独立窗口
     enableMobileTaskShortcut: true, // 手机端显示任务快捷按钮（不包含平板端）
     mobileTaskShortcutBadgeMode: 'separate', // 手机端快捷按钮徽标：merged | separate
     mobileTaskShortcutPosition: 'right', // 手机端快捷按钮默认停靠位置：right | left
@@ -394,6 +396,8 @@ export default class ReminderPlugin extends Plugin {
     private taskNoteDOM: TaskNoteDOMManager;
     private mobileTaskShortcut: MobileTaskShortcut | null = null;
     private calendarTopBarEl: HTMLElement | null = null; // 日历视图顶栏按钮
+    private pomodoroTopBarEl: HTMLElement | null = null;
+    private pomodoroTopBarBusy = false;
 
     // ICS 云端同步相关
     // ICS 订阅同步相关
@@ -1715,6 +1719,7 @@ export default class ReminderPlugin extends Plugin {
                     }
                 }
 
+                this.syncPomodoroTopBar(settings);
                 await this.mobileTaskShortcut?.sync(settings);
                 // 同步刷新徽章（显示/隐藏数字）
                 this.updateBadges();
@@ -2770,6 +2775,8 @@ export default class ReminderPlugin extends Plugin {
                 position: 'left'
             });
         }
+
+        this.syncPomodoroTopBar(topBarSettings);
 
         // 启动时同步一次番茄习惯自动打卡（处理补录）
         const habitSyncTimer = setTimeout(() => {
@@ -4270,6 +4277,68 @@ export default class ReminderPlugin extends Plugin {
 
             // 使用新的批量设置组件
             await this.batchReminderDialog.show(blockIds, defaultSettings);
+        }
+    }
+
+    private syncPomodoroTopBar(settings: any): void {
+        const frontend = getFrontend();
+        const enabled = !this.isInMobileApp && !frontend.endsWith('mobile') &&
+            !frontend.startsWith('browser') && typeof (window as any).require === 'function' &&
+            settings.enablePomodoroTopBar !== false;
+        if (enabled && !this.pomodoroTopBarEl) {
+            this.pomodoroTopBarEl = this.addTopBar({
+                icon: 'iconTNPomodoro',
+                title: i18n('togglePomodoroWindow'),
+                position: 'left',
+                callback: () => { void this.togglePomodoroWindow(); }
+            });
+        }
+        if (this.pomodoroTopBarEl) this.pomodoroTopBarEl.style.display = enabled ? '' : 'none';
+    }
+
+    private async togglePomodoroWindow(): Promise<void> {
+        if (this.pomodoroTopBarBusy || this.storageDisposed) return;
+        this.pomodoroTopBarBusy = true;
+        const manager = PomodoroManager.getInstance();
+        let newTimer: PomodoroTimer | null = null;
+        try {
+            // 等待正在创建的计时器，避免连点或任务启动期间重复开窗。
+            const current = manager.getCurrentPomodoroTimer();
+            if (current) await current.show(false);
+            if (this.storageDisposed) return;
+
+            const { PomodoroTimer } = await import('./components/panel/PomodoroTimer');
+            // 也查找其他思源窗口持有的计时器；只控制原生窗口，不接管其计时。
+            if (await PomodoroTimer.toggleExistingStandaloneWindow(this)) return;
+            if (this.storageDisposed) return;
+            if (manager.hasActivePomodoroTimer()) {
+                showMessage(i18n('pomodoroWindowNotStandalone'), 5000);
+                return;
+            }
+
+            const settings = await this.getPomodoroSettings();
+            if (this.storageDisposed) return;
+            manager.cleanupInactiveTimer();
+            newTimer = new PomodoroTimer({
+                id: 'pomodoro-standalone', title: i18n('pomodoroFocusDefault')
+            }, { ...settings, globalWindowEnabled: true }, false, undefined, this);
+            manager.setCurrentPomodoroTimer(newTimer);
+            // 顶栏仅打开待开始的窗口；任务菜单的 show() 仍直接开始计时。
+            await newTimer.show(false);
+            if (this.storageDisposed || !newTimer.isStandaloneWindow()) {
+                throw new Error('Standalone pomodoro window was not created');
+            }
+        } catch (error) {
+            if (newTimer) {
+                newTimer.destroy();
+                if (manager.getCurrentPomodoroTimer() === newTimer) manager.setCurrentPomodoroTimer(null);
+            }
+            if (!this.storageDisposed) {
+                console.error('Failed to toggle standalone pomodoro window:', error);
+                showMessage(i18n('operationFailed'), 3000);
+            }
+        } finally {
+            this.pomodoroTopBarBusy = false;
         }
     }
 

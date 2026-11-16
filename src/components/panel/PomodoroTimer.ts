@@ -7687,7 +7687,8 @@ export class PomodoroTimer {
         }
     }
 
-    show(): Promise<void> {
+    show(autoStart: boolean = true): Promise<void> {
+        if (!autoStart) return this.componentsReady;
         // 所有启动入口在窗口和音频准备完成后直接计时；重复调用不重启或恢复暂停的计时。
         if (!this.startOnShowPromise) {
             this.startOnShowPromise = this.componentsReady.then(async () => {
@@ -9369,6 +9370,29 @@ document.body.classList.remove('docked-mode');
             console.error("Failed to create pomodoro window:", error);
             throw error;
         }
+    }
+
+    public isStandaloneWindow(): boolean {
+        const win = this.container as any;
+        return !this.isTabMode && !this.isWindowClosed &&
+            typeof win?.isDestroyed === 'function' && !win.isDestroyed();
+    }
+
+    public static async toggleExistingStandaloneWindow(plugin: any): Promise<boolean> {
+        const win = await PomodoroTimer.scanForOrphanedWindow(plugin);
+        if (!win || win.isDestroyed()) return false;
+        // 最小化的窗口在 Electron 中仍可能被认为可见，先处理恢复。
+        if (win.isMinimized()) {
+            win.restore();
+            win.show();
+            win.focus();
+        } else if (win.isVisible()) {
+            win.hide();
+        } else {
+            win.show();
+            win.focus();
+        }
+        return true;
     }
 
     public static async recoverOrphanedWindow(plugin: any, settings: any): Promise<PomodoroTimer | null> {
