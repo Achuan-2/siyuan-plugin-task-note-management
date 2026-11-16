@@ -415,6 +415,7 @@
     "pomodoroDeleteCategoryConfirm": "删除此分类后，相关番茄记录将显示为未分类。确定删除？",
     "pomodoroCategoryWorkStats": "工作时长",
     "pomodoroCategoryBreakStats": "休息时长",
+    "pomodoroCategoryTotalStats": "总时长",
     "pomodoroGroupByTask": "按任务",
     "pomodoroGroupByCategory": "按分类",
     "pomodoroCategoryPhaseChanged": "计时阶段已改变，请重新选择分类",

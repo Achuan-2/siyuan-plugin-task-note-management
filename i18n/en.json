@@ -415,6 +415,7 @@
     "pomodoroDeleteCategoryConfirm": "Records in this category will become uncategorized. Delete this category?",
     "pomodoroCategoryWorkStats": "Work time",
     "pomodoroCategoryBreakStats": "Break time",
+    "pomodoroCategoryTotalStats": "Total time",
     "pomodoroGroupByTask": "By task",
     "pomodoroGroupByCategory": "By category",
     "pomodoroCategoryPhaseChanged": "The timer phase has changed. Please select the category again.",

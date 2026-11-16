@@ -56,7 +56,7 @@ class PomodoroStatsView {
     private disposed = false;
     private categories: PomodoroCategory[] = [];
     private detailGroup: 'task' | 'category' = 'task';
-    private categorySessionType: 'work' | 'break' = 'work';
+    private categorySessionType: 'all' | 'work' | 'break' = 'work';
     private onDataUpdated = () => { if (!this.disposed) void this.updateContent(); };
     constructor(plugin: any, embeddedHost?: HTMLElement) {
         this.recordManager = PomodoroRecordManager.getInstance(plugin);
@@ -273,7 +273,8 @@ class PomodoroStatsView {
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
                         <button class="b3-button ${this.detailGroup === 'task' ? '' : 'b3-button--outline'}" data-pomodoro-group="task">${i18n('pomodoroGroupByTask')}</button>
                         <button class="b3-button ${this.detailGroup === 'category' ? '' : 'b3-button--outline'}" data-pomodoro-group="category">${i18n('pomodoroGroupByCategory')}</button>
-                        ${this.detailGroup === 'category' ? `<button class="b3-button ${this.categorySessionType === 'work' ? '' : 'b3-button--outline'}" data-pomodoro-type="work">${i18n('pomodoroCategoryWorkStats')}</button>
+                        ${this.detailGroup === 'category' ? `<button class="b3-button ${this.categorySessionType === 'all' ? '' : 'b3-button--outline'}" data-pomodoro-type="all">${i18n('all')}</button>
+                        <button class="b3-button ${this.categorySessionType === 'work' ? '' : 'b3-button--outline'}" data-pomodoro-type="work">${i18n('pomodoroCategoryWorkStats')}</button>
                         <button class="b3-button ${this.categorySessionType === 'break' ? '' : 'b3-button--outline'}" data-pomodoro-type="break">${i18n('pomodoroCategoryBreakStats')}</button>` : ''}
                     </div>
                     ${this.renderTaskCategoryChart()}
@@ -1086,6 +1087,10 @@ class PomodoroStatsView {
                 }
             }));
 
+            const timeLabel = this.detailGroup === 'category' && this.categorySessionType !== 'work'
+                ? i18n(this.categorySessionType === 'all' ? 'pomodoroCategoryTotalStats' : 'pomodoroCategoryBreakStats')
+                : i18n('focusTime');
+
             // 配置选项
             const option = {
                 title: {
@@ -1109,7 +1114,7 @@ class PomodoroStatsView {
                                     <span style="display: inline-block; width: 10px; height: 10px; background-color: ${params.color}; border-radius: 50%; margin-right: 8px;"></span>
                                     <strong>${this.escapeHtml(params.name)}</strong>
                                 </div>
-                                <div style="margin-bottom: 2px;">${this.detailGroup === 'category' && this.categorySessionType === 'break' ? i18n('pomodoroCategoryBreakStats') + ': ' : i18n("focusTimeColon")}${timeStr}</div>
+                                <div style="margin-bottom: 2px;">${timeLabel}: ${timeStr}</div>
                                 ${this.detailGroup === 'category' && this.categorySessionType === 'break' ? '' : `<div style="margin-bottom: 2px;">${i18n("completedPomodoroCountColon")}${countStr}${i18n("pomodoroCountUnit")}</div>`}
                                 <div>${i18n("proportionOf")}${percentage}%</div>
                             </div>
@@ -1132,7 +1137,7 @@ class PomodoroStatsView {
                 },
                 series: [
                     {
-                        name: i18n("focusTime"),
+                        name: timeLabel,
                         type: 'pie',
                         radius: ['40%', '70%'],
                         center: ['50%', '45%'],
@@ -1724,7 +1729,7 @@ class PomodoroStatsView {
             void this.updateContent();
             return;
         }
-        if (type === 'work' || type === 'break') {
+        if (type === 'all' || type === 'work' || type === 'break') {
             this.categorySessionType = type;
             void this.updateContent();
             return;

@@ -85,22 +85,32 @@ test('MCP 创建、补录和编辑均保留独立分类，旧记录默认未分�
     assert.equal(manager.getDaySummary(day).workByCategory[''].duration, 25);
 });
 
-test('分类统计排除进行中记录，区分工作休息；删除分类及历史余额归未分类', () => {
+test('分类统计支持全部及工作休息，排除进行中记录；删除分类及历史余额归未分类', () => {
     const sessions = [
         { type: 'work', id: 'a', eventId: 'same-task', categoryId: 'pc_work', duration: 25 },
         { type: 'work', id: 'b', eventId: 'same-task', categoryId: 'deleted', duration: 10 },
         { type: 'work', id: 'c', categoryId: 'pc_work', duration: 8, inProgress: true },
         { type: 'shortBreak', id: 'd', eventId: 'same-task', categoryId: 'pc_break', duration: 5 },
         { type: 'longBreak', id: 'e', eventId: 'same-task', duration: 15 },
+        { type: 'longBreak', id: 'f', categoryId: 'pc_work', duration: 5 },
+        { type: 'shortBreak', id: 'g', categoryId: 'pc_break', duration: 9, inProgress: true },
     ];
-    const summary = summarizePomodoroDay(day, { date: day, sessions, totalWorkTime: 45, totalBreakTime: 20, workSessions: 3 }, () => 1);
+    const summary = summarizePomodoroDay(day, { date: day, sessions, totalWorkTime: 45, totalBreakTime: 30, workSessions: 3 }, () => 1);
     const stats = getPomodoroCategoryStats([summary], categories, 'work');
     assert.deepEqual({ ...stats.pc_work }, { time: 25, count: 1 });
     assert.deepEqual({ ...stats[''] }, { time: 20, count: 2 });
     assert.equal(Object.values(stats).reduce((sum, item) => sum + item.time, 0), 45);
     const breaks = getPomodoroCategoryStats([summary], categories, 'break');
     assert.deepEqual({ ...breaks.pc_break }, { time: 5, count: 0 });
-    assert.deepEqual({ ...breaks[''] }, { time: 15, count: 0 });
+    assert.deepEqual({ ...breaks.pc_work }, { time: 5, count: 0 });
+    assert.deepEqual({ ...breaks[''] }, { time: 20, count: 0 });
+    const all = getPomodoroCategoryStats([summary], categories, 'all');
+    assert.deepEqual({ ...all.pc_work }, { time: 30, count: 1 });
+    assert.deepEqual({ ...all.pc_break }, { time: 5, count: 0 });
+    assert.deepEqual({ ...all[''] }, { time: 40, count: 2 });
+    assert.equal(Object.values(all).reduce((sum, item) => sum + item.time, 0), 75);
+    assert.equal(Object.values(all).reduce((sum, item) => sum + item.count, 0), 3);
+    assert.deepEqual({ ...getPomodoroCategoryStats([summary], [], 'all')[''] }, { time: 75, count: 3 });
     assert.equal(getPomodoroCategoryStats([summary], [], 'work')[''].time, 45);
 });
 

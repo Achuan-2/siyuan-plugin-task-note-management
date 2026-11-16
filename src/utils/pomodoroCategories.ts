@@ -33,7 +33,7 @@ export function changePomodoroCategories(plugin: any, change: (categories: Pomod
     return pending;
 }
 
-export function getPomodoroCategoryStats(days: PomodoroDaySummary[], categories: PomodoroCategory[], type: 'work' | 'break') {
+export function getPomodoroCategoryStats(days: PomodoroDaySummary[], categories: PomodoroCategory[], type: 'all' | 'work' | 'break') {
     const available = new Set(categories.map(category => category.id));
     const result: Record<string, { time: number; count: number }> = Object.create(null);
     const add = (id: string, time: number, count: number) => {
@@ -41,16 +41,19 @@ export function getPomodoroCategoryStats(days: PomodoroDaySummary[], categories:
         value.time += time;
         value.count += count;
     };
-    for (const day of days) {
+    const types: Array<'work' | 'break'> = type === 'all' ? ['work', 'break'] : [type];
+    for (const day of days) for (const sessionType of types) {
+        const isWork = sessionType === 'work';
         let time = 0, count = 0;
-        for (const [id, value] of Object.entries(type === 'work' ? day.workByCategory : day.breakByCategory)) {
-            add(available.has(id) ? id : '', value.duration, value.count);
+        for (const [id, value] of Object.entries(isWork ? day.workByCategory : day.breakByCategory)) {
+            const sessionCount = isWork ? value.count : 0;
+            add(available.has(id) ? id : '', value.duration, sessionCount);
             time += value.duration;
-            count += value.count;
+            count += sessionCount;
         }
         // Old records containing balances but no session details remain visible as uncategorized.
-        const remainder = (type === 'work' ? day.totalWorkTime : day.totalBreakTime) - time;
-        const countRemainder = type === 'work' ? day.workSessions - count : 0;
+        const remainder = (isWork ? day.totalWorkTime : day.totalBreakTime) - time;
+        const countRemainder = isWork ? day.workSessions - count : 0;
         if (remainder > 0 || countRemainder > 0) add('', Math.max(0, remainder), Math.max(0, countRemainder));
     }
     return result;
