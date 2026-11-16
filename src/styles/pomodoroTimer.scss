@@ -73,7 +73,7 @@
             flex-shrink: 0;
         }
         .pomodoro-category-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .pomodoro-category-chevron { opacity: .5; font-size: 11px; flex-shrink: 0; }
+        .pomodoro-category-chevron { display: block; width: 10px; height: 10px; opacity: .5; flex-shrink: 0; }
 
         .pomodoro-status {
             text-transform: uppercase;

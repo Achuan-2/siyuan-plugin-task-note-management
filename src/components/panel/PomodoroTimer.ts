@@ -607,7 +607,7 @@ export class PomodoroTimer {
             const button = anchor || this.container?.querySelector('.pomodoro-category-button') as HTMLElement;
             const rect = button?.getBoundingClientRect();
             menu.open({ x: rect?.left ?? 8, y: rect?.bottom ?? 8 });
-            menu.element.style.zIndex = String(this.resolveSwitchMenuZIndex());
+            menu.element.style.zIndex = String(Math.max(Number.parseInt(menu.element.style.zIndex, 10) || 0, this.resolveSwitchMenuZIndex()));
             menu.element.style.maxHeight = 'min(360px, 70vh)';
             menu.element.style.overflowY = 'auto';
         } catch (error) {
@@ -4007,7 +4007,7 @@ export class PomodoroTimer {
         categoryButton.type = 'button';
         categoryButton.className = 'pomodoro-category-button';
         categoryButton.setAttribute('aria-haspopup', 'menu');
-        categoryButton.innerHTML = '<span class="pomodoro-category-dot" aria-hidden="true"></span><span class="pomodoro-category-label"></span><span class="pomodoro-category-chevron" aria-hidden="true">⌄</span>';
+        categoryButton.innerHTML = '<span class="pomodoro-category-dot" aria-hidden="true"></span><span class="pomodoro-category-label"></span><svg class="pomodoro-category-chevron" viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M2 3.5L5 6.5L8 3.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>';
         categoryButton.querySelector('.pomodoro-category-label').textContent = this.getPomodoroCategoryText();
         categoryButton.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -10315,7 +10315,7 @@ document.body.classList.remove('docked-mode');
         .pomodoro-category-button:disabled { opacity:.55; cursor:wait; }
         .pomodoro-category-dot { width:6px; height:6px; border-radius:50%; background:var(--pomodoro-category-color, ${textColor}); flex-shrink:0; }
         .pomodoro-category-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .pomodoro-category-chevron { opacity:.5; font-size:11px; flex-shrink:0; }
+        .pomodoro-category-chevron { display:block; width:10px; height:10px; opacity:.5; flex-shrink:0; }
         .pomodoro-main-container { -webkit-app-region: drag; display: flex; align-items: center; justify-content: center; gap: var(--normal-gap); margin-bottom: 10px; flex: 1; min-height: 0; }
         .progress-container { -webkit-app-region: drag; position: relative; width: var(--normal-ring-size); height: var(--normal-ring-size); flex-shrink: 0; min-width: 0; min-height: 0; }
         .progress-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
@@ -11004,7 +11004,7 @@ document.body.classList.remove('docked-mode');
             <div class="time-info">
                 <div class="pomodoro-status-row">
                     <div class="pomodoro-status" id="statusDisplay">${statusText}</div>
-                    <button type="button" class="pomodoro-category-button" aria-haspopup="menu" onclick="callMethod('openPomodoroCategoryMenu')"><span class="pomodoro-category-dot" aria-hidden="true"></span><span class="pomodoro-category-label"></span><span class="pomodoro-category-chevron" aria-hidden="true">⌄</span></button>
+                    <button type="button" class="pomodoro-category-button" aria-haspopup="menu" onclick="callMethod('openPomodoroCategoryMenu')"><span class="pomodoro-category-dot" aria-hidden="true"></span><span class="pomodoro-category-label"></span><svg class="pomodoro-category-chevron" viewBox="0 0 10 10" aria-hidden="true" focusable="false"><path d="M2 3.5L5 6.5L8 3.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
                 </div>
                 <div class="pomodoro-time" id="timeDisplay" ondblclick="callMethod('editTime')">${timeStr}</div>
                 <div class="pomodoro-count">

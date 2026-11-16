@@ -17,14 +17,14 @@ const deferred = () => {
     const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
     return { promise, resolve, reject };
 };
-function fixture(native = false) {
+function fixture(native = false, hostMenuZIndex) {
     const menus = [], messages = [], writes = [], events = [], focusChanges = [];
     class Menu {
         constructor(_id, close) { this.items = []; this.closeCallback = close; this.element = { style: {} }; menus.push(this); }
         addItem(item) { this.items.push(item); }
         append(item) { this.items.push(item); }
         addSeparator() { this.items.push({ type: 'separator' }); }
-        open(position) { this.position = position; }
+        open(position) { this.position = position; if (hostMenuZIndex !== undefined) this.element.style.zIndex = String(hostMenuZIndex); }
         popup(options) { this.options = options; }
         close() { this.closeCallback?.(); }
     }
@@ -64,6 +64,14 @@ test('紧凑标签只显示分类名，完整说明保留在辅助标签中', ()
     f.timer.isWorkPhase = false;
     f.timer.updatePomodoroCategoryDisplay();
     assert.equal(f.label.textContent, 'uncategorized');
+});
+
+test('分类菜单保留宿主较高的层级，避免移动端遮罩拦截触摸', async () => {
+    for (const [hostZIndex, expectedZIndex] of [[1002, '1002'], [20, '101']]) {
+        const f = fixture(false, hostZIndex);
+        await f.timer.openPomodoroCategoryMenu(f.button);
+        assert.equal(f.menus[0].element.style.zIndex, expectedZIndex);
+    }
 });
 
 for (const native of [false, true]) test(`${native ? '独立窗口原生' : '普通窗口'}菜单单选立即保存，不激活主窗口或改变置顶`, async () => {
