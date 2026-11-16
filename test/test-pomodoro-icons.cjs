@@ -53,6 +53,17 @@ function element() {
     };
 }
 
+test('分类入口放在工作休息状态下方，任务标题保持独立，使用菜单而不是编辑弹窗', () => {
+    for (const isWorkPhase of [true, false]) {
+        const { html } = fixture('ring', { isWorkPhase });
+        const body = html.slice(html.indexOf('<body'), html.indexOf('<script>', html.indexOf('<body')));
+        assert.match(body, /class="pomodoro-status-row">\s*<div class="pomodoro-status" id="statusDisplay">[^<]*<\/div>\s*<button[^>]+class="pomodoro-category-button"/);
+        assert.equal((body.match(/class="pomodoro-category-button"/g) || []).length, 1);
+        assert.match(body, /aria-haspopup="menu" onclick="callMethod\('openPomodoroCategoryMenu'\)"/);
+        assert.doesNotMatch(body, /pomodoro-task-header|openPomodoroCategoryDialog/);
+    }
+});
+
 test('all icon states use self-contained colored SVG and preserve label escaping', () => {
     for (const [key, svg] of Object.entries(icons.POMODORO_ICON_SVGS)) {
         assert.equal(icons.renderPomodoroIcons(key), svg, key);

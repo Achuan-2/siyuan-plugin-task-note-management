@@ -25,6 +25,56 @@
 
 
     .pomodoro-content {
+        .pomodoro-status-row {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 3px;
+            min-width: 0;
+            max-width: 100%;
+
+            .pomodoro-status {
+                flex: 0 1 auto;
+                min-width: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                margin: 0;
+            }
+        }
+
+        .pomodoro-category-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            flex: 0 1 auto;
+            max-width: 100%;
+            min-width: 0;
+            padding: 2px 6px;
+            border: 1px solid var(--b3-border-color, rgba(127, 127, 127, .22));
+            border-radius: 12px;
+            background: transparent;
+            color: var(--b3-theme-on-surface);
+            font: inherit;
+            font-size: 11px;
+            line-height: 16px;
+            cursor: pointer;
+
+            &:hover { background: var(--b3-theme-surface-hover); }
+            &:focus-visible { outline: 2px solid var(--b3-theme-primary); outline-offset: 2px; }
+            &:disabled { opacity: .55; cursor: wait; }
+        }
+
+        .pomodoro-category-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--pomodoro-category-color, var(--b3-theme-on-surface-light));
+            flex-shrink: 0;
+        }
+        .pomodoro-category-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pomodoro-category-chevron { opacity: .5; font-size: 11px; flex-shrink: 0; }
+
         .pomodoro-status {
             text-transform: uppercase;
             letter-spacing: 0.5px;
