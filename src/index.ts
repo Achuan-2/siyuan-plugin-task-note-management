@@ -239,11 +239,13 @@ export const DEFAULT_SETTINGS = {
     projectPanelShowProgress: true,
     reminderPanelSelectedCategories: [] as string[],
     reminderPanelShowProjectKanbanStatus: true,
+    reminderPanelViewMode: 'standard' as 'standard' | 'mini',
     // 习惯面板筛选与排序
     habitPanelSortKey: 'priority',
     habitPanelSortOrder: 'desc',
     habitPanelSelectedGroups: [] as string[],
     habitPanelCheckInDaysMode: 'total' as 'total' | 'streak',
+    habitPanelViewMode: 'standard' as 'standard' | 'mini',
     // 日历上传：ICS云端同步配置
     icsSyncInterval: 'daily', // 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily' | 'dailyAt'
     icsDailySyncTime: '08:00', // 每天同步时间点（当 syncInterval 为 'dailyAt' 时使用），格式 HH:MM
