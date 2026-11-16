@@ -28,6 +28,8 @@ import { StatusManager } from "../dataManager/statusManager";
 import { CategoryManageDialog } from "../dialog/CategoryManageDialog";
 import { ProjectColorDialog } from "../dialog/ProjectColorDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
+import { loadPomodoroCategories, POMODORO_CATEGORIES_UPDATED, type PomodoroCategory } from '../../utils/pomodoroCategories';
+import { mountPomodoroCategoryControl } from '../dialog/pomodoroCategoryControl';
 import { i18n } from "../../pluginInstance";
 import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate, resolveRepeatReminderTimes, getMonthlyWeekdayDate, getMonthlyWeekRules, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../../utils/icsSubscription";
@@ -69,6 +71,8 @@ export class CalendarView {
     private calendarConfigManager: CalendarConfigManager;
 
     private currentCategoryFilter: Set<string> = new Set(['all']); // 当前分类过滤（支持多选）
+    private pomodoroCategoryFilter = 'all';
+    private pomodoroCategories: PomodoroCategory[] = [];
     private currentProjectFilter: Set<string> = new Set(['all']); // 当前项目过滤（支持多选）
     private projectFilterPopup?: ProjectSelectorPopup;
     private initialProjectFilter: string | null = null;
@@ -994,8 +998,9 @@ export class CalendarView {
             categoryFilterContainer.style.display = categoryActive ? 'inline-block' : 'none';
             if (!projectActive) projectDropdown.style.display = 'none';
             if (!categoryActive) categoryDropdown.style.display = 'none';
-            filterButton.classList.toggle('b3-button--primary', projectActive || categoryActive);
-            filterButton.classList.toggle('b3-button--outline', !projectActive && !categoryActive);
+            const pomodoroActive = this.pomodoroCategoryFilter !== 'all';
+            filterButton.classList.toggle('b3-button--primary', projectActive || categoryActive || pomodoroActive);
+            filterButton.classList.toggle('b3-button--outline', !projectActive && !categoryActive && !pomodoroActive);
             if (isMobileClient && !this.isDockMode && !this.openedFromHabitPanel) {
                 filterGroup.style.display = projectActive || categoryActive ? 'flex' : 'none';
             }
@@ -1007,8 +1012,16 @@ export class CalendarView {
             this.filterDropdowns = null;
             this.syncFilterControls = null;
         });
-        filterButton.addEventListener('click', (event) => {
+        filterButton.addEventListener('click', async (event) => {
             event.stopPropagation();
+            try {
+                this.pomodoroCategories = await loadPomodoroCategories(this.plugin);
+                if (this.disposed) return;
+            } catch (error) {
+                console.error('Failed to load pomodoro categories:', error);
+                showMessage(i18n('loadFailed'), 3000, 'error');
+                return;
+            }
             projectDropdown.style.display = 'none';
             categoryDropdown.style.display = 'none';
             if (this.displaySettingsDropdown) this.displaySettingsDropdown.style.display = 'none';
@@ -1024,6 +1037,18 @@ export class CalendarView {
                 click: () => this.lifecycle.frame(() => this.positionDropdown(categoryDropdown, filterButton, 220))
             });
             const rect = filterButton.getBoundingClientRect();
+            menu.addItem({
+                icon: 'iconTags', label: i18n('pomodoroCategory'),
+                submenu: [{ id: 'all', name: i18n('pomodoroAllCategories') },
+                    { id: 'none', name: i18n('uncategorized') }, ...this.pomodoroCategories].map(category => ({
+                    label: category.name, checked: this.pomodoroCategoryFilter === category.id,
+                    click: () => {
+                        this.pomodoroCategoryFilter = category.id;
+                        this.syncFilterControls?.();
+                        this.refreshEvents();
+                    }
+                }))
+            });
             menu.open({ x: rect.left, y: rect.bottom + 4 });
         });
 
@@ -2834,6 +2859,7 @@ export class CalendarView {
             this.refreshEvents(false, true);
         };
         this.lifecycle.listen(window, 'reminderUpdated', this.externalReminderUpdatedHandler);
+        this.lifecycle.listen(window, POMODORO_CATEGORIES_UPDATED, () => this.refreshEvents());
 
         // 监听设置更新事件
         this.settingUpdateHandler = async (e: Event) => {
@@ -4769,6 +4795,7 @@ export class CalendarView {
         const noteInput = editDialog.element.querySelector("#calendarEditSessionNote") as HTMLTextAreaElement;
 
         typeSelect.value = session.type;
+        const categoryControl = mountPomodoroCategoryControl(typeSelect.parentElement, this.plugin, session.categoryId);
         startTimeInput.value = this.formatDateTimeLocalInputValue(startTime);
         durationInput.value = String(initialDuration);
 
@@ -4807,7 +4834,8 @@ export class CalendarView {
                     plannedDuration: nextPlannedDuration,
                     completed: true,
                     inProgress: false,
-                    note
+                    note,
+                    categoryId: await categoryControl.value()
                 };
 
                 if (updatedSession.type === 'work' && updatedSession.isCountUp) {
@@ -5638,6 +5666,13 @@ export class CalendarView {
                 : renderPomodoroIcons(phase === 'longBreak' ? '🧘' : phase === 'shortBreak' ? '🍵' : '🍅');
             titleEl.appendChild(document.createTextNode(' ' + event.title.replace(/^(?:🍅|⏳)\s*/u, '')));
             mainFrame.appendChild(titleEl);
+
+            if (props.pomodoroCategoryName) {
+                const categoryEl = document.createElement('div');
+                categoryEl.style.cssText = 'font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+                categoryEl.textContent = props.pomodoroCategoryName;
+                mainFrame.appendChild(categoryEl);
+            }
 
             if (timeText) {
                 const timeEl = document.createElement('div');
@@ -8582,6 +8617,11 @@ export class CalendarView {
                     const sessions = await pomodoroManager.getDateRangeSessions(startDate, endDate);
                     const pomodoroSettings = await this.plugin.getPomodoroSettings?.() || {};
                     const defaultWorkDuration = Math.max(1, Number(pomodoroSettings.workDuration || 25));
+                    this.pomodoroCategories = await loadPomodoroCategories(this.plugin);
+                    if (!['all', 'none', ...this.pomodoroCategories.map(category => category.id)].includes(this.pomodoroCategoryFilter)) {
+                        this.pomodoroCategoryFilter = 'all';
+                        this.syncFilterControls?.();
+                    }
 
                     for (const session of sessions) {
                         // Ensure session has necessary data
@@ -8592,7 +8632,8 @@ export class CalendarView {
                             continue;
                         }
 
-                        // 筛选项目和分类
+                        // 番茄分类独立于任务分类；项目关联仍沿用原有行为。
+                        if (!this.passesPomodoroCategoryFilter(session.categoryId)) continue;
                         let reminder = session.eventId ? reminderData[session.eventId] : null;
 
                         // 如果关联了任务但没在 reminderData 中找到，尝试作为重复任务实例处理
@@ -8611,12 +8652,10 @@ export class CalendarView {
                         if (reminder) {
                             if (this.isAbandonedReminder(reminder)) continue;
                             if (!this.passesProjectFilter(reminder)) continue;
-                            if (!this.passesCategoryFilter(reminder, projectData)) continue;
                         } else {
-                            // 如果是休息记录或关联的任务已彻底删除且无法找回，则视为“无项目”和“无分类”进行过滤
+                            // 无关联任务的番茄记录按“无项目”筛选；分类独立处理。
                             const virtualReminder = { projectId: null, categoryId: null };
                             if (!this.passesProjectFilter(virtualReminder)) continue;
-                            if (!this.passesCategoryFilter(virtualReminder, projectData)) continue;
                         }
 
                         // Construct title: "<TomatoIcon> TaskName"
@@ -8632,6 +8671,8 @@ export class CalendarView {
                             const colors = this.getEventColors(reminder);
                             backgroundColor = colors.backgroundColor;
                         }
+                        const pomodoroCategory = this.pomodoroCategories.find(category => category.id === session.categoryId);
+                        if (pomodoroCategory) backgroundColor = pomodoroCategory.color;
 
                         let sessionStart = session.startTime;
                         let sessionEnd = session.endTime;
@@ -8667,6 +8708,8 @@ export class CalendarView {
                                 eventTitle: session.eventTitle,
                                 duration: session.duration > 0 ? session.duration : durationMinutes,
                                 note: session.note || '',
+                                pomodoroCategoryId: pomodoroCategory?.id,
+                                pomodoroCategoryName: pomodoroCategory?.name,
                                 parentId: session.eventId, // Map associated task ID to parentId for easy access
                                 originalSession: session
                             }
@@ -9370,6 +9413,11 @@ export class CalendarView {
 
 
 
+
+    private passesPomodoroCategoryFilter(categoryId?: string): boolean {
+        const id = this.pomodoroCategories.some(category => category.id === categoryId) ? categoryId : 'none';
+        return this.pomodoroCategoryFilter === 'all' || this.pomodoroCategoryFilter === id;
+    }
 
     passesCategoryFilter(reminder: any, projectData: any = {}): boolean {
         // 如果没有选择任何分类（取消全选），不显示任何任务

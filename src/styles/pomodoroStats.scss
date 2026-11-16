@@ -624,6 +624,20 @@
                 background: linear-gradient(135deg, #4CAF50, #66BB6A);
                 color: white;
             }
+
+            &.pomodoro-record--categorized {
+                border-inline-start: var(--pomodoro-record-category-border);
+                background: var(--pomodoro-record-background);
+
+                &:hover {
+                    background: color-mix(in srgb, var(--pomodoro-record-category-color) 16%, var(--b3-theme-surface));
+                }
+
+                .record-icon {
+                    background: var(--pomodoro-record-background);
+                    box-shadow: inset 0 0 0 1px var(--pomodoro-record-category-color);
+                }
+            }
         }
     }
 }

@@ -11,7 +11,9 @@ let statsView: any = null;
 import { Dialog } from "siyuan";
 import { showMessage } from "siyuan";
 import { confirm } from "siyuan";
-import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
+import { PomodoroRecordManager, type PomodoroSession } from "../dataManager/pomodoroRecord";
+import { getPomodoroCategoryStats, loadPomodoroCategories, POMODORO_CATEGORIES_UPDATED, type PomodoroCategory } from '../../utils/pomodoroCategories';
+import { getPomodoroCategoryRecordStyle, mountPomodoroCategoryControl, renderPomodoroCategoryBadge } from '../dialog/pomodoroCategoryControl';
 import { i18n } from "../../pluginInstance";
 import { getLocalDateString, getLogicalDateString, getDayStartMinutes, getLocaleTag } from "../../utils/dateUtils";
 import { init, use } from 'echarts/core';
@@ -20,20 +22,8 @@ import { TooltipComponent, VisualMapComponent, GridComponent, TitleComponent, Le
 import { CanvasRenderer } from 'echarts/renderers';
 import { setLastStatsMode } from "./statsMode";
 
-type PomodoroSession = {
-    id: string;
-    type: 'work' | 'shortBreak' | 'longBreak';
-    eventId: string;
-    eventTitle: string;
-    startTime: string;
-    endTime: string;
-    duration: number;
-    plannedDuration: number;
-    completed: boolean;
-    isCountUp?: boolean;
-    count?: number;
-    inProgress?: boolean;
-    note?: string;
+type PomodoroTimelineSession = {
+    type: string; title: string; duration: number; startPercent: number; widthPercent: number; color?: string;
 };
 
 // 注册 ECharts 组件
@@ -64,6 +54,10 @@ class PomodoroStatsView {
     private plugin;
     private renderGeneration = 0;
     private disposed = false;
+    private categories: PomodoroCategory[] = [];
+    private detailGroup: 'task' | 'category' = 'task';
+    private categorySessionType: 'work' | 'break' = 'work';
+    private onDataUpdated = () => { if (!this.disposed) void this.updateContent(); };
     constructor(plugin: any, embeddedHost?: HTMLElement) {
         this.recordManager = PomodoroRecordManager.getInstance(plugin);
         this.plugin = plugin;
@@ -276,6 +270,12 @@ class PomodoroStatsView {
                 </div>
                 
                 <div class="details-content">
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                        <button class="b3-button ${this.detailGroup === 'task' ? '' : 'b3-button--outline'}" data-pomodoro-group="task">${i18n('pomodoroGroupByTask')}</button>
+                        <button class="b3-button ${this.detailGroup === 'category' ? '' : 'b3-button--outline'}" data-pomodoro-group="category">${i18n('pomodoroGroupByCategory')}</button>
+                        ${this.detailGroup === 'category' ? `<button class="b3-button ${this.categorySessionType === 'work' ? '' : 'b3-button--outline'}" data-pomodoro-type="work">${i18n('pomodoroCategoryWorkStats')}</button>
+                        <button class="b3-button ${this.categorySessionType === 'break' ? '' : 'b3-button--outline'}" data-pomodoro-type="break">${i18n('pomodoroCategoryBreakStats')}</button>` : ''}
+                    </div>
                     ${this.renderTaskCategoryChart()}
                 </div>
             </div>
@@ -456,6 +456,7 @@ class PomodoroStatsView {
     }
 
     private renderSessionRecord(session: PomodoroSession): string {
+        const categoryStyle = getPomodoroCategoryRecordStyle(session.categoryId, this.categories);
         const date = new Date(session.startTime);
         const dateStr = date.toLocaleDateString(getLocaleTag());
         const timeStr = date.toLocaleTimeString(getLocaleTag(), { hour: '2-digit', minute: '2-digit' });
@@ -469,7 +470,7 @@ class PomodoroStatsView {
             : "";
 
         return `
-            <div class="record-item ${session.type}">
+            <div class="record-item ${session.type}${categoryStyle ? ' pomodoro-record--categorized' : ''}" style="${categoryStyle}">
                 <div class="record-icon">
                     ${renderPomodoroIcons(session.type === 'work' ? '🍅' : (session.type === 'longBreak' ? '🧘' : '🍵'))}
                 </div>
@@ -482,6 +483,7 @@ class PomodoroStatsView {
                         ${statusText}
                     </div>
                     ${noteHtml}
+                    <div>${renderPomodoroCategoryBadge(session.categoryId, this.categories)}</div>
                 </div>
                 <div class="record-actions">
                     <button class="edit-btn ariaLabel" data-session-id="${session.id}" aria-label="${i18n("edit")}">✏️</button>
@@ -636,6 +638,10 @@ class PomodoroStatsView {
 
     private getTaskCategoryStats(): Record<string, { time: number, count: number }> {
         const [start, end] = this.getCurrentRange();
+        if (this.detailGroup === 'category') {
+            return getPomodoroCategoryStats(Object.entries(this.recordManager.getDailySummaries())
+                .filter(([date]) => date >= start && date <= end).map(([, day]) => day), this.categories, this.categorySessionType);
+        }
         const stats: Record<string, { time: number; count: number }> = Object.create(null);
         for (const [date, day] of Object.entries(this.recordManager.getDailySummaries())) {
             if (date < start || date > end) continue;
@@ -755,7 +761,7 @@ class PomodoroStatsView {
         return data;
     }
 
-    private getTimelineData(): Array<{ date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> }> {
+    private getTimelineData(): Array<{ date: string, sessions: PomodoroTimelineSession[] }> {
         // 实现时间线数据获取
         const data = [];
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
@@ -799,7 +805,7 @@ class PomodoroStatsView {
         return data;
     }
 
-    private getTimelineDataForDate(date: Date): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
+    private getTimelineDataForDate(date: Date): { date: string, sessions: PomodoroTimelineSession[] } {
         const dateStr = getLocalDateString(date);
         const sessions = this.recordManager.getDateSessions(dateStr);
 
@@ -812,6 +818,7 @@ class PomodoroStatsView {
                 type: session.type,
                 title: session.eventTitle,
                 duration: session.duration,
+                color: this.categories.find(category => category.id === session.categoryId)?.color,
                 startPercent,
                 widthPercent
             };
@@ -823,7 +830,7 @@ class PomodoroStatsView {
         };
     }
 
-    private getAverageTimelineDataForMonth(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
+    private getAverageTimelineDataForMonth(): { date: string, sessions: PomodoroTimelineSession[] } {
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetDate = new Date(today.getFullYear(), today.getMonth() + this.currentMonthOffset, 1);
         const daysInMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
@@ -900,7 +907,7 @@ class PomodoroStatsView {
         };
     }
 
-    private getAverageTimelineDataForYear(): { date: string, sessions: Array<{ type: string, title: string, duration: number, startPercent: number, widthPercent: number }> } {
+    private getAverageTimelineDataForYear(): { date: string, sessions: PomodoroTimelineSession[] } {
         const today = new Date(`${getLogicalDateString()}T00:00:00`);
         const targetYear = today.getFullYear() + this.currentYearOffset;
 
@@ -1045,6 +1052,8 @@ class PomodoroStatsView {
     public show() {
         setLastStatsMode('pomodoro');
         this.dialog.element.addEventListener('click', this.handleClick.bind(this));
+        window.addEventListener('reminderUpdated', this.onDataUpdated);
+        window.addEventListener(POMODORO_CATEGORIES_UPDATED, this.onDataUpdated);
         this.updateContent();
     }
 
@@ -1067,11 +1076,13 @@ class PomodoroStatsView {
 
             // 准备数据
             const data = Object.entries(stats).map(([category, data]: [string, any], index) => ({
-                name: category,
+                name: this.detailGroup === 'category'
+                    ? this.categories.find(item => item.id === category)?.name || i18n('uncategorized') : category,
                 value: data.time,
                 count: data.count,
                 itemStyle: {
-                    color: this.getTaskColor(index)
+                    color: this.detailGroup === 'category'
+                        ? this.categories.find(item => item.id === category)?.color || '#888888' : this.getTaskColor(index)
                 }
             }));
 
@@ -1091,15 +1102,15 @@ class PomodoroStatsView {
                     formatter: (params: any) => {
                         const percentage = ((params.value / total) * 100).toFixed(1);
                         const timeStr = this.recordManager.formatTime(params.value);
-                        const countStr = data.find(d => d.name === params.name)?.count || 0;
+                        const countStr = params.data?.count || 0;
                         return `
                             <div style="padding: 8px;">
                                 <div style="margin-bottom: 4px;">
                                     <span style="display: inline-block; width: 10px; height: 10px; background-color: ${params.color}; border-radius: 50%; margin-right: 8px;"></span>
-                                    <strong>${params.name}</strong>
+                                    <strong>${this.escapeHtml(params.name)}</strong>
                                 </div>
-                                <div style="margin-bottom: 2px;">${i18n("focusTimeColon")}${timeStr}</div>
-                                <div style="margin-bottom: 2px;">${i18n("completedPomodoroCountColon")}${countStr}${i18n("pomodoroCountUnit")}</div>
+                                <div style="margin-bottom: 2px;">${this.detailGroup === 'category' && this.categorySessionType === 'break' ? i18n('pomodoroCategoryBreakStats') + ': ' : i18n("focusTimeColon")}${timeStr}</div>
+                                ${this.detailGroup === 'category' && this.categorySessionType === 'break' ? '' : `<div style="margin-bottom: 2px;">${i18n("completedPomodoroCountColon")}${countStr}${i18n("pomodoroCountUnit")}</div>`}
                                 <div>${i18n("proportionOf")}${percentage}%</div>
                             </div>
                         `;
@@ -1435,13 +1446,10 @@ class PomodoroStatsView {
                                 const startHour = session.startPercent / 100 * 24;
                                 const endHour = startHour + (session.widthPercent / 100 * 24);
 
-                                data.push([
-                                    startHour,  // x轴：开始时间
-                                    dayIndex,   // y轴：日期索引
-                                    endHour,    // 结束时间
-                                    session.title,
-                                    session.duration
-                                ]);
+                                data.push({
+                                    value: [startHour, dayIndex, endHour, session.title, session.duration],
+                                    itemStyle: { color: session.color || typeColors[type] }
+                                });
                             }
                         });
                     });
@@ -1467,7 +1475,7 @@ class PomodoroStatsView {
                                         height: height
                                     },
                                     style: {
-                                        fill: typeColors[type],
+                                        fill: api.visual('color'),
                                         opacity: 0.8
                                     }
                                 };
@@ -1645,6 +1653,7 @@ class PomodoroStatsView {
         const noteInput = editDialog.element.querySelector("#editStatsSessionNote") as HTMLTextAreaElement;
 
         typeSelect.value = session.type;
+        const categoryControl = mountPomodoroCategoryControl(typeSelect.parentElement, this.plugin, session.categoryId);
         startTimeInput.value = this.formatDateTimeLocal(startTime);
         durationInput.value = String(initialDuration);
 
@@ -1689,6 +1698,7 @@ class PomodoroStatsView {
             }
 
             try {
+                nextSession.categoryId = await categoryControl.value();
                 const success = await this.recordManager.updateSession(nextSession);
                 if (success) {
                     await this.recordManager.refreshData();
@@ -1707,6 +1717,18 @@ class PomodoroStatsView {
 
     private handleClick(event: Event) {
         const target = event.target as HTMLElement;
+        const group = target.closest<HTMLElement>('[data-pomodoro-group]')?.dataset.pomodoroGroup;
+        const type = target.closest<HTMLElement>('[data-pomodoro-type]')?.dataset.pomodoroType;
+        if (group === 'task' || group === 'category') {
+            this.detailGroup = group;
+            void this.updateContent();
+            return;
+        }
+        if (type === 'work' || type === 'break') {
+            this.categorySessionType = type;
+            void this.updateContent();
+            return;
+        }
 
         if (target.classList.contains('stats-switch-btn')) {
             if (this.embeddedMode) return;
@@ -1864,6 +1886,7 @@ class PomodoroStatsView {
         let release = () => {};
         try {
             await this.recordManager.initialize();
+            this.categories = await loadPomodoroCategories(this.plugin);
             release = this.recordManager.retainDetails();
             if (this.currentView === 'records') {
                 const today = new Date(`${getLogicalDateString()}T00:00:00`);
@@ -1928,6 +1951,8 @@ class PomodoroStatsView {
 
     public destroy() {
         this.disposed = true;
+        window.removeEventListener('reminderUpdated', this.onDataUpdated);
+        window.removeEventListener(POMODORO_CATEGORIES_UPDATED, this.onDataUpdated);
         this.renderGeneration++;
         this.cleanupCharts();
         this.dialog.destroy();

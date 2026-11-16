@@ -15,6 +15,8 @@ export interface PomodoroDaySummary {
     // workByEvent 保留按会话查询的旧口径；events 排除进行中记录，供累计索引使用。
     workByEvent: Record<string, PomodoroWorkTotals>;
     workByTitle: Record<string, PomodoroEventTotals>;
+    workByCategory: Record<string, PomodoroEventTotals>;
+    breakByCategory: Record<string, PomodoroEventTotals>;
     events: Record<string, PomodoroEventTotals>;
     eventIds: string[];
     sessionIds: string[];
@@ -37,7 +39,7 @@ interface CachedDay {
     summary: PomodoroDaySummary; // 物理分片总量及会话定位
     logicalDays: Record<string, PomodoroDaySummary>; // 此分片对各逻辑日的贡献
 }
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const DATE_FILE = /^(\d{4}-\d{2}-\d{2})\.json$/;
 const CONCURRENCY = 6;
 
@@ -58,8 +60,16 @@ export function summarizePomodoroDay(date: string, record: PomodoroRecord, count
     const workByEvent: Record<string, PomodoroWorkTotals> = Object.create(null);
     const workByTitle: Record<string, PomodoroEventTotals> = Object.create(null);
     const events: Record<string, PomodoroEventTotals> = Object.create(null);
+    const workByCategory: Record<string, PomodoroEventTotals> = Object.create(null);
+    const breakByCategory: Record<string, PomodoroEventTotals> = Object.create(null);
     let workSessions = 0, totalWorkTime = 0, totalBreakTime = 0;
     for (const session of record.sessions) {
+        if (!session.inProgress) {
+            const map = session.type === 'work' ? workByCategory : breakByCategory;
+            const value = map[session.categoryId || ''] ||= { duration: 0, count: 0 };
+            value.duration += Math.max(0, Math.round(Number(session.duration) || 0));
+            if (session.type === 'work') value.count += count(session);
+        }
         if (session.type === 'work') {
             const sessionCount = count(session);
             const value = workByEvent[session.eventId] ||= { count: 0, duration: 0, displayCount: 0, displayDuration: 0 };
@@ -91,6 +101,7 @@ export function summarizePomodoroDay(date: string, record: PomodoroRecord, count
         totalBreakTime: record.totalBreakTime ?? totalBreakTime,
         workTimeFromSessions: totalWorkTime,
         workByEvent, workByTitle, events,
+        workByCategory, breakByCategory,
         eventIds: [...new Set(record.sessions.map(s => s.eventId).filter(id => typeof id === 'string'))],
         sessionIds: record.sessions.map(s => s.id).filter(id => typeof id === 'string'),
         deletedSessionIds: Object.keys(record.tombstones || {}),
@@ -102,6 +113,7 @@ function validSummary(value: any, date: string): value is PomodoroDaySummary {
         && Object.values(map).every((v: any) => v && Number.isFinite(v.count) && Number.isFinite(v.duration));
     return value?.date === date && ['workSessions', 'totalWorkTime', 'totalBreakTime', 'workTimeFromSessions'].every(k => Number.isFinite(value[k]))
         && totals(value.events) && totals(value.workByEvent) && totals(value.workByTitle)
+        && totals(value.workByCategory) && totals(value.breakByCategory)
         && Object.values(value.workByEvent).every((v: any) => Number.isFinite(v.displayCount) && Number.isFinite(v.displayDuration))
         && Array.isArray(value.sessionIds) && value.sessionIds.every((id: any) => typeof id === 'string')
         && Array.isArray(value.deletedSessionIds) && value.deletedSessionIds.every((id: any) => typeof id === 'string')
@@ -124,7 +136,7 @@ function combineSummaries(date: string, values: PomodoroDaySummary[]): PomodoroD
     const result = summarizePomodoroDay(date, { date, sessions: [] } as PomodoroRecord, () => 0);
     for (const value of values) {
         for (const key of ['workSessions', 'totalWorkTime', 'totalBreakTime', 'workTimeFromSessions'] as const) result[key] += value[key];
-        for (const key of ['events', 'workByEvent', 'workByTitle'] as const) {
+        for (const key of ['events', 'workByEvent', 'workByTitle', 'workByCategory', 'breakByCategory'] as const) {
             for (const [id, stats] of Object.entries(value[key])) {
                 const map = result[key] as unknown as Record<string, Record<string, number>>;
                 const total = map[id] ||= {};

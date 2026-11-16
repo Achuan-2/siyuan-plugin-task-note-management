@@ -52,6 +52,9 @@ function fixture() {
         if (name.endsWith('/pluginInstance')) return { i18n: key => key };
         if (name.endsWith('/dateUtils')) return { getLocaleTag: () => 'zh-CN' };
         if (name.endsWith('/api')) return { getBlockByID: async () => null };
+        if (name.endsWith('/pomodoroCategoryControl')) return {
+            mountPomodoroCategoryControl: () => ({ value: async () => undefined }),
+        };
         return {};
     }, exports, { dispatchEvent() {} }, class {}, { error: (...args) => errors.push(args), warn() {} });
     const view = new exports.PomodoroSessionsDialog('task', { loadSettings: async () => ({}) });

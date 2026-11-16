@@ -35,6 +35,7 @@ function fixture({ isCountUp = false, inheritState } = {}) {
     const module = { exports: {} };
     const window = {
         dispatchEvent() {},
+        addEventListener() {}, removeEventListener() {},
         setInterval: callback => { intervals.set(++nextInterval, callback); return nextInterval; }
     };
     new Function('require', 'module', 'exports', 'window', 'clearInterval', 'Date', 'CustomEvent', compiled)(

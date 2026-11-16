@@ -37,6 +37,15 @@ function directoryFixture() {
     return { tracker, directories };
 }
 
+test('独立番茄分类文件修改仅刷新分类视图，不读取任务和番茄明细', async () => {
+    const f = pluginFixture();
+    f.tracker.commit(await f.tracker.scan());
+    f.directories[''].push({ name: 'pomodoro_categories.json', isDir: false, updated: 2 });
+    await f.plugin.onDataChanged();
+    assert.deepEqual(f.calls, []);
+    assert.ok(f.events.some(event => event.type === 'pomodoroCategoriesUpdated'));
+});
+
 test('目录快照识别订阅、习惯明细的修改、新增、删除，未变化时无刷新', async () => {
     const { tracker, directories } = directoryFixture();
     tracker.commit(await tracker.scan());

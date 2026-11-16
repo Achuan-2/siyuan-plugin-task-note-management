@@ -1,5 +1,7 @@
 import { showMessage, confirm, getFrontend, getBackend, Dialog } from "siyuan";
 import { PomodoroRecordManager, type PomodoroSession } from "../dataManager/pomodoroRecord";
+import { loadPomodoroCategories, POMODORO_CATEGORIES_UPDATED, type PomodoroCategory } from '../../utils/pomodoroCategories';
+import { mountPomodoroCategoryControl } from '../dialog/pomodoroCategoryControl';
 import { getBlockByID, getBlockAttrs, setBlockAttrs, openBlock, sendNotification, cancelNotification } from "../../api";
 import { i18n } from "../../pluginInstance";
 import { resolveAudioPath } from "../../utils/audioUtils";
@@ -88,6 +90,11 @@ export class PomodoroTimer {
     private activeWorkSessionId: string | null = null; // 开始专注时预创建的记录ID
     private activeWorkSessionStartTime: number = 0; // 当前专注记录的真实开始时间
     private activeWorkSessionStartPromise: Promise<string | null> | null = null;
+    private workCategoryId?: string;
+    private breakCategoryId?: string;
+    private pomodoroCategories: PomodoroCategory[] = [];
+    private categoryListenersAttached = false;
+    private onCategoriesUpdated = () => { void this.refreshPomodoroCategories(); };
     private pausedTime: number = 0; // 记录暂停时累计的时间
 
 
@@ -272,6 +279,7 @@ export class PomodoroTimer {
      * 应用继承的番茄钟状态
      */
     private applyInheritedState(inheritState: any) {
+        this.restoreCategorySelections(inheritState);
 
         // 继承基本状态
         this.isWorkPhase = inheritState.isWorkPhase;
@@ -348,6 +356,7 @@ export class PomodoroTimer {
      * 仅继承窗口模式及位置设置（用于未运行状态下切换任务）
      */
     private applyInheritedWindowSettings(inheritState: any) {
+        this.restoreCategorySelections(inheritState);
         if (inheritState.isDocked !== undefined || inheritState.isMiniMode !== undefined) {
             this.browserWindowModeInitialized = true;
         }
@@ -451,6 +460,10 @@ export class PomodoroTimer {
             phaseStartTime: this.phaseStartTime,
             activeWorkSessionId: this.activeWorkSessionId,
             activeWorkSessionStartTime: this.activeWorkSessionStartTime,
+            workCategoryId: this.workCategoryId,
+            breakCategoryId: this.breakCategoryId,
+            pomodoroCategoryText: this.getPomodoroCategoryText(),
+            pomodoroCategoryColor: this.pomodoroCategories.find(item => item.id === (this.isWorkPhase ? this.workCategoryId : this.breakCategoryId))?.color,
             lastPomodoroTriggerTime: this.lastPomodoroTriggerTime,
             randomRestCount: this.randomRestCount,
             randomRestEnabled: this.randomRestEnabled,
@@ -471,6 +484,102 @@ export class PomodoroTimer {
             breakVolume: this.breakVolume,
             longBreakVolume: this.longBreakVolume
         };
+    }
+
+    private restoreCategorySelections(state: any) {
+        this.workCategoryId = state.workCategoryId || undefined;
+        this.breakCategoryId = state.breakCategoryId || undefined;
+    }
+
+    private getPomodoroCategoryText() {
+        const id = this.isWorkPhase ? this.workCategoryId : this.breakCategoryId;
+        const category = this.pomodoroCategories.find(item => item.id === id);
+        return `${i18n('pomodoroCategory')}: ${category?.name || i18n('uncategorized')}`;
+    }
+
+    private updatePomodoroCategoryDisplay() {
+        if (!this.container || typeof (this.container as any).querySelector !== 'function') return;
+        const button = this.container.querySelector('.pomodoro-category-button') as HTMLElement;
+        if (!button) return;
+        const id = this.isWorkPhase ? this.workCategoryId : this.breakCategoryId;
+        const category = this.pomodoroCategories.find(item => item.id === id);
+        button.textContent = this.getPomodoroCategoryText();
+        button.style.color = category?.color || '';
+    }
+
+    private async refreshPomodoroCategories() {
+        if (typeof this.plugin?.loadData !== 'function' || this.isWindowClosed) return;
+        try {
+            const categories = await loadPomodoroCategories(this.plugin);
+            if (this.isWindowClosed) return;
+            this.pomodoroCategories = categories;
+            this.updatePomodoroCategoryDisplay();
+            const win = PomodoroTimer.browserWindowInstance;
+            if (win && !win.isDestroyed()) this.updateBrowserWindowDisplay(win);
+        } catch (error) {
+            console.error('[PomodoroTimer] Failed to load pomodoro categories:', error);
+        }
+    }
+
+    private detachCategoryListener() {
+        if (!this.categoryListenersAttached) return;
+        window.removeEventListener(POMODORO_CATEGORIES_UPDATED, this.onCategoriesUpdated);
+        this.categoryListenersAttached = false;
+    }
+
+    private async openPomodoroCategoryDialog() {
+        if (!this.plugin || this.isWindowClosed) return;
+        const work = this.isWorkPhase;
+        const phaseStart = this.phaseStartTime;
+        const eventId = this.reminder.id;
+        const initialId = work ? this.workCategoryId : this.breakCategoryId;
+        const win = PomodoroTimer.browserWindowInstance;
+        // Dialogs live in SiYuan's window. Reveal it when invoked from the floating timer.
+        try {
+            const electronReq = (window as any).require;
+            const remote = electronReq?.('@electron/remote') || electronReq?.('electron')?.remote;
+            const main = remote?.getCurrentWindow();
+            if (main) { if (main.isMinimized()) main.restore(); main.show(); main.focus(); }
+            if (win && !win.isDestroyed()) win.setAlwaysOnTop(false);
+        } catch (error) { console.warn('[PomodoroTimer] Failed to focus category dialog:', error); }
+        const dialog = new Dialog({
+            title: i18n('pomodoroCategory'), width: '400px',
+            content: `<div class="b3-dialog__content"><div class="pomodoro-category-anchor"></div></div><div class="b3-dialog__action"><button class="b3-button b3-button--cancel">${i18n('cancel')}</button><button class="b3-button b3-button--primary">${i18n('save')}</button></div>`,
+            destroyCallback: () => {
+                if (win && !win.isDestroyed()) win.setAlwaysOnTop(this.isAlwaysOnTopPinned);
+            },
+        });
+        const control = mountPomodoroCategoryControl(dialog.element.querySelector('.pomodoro-category-anchor'), this.plugin, initialId);
+        dialog.element.querySelector('.b3-button--cancel')?.addEventListener('click', () => dialog.destroy());
+        const save = dialog.element.querySelector('.b3-button--primary') as HTMLButtonElement;
+        save.addEventListener('click', async () => {
+            if (save.disabled) return;
+            save.disabled = true;
+            let categoryId: string | undefined;
+            let applied = false;
+            try {
+                categoryId = await control.value();
+                if (this.isWindowClosed || this.isWorkPhase !== work || this.phaseStartTime !== phaseStart || this.reminder.id !== eventId) {
+                    showMessage(i18n('pomodoroCategoryPhaseChanged'), 3000);
+                    dialog.destroy(); return;
+                }
+                if (work) this.workCategoryId = categoryId;
+                else this.breakCategoryId = categoryId;
+                applied = true;
+                const sessionId = work ? this.activeWorkSessionId || await this.activeWorkSessionStartPromise : null;
+                if (sessionId && !await this.recordManager.updateSessionCategory(sessionId, categoryId)) throw new Error('Pomodoro record not found');
+                await this.refreshPomodoroCategories();
+                window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                dialog.destroy();
+            } catch (error) {
+                if (applied) {
+                    if (work && this.workCategoryId === categoryId) this.workCategoryId = initialId;
+                    if (!work && this.breakCategoryId === categoryId) this.breakCategoryId = initialId;
+                }
+                console.error('[PomodoroTimer] Failed to save category:', error);
+                showMessage(i18n('operationFailed'), 3000, 'error');
+            } finally { save.disabled = false; }
+        });
     }
 
     private resetPhaseTracking() {
@@ -503,7 +612,8 @@ export class PomodoroTimer {
             this.reminder.title || (i18n('pomodoroFocusDefault') || '番茄专注'),
             this.currentPhaseOriginalDuration || this.settings.workDuration || 25,
             this.isCountUp,
-            new Date(sessionStartTime)
+            new Date(sessionStartTime),
+            this.workCategoryId
         ).catch(error => {
             console.error("[PomodoroTimer] Failed to create in-progress pomodoro record:", error);
             return null;
@@ -527,6 +637,7 @@ export class PomodoroTimer {
         endTime: Date = new Date()
     ): Promise<PomodoroSession | null> {
         const startTime = this.getWorkSessionStartDate();
+        const categoryId = this.workCategoryId;
         const startRequest = this.activeWorkSessionStartPromise;
         const existingSessionId = this.activeWorkSessionId;
         // 在首次等待前交出旧阶段的记录，避免后台保存完成后清掉新阶段记录。
@@ -560,7 +671,8 @@ export class PomodoroTimer {
                 isCountUp,
                 {
                     startTime,
-                    endTime
+                    endTime,
+                    categoryId
                 }
             );
         }
@@ -598,7 +710,8 @@ export class PomodoroTimer {
             true,
             {
                 startTime: this.phaseStartTime > 0 ? new Date(this.phaseStartTime) : undefined,
-                endTime: new Date()
+                endTime: new Date(),
+                categoryId: this.breakCategoryId
             }
         );
         this.phaseStartTime = 0;
@@ -844,7 +957,11 @@ export class PomodoroTimer {
 
     private async initComponents(container?: HTMLElement, orphanedWindow?: any) {
         // 统计记录与音频互不依赖，并行准备，避免文件读取串行拖慢窗口创建。
-        await Promise.all([this.recordManager.initialize(), this.initAudio()]);
+        await Promise.all([this.recordManager.initialize(), this.initAudio(), this.refreshPomodoroCategories()]);
+        if (!this.categoryListenersAttached && !this.isWindowClosed) {
+            window.addEventListener(POMODORO_CATEGORIES_UPDATED, this.onCategoriesUpdated);
+            this.categoryListenersAttached = true;
+        }
 
         if (this.isWindowClosed) return;
 
@@ -3335,6 +3452,16 @@ export class PomodoroTimer {
         });
         this.initMenuItemHoverEffects(this.fullscreenBtn);
         this.switchMenu.appendChild(this.fullscreenBtn);
+        const categoryMenuButton = document.createElement('button');
+        categoryMenuButton.className = 'pomodoro-menu-item';
+        categoryMenuButton.dataset.menuGroup = 'more';
+        categoryMenuButton.style.cssText = this.getMenuItemStyle();
+        categoryMenuButton.textContent = i18n('pomodoroCategory');
+        categoryMenuButton.addEventListener('click', () => {
+            this.hideSwitchMenu();
+            void this.openPomodoroCategoryDialog();
+        });
+        this.switchMenu.appendChild(categoryMenuButton);
 
 
 
@@ -3918,6 +4045,12 @@ export class PomodoroTimer {
 
 
         content.appendChild(eventTitle);
+        const categoryButton = document.createElement('button');
+        categoryButton.className = 'pomodoro-category-button b3-button b3-button--text';
+        categoryButton.style.cssText = 'display:block;width:100%;font-size:12px;white-space:normal;overflow-wrap:anywhere;margin-bottom:4px';
+        categoryButton.textContent = this.getPomodoroCategoryText();
+        categoryButton.addEventListener('click', () => { void this.openPomodoroCategoryDialog(); });
+        content.appendChild(categoryButton);
         content.appendChild(mainContainer);
         content.appendChild(this.statsContainer);
 
@@ -5366,6 +5499,11 @@ export class PomodoroTimer {
                 });
             }
         }];
+        moreItems.push({
+            label: i18n('pomodoroCategory'),
+            icon: menuIcon('pencil'),
+            click: () => { void this.openPomodoroCategoryDialog(); }
+        });
         if (kind === 'more') {
             for (const item of moreItems) menu.append(new MenuItem(item));
         } else if (kind === 'all') {
@@ -5640,6 +5778,7 @@ export class PomodoroTimer {
     }
 
     private updateDisplay() {
+        this.updatePomodoroCategoryDisplay();
         // 如果窗口已关闭，不执行任何更新
         if (this.isWindowClosed) {
             return;
@@ -7734,6 +7873,7 @@ export class PomodoroTimer {
 
     close() {
         this.isWindowClosed = true; // 标记窗口已关闭
+        this.detachCategoryListener();
         this.hideSwitchMenu(true);
 
         if (this.timer) {
@@ -7812,6 +7952,7 @@ export class PomodoroTimer {
         try {
             // 先把旧实例的精确状态推送到独立窗口，供新实例恢复。
             this.updateBrowserWindowDisplay(pomodoroWindow);
+            this.detachCategoryListener();
 
             if (this.timer) {
                 clearInterval(this.timer);
@@ -7882,7 +8023,6 @@ export class PomodoroTimer {
     }
 
     destroy() {
-        this.isWindowClosed = true; // 标记窗口已关闭
         this.close();
     }
 
@@ -8831,6 +8971,7 @@ export class PomodoroTimer {
             : (this.activeWorkSessionStartTime || this.phaseStartTime || this.startTime);
         const startTime = startTimestamp > 0 ? new Date(startTimestamp) : undefined;
         const isCountUpMode = state ? state.isCountUp : this.isCountUp;
+        const categoryId = state ? state.workCategoryId : this.workCategoryId;
 
         try {
             if (activeSessionId) {
@@ -8857,7 +8998,8 @@ export class PomodoroTimer {
                     isCountUpMode,
                     {
                         startTime,
-                        endTime: new Date()
+                        endTime: new Date(),
+                        categoryId
                     }
                 );
             }
@@ -9306,6 +9448,7 @@ document.body.classList.remove('docked-mode');
                 }
 
                 this.isWindowClosed = true;
+                this.detachCategoryListener();
                 this.stopAllAudio();
                 this.stopRandomRestTimer();
 
@@ -9345,6 +9488,7 @@ document.body.classList.remove('docked-mode');
 
                 console.warn('[PomodoroTimer] BrowserWindow was destroyed unexpectedly');
                 this.isWindowClosed = true;
+                this.detachCategoryListener();
                 this.stopAllAudio();
                 this.stopRandomRestTimer();
 
@@ -9422,6 +9566,7 @@ document.body.classList.remove('docked-mode');
                 if (recoveredState.blockId) timer.reminder.blockId = recoveredState.blockId;
                 if (recoveredState.reminderUrl) timer.reminder.url = recoveredState.reminderUrl;
                 if (recoveredState.isBlockPomodoro) timer.reminder.isBlockPomodoro = true;
+                timer.restoreCategorySelections(recoveredState);
 
                 // Restore random notification state
                 timer.randomRestEnabled = recoveredState.randomRestEnabled || false;
@@ -9576,6 +9721,7 @@ document.body.classList.remove('docked-mode');
                         }
                         if (recoveredState.reminderUrl) this.reminder.url = recoveredState.reminderUrl;
                         if (recoveredState.isBlockPomodoro) this.reminder.isBlockPomodoro = true;
+                        this.restoreCategorySelections(recoveredState);
 
                         if (this.isRunning && this.isWorkPhase && !this.activeWorkSessionId) {
                             void this.ensureActiveWorkSessionStarted(this.activeWorkSessionStartTime || this.phaseStartTime || Date.now());
@@ -9742,6 +9888,7 @@ document.body.classList.remove('docked-mode');
                 }
 
                 this.isWindowClosed = true;
+                this.detachCategoryListener();
                 this.stopAllAudio();
                 this.stopRandomRestTimer();
                 if (this.timer) {
@@ -10359,6 +10506,7 @@ document.body.classList.remove('docked-mode');
             display: flex;
         }
         body.mini-mode .pomodoro-event-title,
+        body.mini-mode .pomodoro-category-button,
         body.mini-mode .time-info,
         body.mini-mode .pomodoro-stats {
             display: none;
@@ -10701,6 +10849,7 @@ document.body.classList.remove('docked-mode');
         body.docked-mode { background: transparent !important; overflow: hidden; }
         body.docked-mode .custom-titlebar,
         body.docked-mode .pomodoro-event-title,
+        body.docked-mode .pomodoro-category-button,
         body.docked-mode .time-info,
         body.docked-mode .pomodoro-stats,
         body.docked-mode .pomodoro-main-container { display: none; }
@@ -10764,6 +10913,7 @@ document.body.classList.remove('docked-mode');
         </div>
     </div>
     <div class="pomodoro-content">
+        <button class="pomodoro-category-button" style="width:100%;border:0;background:transparent;color:inherit;cursor:pointer;font-size:12px;overflow-wrap:anywhere" onclick="callMethod('openPomodoroCategoryDialog')"></button>
         <div class="progress-bar-container" onclick="restoreFromDocked()">
             <div class="progress-bar-fill" id="dockedProgressBar"></div>
         </div>
@@ -11388,6 +11538,11 @@ document.body.classList.remove('docked-mode');
                  if (el) el.textContent = localState.weekFocusTime;
             }
             const eventTitleEl = document.querySelector('.pomodoro-event-title');
+            const categoryButton = document.querySelector('.pomodoro-category-button');
+            if (categoryButton) {
+                categoryButton.textContent = localState.pomodoroCategoryText || '';
+                categoryButton.style.color = localState.pomodoroCategoryColor || '';
+            }
             if (eventTitleEl) {
                  eventTitleEl.textContent = reminderTitleText;
                  eventTitleEl.title = ${openNoteTextJson} + ': ' + reminderTitleText;
@@ -11825,6 +11980,9 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'openPomodoroSettings':
                     this.openPomodoroSettings();
+                    break;
+                case 'openPomodoroCategoryDialog':
+                    void this.openPomodoroCategoryDialog();
                     break;
                 case 'toggleFullscreen':
                     this.toggleFullscreen();

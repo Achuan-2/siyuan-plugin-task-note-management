@@ -17,6 +17,8 @@ import { PomodoroRecordManager, PomodoroSession } from "../dataManager/pomodoroR
 import { i18n } from "../../pluginInstance";
 import { getLocaleTag } from "../../utils/dateUtils";
 import { getBlockByID } from "../../api";
+import { loadPomodoroCategories, POMODORO_CATEGORIES_UPDATED, type PomodoroCategory } from '../../utils/pomodoroCategories';
+import { getPomodoroCategoryRecordStyle, mountPomodoroCategoryControl, renderPomodoroCategoryBadge } from './pomodoroCategoryControl';
 
 interface PomodoroSessionsDialogOptions {
     includeEventIds?: string[];
@@ -38,6 +40,13 @@ export class PomodoroSessionsDialog {
     private defaultAddEventId: string;
     private updateTail: Promise<void> = Promise.resolve();
     private pendingDeletes = new Set<string>();
+    private categories: PomodoroCategory[] = [];
+    private refreshCategories = () => {
+        void loadPomodoroCategories(this.plugin).then(categories => {
+            this.categories = categories;
+            if (this.dialog?.element?.isConnected) this.renderSessions();
+        }).catch(error => console.error('Failed to refresh pomodoro categories:', error));
+    };
 
     /**
      * @param reminderId 任务ID
@@ -153,12 +162,14 @@ export class PomodoroSessionsDialog {
             `,
             width: "600px",
             destroyCallback: () => {
+                window.removeEventListener(POMODORO_CATEGORIES_UPDATED, this.refreshCategories);
                 if (this.onUpdate) this.onUpdate();
             }
         });
 
         this.renderSessions();
         this.bindEvents();
+        window.addEventListener(POMODORO_CATEGORIES_UPDATED, this.refreshCategories);
     }
 
     /**
@@ -166,6 +177,7 @@ export class PomodoroSessionsDialog {
      */
     private async loadSessions() {
         await this.recordManager.initialize();
+        this.categories = await loadPomodoroCategories(this.plugin);
 
         const allSessions = await this.recordManager.getSessionsMatchingEvent(id => this.shouldIncludeEventId(id));
 
@@ -276,6 +288,7 @@ export class PomodoroSessionsDialog {
     }
 
     private renderSessionItem(session: PomodoroSession): string {
+        const categoryStyle = getPomodoroCategoryRecordStyle(session.categoryId, this.categories);
         const startTime = new Date(session.startTime);
         const endTime = new Date(session.endTime);
 
@@ -324,12 +337,14 @@ export class PomodoroSessionsDialog {
         }
 
         return `
-            <div class="pomodoro-session-item" data-id="${session.id}" style="
+            <div class="pomodoro-session-item${categoryStyle ? ' pomodoro-record--categorized' : ''}" data-id="${session.id}" style="
+                ${categoryStyle}
                 display: flex;
                 align-items: center;
                 padding: 12px;
-                background: var(--b3-theme-surface);
+                background: var(--pomodoro-record-background, var(--b3-theme-surface));
                 border: 1px solid var(--b3-theme-border);
+                border-inline-start: var(--pomodoro-record-category-border, 1px solid var(--b3-theme-border));
                 border-radius: 6px;
                 transition: all 0.2s;
             ">
@@ -346,6 +361,7 @@ export class PomodoroSessionsDialog {
                         <span>${renderTaskMetadataIcon('duration')} ${session.inProgress ? i18n("toRecord") : i18n("durationMinutes", { minutes: String(session.duration) })}</span>
                     </div>
                     ${noteHtml}
+                    <div>${renderPomodoroCategoryBadge(session.categoryId, this.categories)}</div>
                 </div>
                 <div style="display: flex; gap: 4px;">
                     <button class="b3-button b3-button--outline edit-pomodoro-btn ariaLabel" aria-label="${i18n("edit")}" style="padding: 4px 8px;">
@@ -807,6 +823,7 @@ export class PomodoroSessionsDialog {
         // Initialize
         updateUIState();
 
+        const categoryControl = mountPomodoroCategoryControl(typeSelect.parentElement, this.plugin);
         typeSelect.addEventListener("change", () => {
             switch (typeSelect.value) {
                 case "work":
@@ -888,7 +905,8 @@ export class PomodoroSessionsDialog {
                     isCountUp,
                     count,
                     inProgress: false,
-                    note
+                    note,
+                    categoryId: await categoryControl.value()
                 };
 
                 const success = await this.recordManager.updateSession(session);
@@ -957,6 +975,7 @@ export class PomodoroSessionsDialog {
         const noteInput = editDialog.element.querySelector("#editSessionNote") as HTMLTextAreaElement;
 
         typeSelect.value = session.type;
+        const categoryControl = mountPomodoroCategoryControl(typeSelect.parentElement, this.plugin, session.categoryId);
 
         const startTime = new Date(session.startTime);
         startTimeInput.value = `${startTime.getFullYear()}-${String(startTime.getMonth() + 1).padStart(2, '0')}-${String(startTime.getDate()).padStart(2, '0')}T${String(startTime.getHours()).padStart(2, '0')}:${String(startTime.getMinutes()).padStart(2, '0')}`;
@@ -1012,7 +1031,8 @@ export class PomodoroSessionsDialog {
                     isCountUp: session.isCountUp, // 保留原有的计时属性
                     count: session.count, // 保留原有的番茄数计数
                     inProgress: false,
-                    note
+                    note,
+                    categoryId: await categoryControl.value()
                 };
 
                 // 如果修改了时长且是正计时/工作番茄，可能需要重新计算count

@@ -96,13 +96,15 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
             rpc.get('commit-pomodoro-records')({ changes: [{ date, base, next: {
                 ...base, sessions: [original, frontendSession], workSessions: 2, totalWorkTime: 50,
             } }] }),
-            stats({ action: 'create_focus', type: 'work', eventId: 'task', startTime: `${date}T11:00:00`, endTime: `${date}T11:25:00` }),
+            stats({ action: 'create_focus', type: 'work', eventId: 'task', categoryId: 'pc_independent', startTime: `${date}T11:00:00`, endTime: `${date}T11:25:00` }),
         ]);
         assert.equal(mcp.success, true);
+        assert.equal(mcp.data.categoryId, 'pc_independent');
         const saved = JSON.parse(files[`pomodoroRecords/${date}.json`]);
         assert.equal(saved.sessions.length, 3);
         assert.ok(saved.sessions.some(session => session.id === 'frontend'));
         assert.ok(saved.sessions.some(session => session.id === mcp.data.id));
+        assert.equal(saved.sessions.find(session => session.id === mcp.data.id).categoryId, 'pc_independent');
         assert.equal(saved.totalWorkTime, 75);
 
         // 自然日文件中的凌晨专注属于前一逻辑日；后台习惯提醒必须使用索引。

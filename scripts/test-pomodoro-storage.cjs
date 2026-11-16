@@ -431,6 +431,20 @@ test('本地缓存按月分片，更新一个月只写该月，前端和内核�
     assert.ok(transport.reads.some(key => key.endsWith('kernel/manifest.json')));
 });
 
+test('独立分类摘要随缓存恢复且无需历史明细读取，编辑分类只替换当天贡献', async () => {
+    const date = '2026-11-04';
+    const f = fixture({ [date]: record(date, [session(date, 'cat', 'task', { categoryId: 'pc_work' })]) });
+    const first = f.manager(); await first.initialize(); await first.flushCache();
+    f.reset();
+    const warm = f.manager(); await warm.initialize();
+    assert.deepEqual(f.stats.reads, []);
+    assert.equal(warm.getDaySummary(date).workByCategory.pc_work.duration, 25);
+    await warm.updateSessionCategory('cat', 'pc_other');
+    assert.equal(warm.getDaySummary(date).workByCategory.pc_work, undefined);
+    assert.equal(warm.getDaySummary(date).workByCategory.pc_other.duration, 25);
+    assert.equal(warm.getDaySummary(date).totalWorkTime, 25);
+});
+
 test('恶意对象键不会污染按事件和标题汇总', () => {
     const date = '2026-11-04';
     const summary = summarizePomodoroDay(date, record(date, [session(date, 'id', '__proto__', { eventTitle: 'constructor' })]), () => 1);
@@ -465,8 +479,8 @@ function statsView(manager) {
     const ast = ts.createSourceFile('stats.ts', script, ts.ScriptTarget.Latest, true);
     const declaration = ast.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'PomodoroStatsView');
     const compiled = ts.transpileModule(declaration.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2021 } }).outputText;
-    const Stats = new Function('getLogicalDateString', 'getLocalDateString', 'i18n', 'showMessage', `${compiled}; return PomodoroStatsView;`)(
-        logicalDate, date => logicalDate(date), key => key, () => {}
+    const Stats = new Function('getLogicalDateString', 'getLocalDateString', 'i18n', 'showMessage', 'loadPomodoroCategories', 'window', 'POMODORO_CATEGORIES_UPDATED', `${compiled}; return PomodoroStatsView;`)(
+        logicalDate, date => logicalDate(date), key => key, () => {}, async () => [], { removeEventListener() {} }, 'pomodoroCategoriesUpdated'
     );
     const content = { innerHTML: '' };
     const view = Object.assign(Object.create(Stats.prototype), {

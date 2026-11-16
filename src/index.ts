@@ -1638,7 +1638,9 @@ export default class ReminderPlugin extends Plugin {
                 const normalizedPath = typeof path === 'string' ? path.replace(/\\/g, '/') : '';
                 
                 try {
-                    if (normalizedPath === 'categories.json') {
+                    if (normalizedPath === 'pomodoro_categories.json') {
+                        window.dispatchEvent(new CustomEvent('pomodoroCategoriesUpdated'));
+                    } else if (normalizedPath === 'categories.json') {
                         await this.loadCategories(true);
                         await CategoryManager.getInstance(this).loadCategories();
                         window.dispatchEvent(new CustomEvent('projectUpdated'));
@@ -5146,6 +5148,7 @@ export default class ReminderPlugin extends Plugin {
             await Promise.all(reloads);
             if (this.storageDisposed) return;
             if (snapshot) this.pluginDataChanges.commit(snapshot);
+            if (has('pomodoroCategories')) window.dispatchEvent(new CustomEvent('pomodoroCategoriesUpdated'));
             const habitsChanged = has('habits') || has('habitGroups') || has('settings');
             const remindersChanged = habitsChanged || has('reminders') || has('projects') || has('statuses')
                 || has('categories') || has('subscriptions') || has('pomodoros') || has('holidays');

@@ -75,6 +75,21 @@ function fixture({ autoMode = false, isWorkPhase = true, isCountUp = false,
         advance(seconds) { now += seconds * 1000; for (const tick of [...intervals.values()]) tick(); } };
 }
 
+test('工作预创建和休息结束分别使用自己的分类，保存期间不串用下一阶段选择', async () => {
+    const work = fixture();
+    work.timer.workCategoryId = 'pc_work'; work.timer.breakCategoryId = 'pc_break';
+    work.timer.activeWorkSessionId = null;
+    const started = work.timer.ensureActiveWorkSessionStarted();
+    assert.equal(work.calls.starts[0][5], 'pc_work');
+    work.start.resolve('new-work'); await started;
+    const rest = fixture({ isWorkPhase: false });
+    rest.timer.workCategoryId = 'pc_work'; rest.timer.breakCategoryId = 'pc_break';
+    rest.timer.recordCompletedBreakPhase();
+    rest.timer.breakCategoryId = 'later';
+    assert.equal(rest.calls.records[0].at(-1).categoryId, 'pc_break');
+    rest.save.resolve(); await flush();
+});
+
 for (const autoMode of [false, true]) {
     for (const phase of ['work', 'break', 'longBreak', 'countUpBreak', 'countUpLongBreak']) {
         test(`${autoMode ? '自动' : '手动'}模式 ${phase} 结束不等待音频和存储`, async () => {

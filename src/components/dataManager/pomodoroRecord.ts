@@ -3,6 +3,7 @@ import { ReminderPomodoroStatsSnapshot, type EventPomodoroTotals } from '../../u
 import { PomodoroStore, summarizePomodoroDay, type PomodoroDaySummary, type PomodoroEventTotals } from '../../utils/pomodoroStore';
 import { calculatePomodoroSessionCount } from '../../utils/pomodoroWriteCoordinator';
 import { attachPomodoroStorageMetadata, getPomodoroCalendarDate } from '../../utils/pomodoroDates';
+import { normalizePomodoroCategoryId } from '../../utils/pomodoroCategories';
 
 // 单个番茄钟会话记录
 export interface PomodoroSession {
@@ -19,6 +20,7 @@ export interface PomodoroSession {
     count?: number; // 完成的番茄钟数量（正计时模式下根据时长计算）
     inProgress?: boolean; // 是否为开始计时时预创建、等待结束或补录的记录
     note?: string; // 备注
+    categoryId?: string; // 番茄钟独立分类（单选），不继承任务分类
     storageDate?: string; // 稳定的物理分片日期，编辑开始时间时不迁移文件
     timezoneOffsetMinutes?: number; // 记录时的 Date.getTimezoneOffset()，避免换时区后改变日期归属
     revision?: number; // 写入协调器生成的记录版本
@@ -51,6 +53,7 @@ interface RecordSessionOptions {
     endTime?: SessionTimeInput;
     sessionId?: string;
     note?: string;
+    categoryId?: string;
 }
 
 export class PomodoroRecordManager {
@@ -196,6 +199,14 @@ export class PomodoroRecordManager {
 
     async updateSessionNote(...args: Parameters<PomodoroRecordManager['updateSessionNoteImpl']>) {
         return this.serialize(() => this.updateSessionNoteImpl(...args));
+    }
+
+    async updateSessionCategory(sessionId: string, categoryId?: string): Promise<boolean> {
+        return this.serialize(async () => {
+            await this.loadSessionDate(sessionId);
+            const location = this.findSessionLocation(sessionId);
+            return location ? this.updateSessionImpl({ ...location.session, categoryId }) : false;
+        });
     }
 
     async deleteSession(...args: Parameters<PomodoroRecordManager['deleteSessionImpl']>) {
@@ -451,7 +462,8 @@ export class PomodoroRecordManager {
             completed,
             isCountUp: isCountUp || false,
             count,
-            note: this.normalizeSessionNote(options.note)
+            note: this.normalizeSessionNote(options.note),
+            categoryId: normalizePomodoroCategoryId(options.categoryId)
         };
 
         // 添加到会话记录
@@ -506,7 +518,8 @@ export class PomodoroRecordManager {
             duration: roundedBreakMinutes,
             plannedDuration,
             completed,
-            note: this.normalizeSessionNote(options.note)
+            note: this.normalizeSessionNote(options.note),
+            categoryId: normalizePomodoroCategoryId(options.categoryId)
         };
 
         // 添加到会话记录
@@ -525,7 +538,8 @@ export class PomodoroRecordManager {
         eventTitle: string = '番茄专注',
         plannedDuration: number = 25,
         isCountUp: boolean = false,
-        startTimeInput?: SessionTimeInput
+        startTimeInput?: SessionTimeInput,
+        categoryId?: string
     ): Promise<string> {
         if (!this.isInitialized) {
             await this.initialize();
@@ -549,7 +563,8 @@ export class PomodoroRecordManager {
             isCountUp: isCountUp || false,
             count: 0,
             inProgress: true,
-            note: ''
+            note: '',
+            categoryId: normalizePomodoroCategoryId(categoryId)
         };
 
         this.records[storageDate].sessions.push(attachPomodoroStorageMetadata(session, storageDate));
@@ -598,7 +613,9 @@ export class PomodoroRecordManager {
             isCountUp: isCountUp || false,
             count,
             inProgress: false,
-            note: this.normalizeSessionNote(options.note ?? location.session.note)
+            note: this.normalizeSessionNote(options.note ?? location.session.note),
+            categoryId: Object.prototype.hasOwnProperty.call(options, 'categoryId')
+                ? normalizePomodoroCategoryId(options.categoryId) : location.session.categoryId
         };
 
         await this.updateSessionImpl(updatedSession);
@@ -629,7 +646,8 @@ export class PomodoroRecordManager {
             completed: session.inProgress ? false : session.completed !== false,
             isCountUp: session.type === 'work' ? !!session.isCountUp : false,
             inProgress: !!session.inProgress,
-            note: this.normalizeSessionNote(session.note)
+            note: this.normalizeSessionNote(session.note),
+            categoryId: normalizePomodoroCategoryId(session.categoryId)
         };
 
         if (normalizedSession.type === 'work') {
@@ -1499,6 +1517,7 @@ export class PomodoroRecordManager {
         plannedDuration?: number;
         completed?: boolean;
         note?: string;
+        categoryId?: string;
     }): Promise<PomodoroSession> {
         const startTimeObj = new Date(input.startTime);
         const endTimeObj = new Date(input.endTime);
@@ -1514,6 +1533,7 @@ export class PomodoroRecordManager {
             plannedDuration: input.plannedDuration ?? 25,
             completed: input.completed ?? true,
             note: input.note || '',
+            categoryId: normalizePomodoroCategoryId(input.categoryId),
         };
         await this.initialize();
         const date = getPomodoroCalendarDate(session, this.getToday());

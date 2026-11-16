@@ -12,7 +12,7 @@ const ast = ts.createSourceFile('PomodoroTimer.ts', source, ts.ScriptTarget.Late
 const timerClass = ast.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'PomodoroTimer');
 const names = ['showNativeSwitchMenuPopup', 'openPomodoroSettings', 'callMethod', 'toggleFullscreen',
     'setBrowserWindowFullscreen', 'setupBrowserWindowFullscreen', 'exitFullscreen', 'getMiniWindowStyle',
-    'getCurrentState', 'updateBrowserWindowContent', 'formatTime',
+    'getCurrentState', 'getPomodoroCategoryText', 'restoreCategorySelections', 'updateBrowserWindowContent', 'formatTime',
     'toggleBrowserWindowMiniMode', 'toggleBrowserWindowDock'];
 const methods = timerClass.members.filter(node => names.includes(node.name?.getText(ast)))
     .map(node => node.getText(ast)).join('\n');
@@ -76,6 +76,7 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
     );
     Timer.browserWindowInstance = owner;
     const timer = Object.assign(new Timer(), { isCountUp, isWorkPhase, isMiniMode, container: owner,
+        pomodoroCategories: [],
         settings: { pomodoroMiniWindowStyle: miniStyle },
         reminder: { title: '测试任务' },
         recordManager: { getTodayFocusTime: () => 0, getWeekFocusTime: () => 0, formatTime: () => '0m' },
@@ -107,6 +108,18 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
     };
 }
 
+test('独立分类随窗口状态恢复，工作和休息分别保存且不读取任务分类', () => {
+    const original = fixture(), restored = fixture();
+    original.timer.workCategoryId = 'pc_work';
+    original.timer.breakCategoryId = 'pc_break';
+    original.timer.reminder.categoryId = 'task_category';
+    const state = original.timer.getCurrentState();
+    restored.timer.restoreCategorySelections(state);
+    assert.equal(restored.timer.workCategoryId, 'pc_work');
+    assert.equal(restored.timer.breakCategoryId, 'pc_break');
+    assert.equal(restored.timer.reminder.categoryId, undefined);
+});
+
 test('状态按钮通过 IPC 打开工作休息状态和计时模式切换', () => {
     const view = fixture();
     const menu = view.open('status');
@@ -127,18 +140,19 @@ test('迷你模式将状态放在首层，低频操作放在更多子菜单', ()
     assert.deepEqual(mini.items.slice(0, 3).map(item => item.icon.name), ['work', 'shortBreak', 'longBreak']);
     assert.equal(mini.items[3].label, 'switchToCountUp');
     assert.equal(mini.items[4].label, 'more');
-    assert.equal(mini.items[4].submenu.length, 4);
+    assert.equal(mini.items[4].submenu.length, 5);
+    assert.equal(mini.items[4].submenu[4].label, 'pomodoroCategory');
     for (const item of mini.items[4].submenu) assert.equal(typeof item.click, 'function');
     assert.equal(mini.options.window, view.owner);
 });
 
-test('更多按钮只包含修改时长、设置、全屏和音量操作', () => {
+test('更多按钮包含修改时长、设置、全屏、音量和独立分类操作', () => {
     const view = fixture();
     const menu = view.open('more');
-    assert.equal(menu.items.length, 4);
-    assert.deepEqual(menu.items.map(item => item.icon.name), ['pencil', 'settings', 'fullscreen', 'volume']);
+    assert.equal(menu.items.length, 5);
+    assert.deepEqual(menu.items.map(item => item.icon.name), ['pencil', 'settings', 'fullscreen', 'volume', 'pencil']);
     assert.ok(menu.items.every(item => item.icon.color === '#333333'));
-    assert.deepEqual(menu.items.map(item => item.label), ['pomodoroEditDuration', 'pomodoroSettings', 'fullscreenMode', 'backgroundVolume']);
+    assert.deepEqual(menu.items.map(item => item.label), ['pomodoroEditDuration', 'pomodoroSettings', 'fullscreenMode', 'backgroundVolume', 'pomodoroCategory']);
     assert.equal(menu.items[2].accelerator, 'F11');
     menu.items[0].click();
     menu.items[1].click();

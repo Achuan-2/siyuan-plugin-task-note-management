@@ -103,6 +103,7 @@ export function createStatsTool(pomodoroManager: PomodoroManager, summaryManager
                     plannedDuration: { type: "number", description: "计划持续分钟数" },
                     completed: { type: "boolean", description: "是否完成" },
                     note: { type: "string", description: "备注" },
+                    categoryId: { type: "string", description: "番茄钟独立分类 ID（单选），不继承任务分类" },
                     // get_task_summary
                     filter: {
                         type: "string",
@@ -146,6 +147,7 @@ export function createStatsTool(pomodoroManager: PomodoroManager, summaryManager
                         plannedDuration: assertOptionalNumber(input.plannedDuration, "plannedDuration"),
                         completed: assertOptionalBoolean(input.completed, "completed"),
                         note: assertOptionalString(input.note, "note"),
+                        categoryId: assertOptionalString(input.categoryId, "categoryId"),
                     });
                     return successResponse(session);
                 }

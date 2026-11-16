@@ -2,6 +2,7 @@ type DirectoryEntry = { name: string; isDir: boolean; updated: number };
 type ReadDirectory = (path: string, strict: boolean) => Promise<DirectoryEntry[]>;
 
 export type PluginDataGroup = 'settings' | 'reminders' | 'projects' | 'statuses' | 'categories'
+    | 'pomodoroCategories'
     | 'habits' | 'habitGroups' | 'subscriptions' | 'pomodoros' | 'mobileNotifications' | 'holidays';
 
 const FILE_GROUPS: Record<string, PluginDataGroup> = {
@@ -10,6 +11,7 @@ const FILE_GROUPS: Record<string, PluginDataGroup> = {
     'project.json': 'projects',
     'statuses.json': 'statuses',
     'categories.json': 'categories',
+    'pomodoro_categories.json': 'pomodoroCategories',
     'habit.json': 'habits',
     'habitGroup.json': 'habitGroups',
     'ics-subscriptions.json': 'subscriptions',
