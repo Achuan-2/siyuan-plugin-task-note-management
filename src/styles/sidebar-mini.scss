@@ -260,6 +260,22 @@
         background: var(--b3-theme-primary-lightest);
     }
 
+    .habit-mini .habit-card__week-day--today {
+        border-width: 1px;
+        border-color: transparent;
+    }
+
+    .habit-mini__day-icon {
+        line-height: 16px;
+    }
+
+    .habit-mini__day-progress {
+        font: clamp(7px, calc(var(--habit-mini-day-width) * 0.35), 9px) / 10px Arial, sans-serif;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.2px;
+        color: var(--b3-theme-on-surface-light);
+    }
+
     .habit-mini .habit-mini__day--recorded {
         font-size: 14px;
     }

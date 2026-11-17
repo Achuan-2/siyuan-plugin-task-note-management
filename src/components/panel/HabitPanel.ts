@@ -32,6 +32,7 @@ import {
     isHabitCheckInDayComplete,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     getHabitProgressOnDate as getHabitProgressOnDateUtil,
+    getHabitSuccessfulCheckInCount,
     getHabitStreakDays,
     formatHabitReminderTimeDisplay,
     getHabitReminderTimesForDate,
@@ -1715,7 +1716,7 @@ export class HabitPanel {
         }
         return goal === 'pomodoro'
             ? `${this.formatMinutesToHourMinute(progress.current)}/${this.formatMinutesToHourMinute(progress.target)}`
-            : `${progress.current}/${progress.target} ${i18n('times')}`;
+            : `${getHabitSuccessfulCheckInCount(habit, date)}/${progress.target} ${i18n('times')}`;
     }
 
     private getWeekStartDate(): Date {
@@ -1751,20 +1752,36 @@ export class HabitPanel {
                 ? checkIn.entries.map(entry => entry.emoji).filter(Boolean)
                 : checkIn?.status?.filter(Boolean) || [];
             const count = Math.max(emojis.length, checkIn?.count || 0);
-            const hasRecord = count > 0 || (mini && this.getHabitProgressOnDate(habit, date).pomodoro.current > 0);
+            const hasRecord = count > 0;
+            const progress = mini ? this.getHabitProgressOnDate(habit, date) : null;
+            const ratio = progress ? (this.getHabitGoalType(habit) === 'count'
+                ? getHabitSuccessfulCheckInCount(habit, date) / progress.count.target
+                : progress.current / progress.target) : 0;
+            const percentage = completed ? 100 : Math.max(0, Math.min(99, Math.round((Number.isFinite(ratio) ? ratio : 0) * 100)));
+            const showPercentage = mini && (hasRecord || ratio > 0)
+                && (this.getHabitGoalType(habit) !== 'count' || progress.count.target > 1);
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'habit-card__week-day';
             if (!required) button.classList.add('habit-card__week-day--not-required');
-            if (completed) button.classList.add('habit-card__week-day--done');
+            if (completed && (!mini || hasRecord)) button.classList.add('habit-card__week-day--done');
             if (date === today) button.classList.add('habit-card__week-day--today');
             button.style.setProperty('--habit-color', this.getHabitProgressColor(habit));
 
             if (mini) {
                 const recordedEmoji = emojis[emojis.length - 1];
                 const defaultEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
-                button.textContent = completed || hasRecord ? recordedEmoji || defaultEmoji : required ? '○' : '—';
-                if (completed || hasRecord) button.classList.add('habit-mini__day--recorded');
+                const icon = document.createElement('span');
+                icon.className = 'habit-mini__day-icon';
+                icon.textContent = hasRecord ? recordedEmoji || defaultEmoji : required ? '○' : '—';
+                button.appendChild(icon);
+                if (showPercentage) {
+                    const percent = document.createElement('span');
+                    percent.className = 'habit-mini__day-progress';
+                    percent.textContent = `${percentage}%`;
+                    button.appendChild(percent);
+                }
+                if (hasRecord) button.classList.add('habit-mini__day--recorded');
                 if (!completed && hasRecord) button.classList.add('habit-mini__day--partial');
             } else {
                 const weekday = document.createElement('span');
@@ -1799,11 +1816,12 @@ export class HabitPanel {
                 button.append(weekday, dayNumber, status);
             }
 
-            const checkInState = completed ? i18n('habitWeekCompleted')
+            const checkInState = mini && !hasRecord ? (required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired'))
+                : completed ? i18n('habitWeekCompleted')
                 : hasRecord ? i18n('habitWeekIncomplete')
                     : required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired');
             const progressDescription = mini ? this.getHabitProgressDescription(habit, date) : '';
-            const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}${progressDescription ? ` · ${progressDescription}` : ''}`;
+            const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}${showPercentage ? ` · ${percentage}%` : ''}${progressDescription ? ` · ${progressDescription}` : ''}`;
             const label = mini ? `${description}\n${i18n('habitMiniDayActionHint')}` : description;
             button.title = label;
             button.setAttribute('aria-label', label);
