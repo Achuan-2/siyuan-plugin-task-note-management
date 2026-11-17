@@ -291,6 +291,10 @@
         fill: color-mix(in srgb, var(--habit-color) 12%, transparent);
     }
 
+    .habit-mini .habit-mini__day--recorded {
+        opacity: 1;
+    }
+
     .habit-card__week-day--done .habit-mini__ring-fill {
         fill: color-mix(in srgb, var(--habit-color) 20%, transparent);
     }
