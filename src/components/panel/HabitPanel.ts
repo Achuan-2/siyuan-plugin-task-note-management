@@ -1761,7 +1761,10 @@ export class HabitPanel {
             button.style.setProperty('--habit-color', this.getHabitProgressColor(habit));
 
             if (mini) {
-                button.textContent = completed ? '✓' : hasRecord ? '◐' : required ? '○' : '—';
+                const recordedEmoji = emojis[emojis.length - 1];
+                const defaultEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
+                button.textContent = completed || hasRecord ? recordedEmoji || defaultEmoji : required ? '○' : '—';
+                if (completed || hasRecord) button.classList.add('habit-mini__day--recorded');
                 if (!completed && hasRecord) button.classList.add('habit-mini__day--partial');
             } else {
                 const weekday = document.createElement('span');

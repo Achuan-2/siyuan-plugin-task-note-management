@@ -260,6 +260,10 @@
         background: var(--b3-theme-primary-lightest);
     }
 
+    .habit-mini .habit-mini__day--recorded {
+        font-size: 14px;
+    }
+
 }
 
 @container habit-mini (min-width: 300px) {
