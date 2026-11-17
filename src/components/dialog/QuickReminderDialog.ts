@@ -2274,7 +2274,8 @@ export class QuickReminderDialog {
         const tabs = document.createElement('div');
         tabs.id = 'quickTaskSelectionTabs';
         tabs.setAttribute('role', 'tablist');
-        tabs.style.cssText = 'display:flex;flex-shrink:0;gap:12px;margin-bottom:12px;border-bottom:1px solid var(--b3-border-color)';
+        tabs.style.cssText = 'display:flex;align-self:stretch;gap:12px;min-width:0;flex:1;-webkit-app-region:no-drag';
+        tabs.addEventListener('mousedown', event => event.stopPropagation());
         const createTab = document.createElement('button');
         createTab.type = 'button';
         createTab.id = 'quickCreateTaskTab';
@@ -2297,7 +2298,16 @@ export class QuickReminderDialog {
         panel.setAttribute('aria-labelledby', tab.id);
         panel.style.cssText = 'display:none;flex:1;min-height:0;height:auto;overflow:hidden';
         tabs.append(createTab, tab);
-        content.append(tabs, creationPanel, panel);
+        const header = this.dialog.element.querySelector('.b3-dialog__header') as HTMLElement;
+        const closeButton = header.querySelector('.b3-dialog__close');
+        header.replaceChildren(tabs);
+        if (closeButton) header.appendChild(closeButton);
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.minHeight = '48px';
+        header.style.paddingTop = '0';
+        header.style.paddingBottom = '0';
+        content.append(creationPanel, panel);
         createTab.addEventListener('click', () => { void this.switchQuickDialogTab('task'); });
         tab.addEventListener('click', () => { void this.switchQuickDialogTab('select-task'); });
         if (initiallySelected) await this.switchQuickDialogTab('select-task');
