@@ -39,7 +39,7 @@ function fixture() {
     const calls = { uploads: 0, subscriptions: 0, stats: 0, settingsSaves: 0 };
     const dependencies = {
         '../api': { getFileStat: async () => { calls.stats++; return { mtime: mtime ?? now }; } },
-        './icsExport': { uploadIcsToCloud: async () => { calls.uploads++; } },
+        './icsExport': { uploadIcsToCloud: async () => { calls.uploads++; settings.icsLastSyncAt = new Clock().toISOString(); } },
         './icsSubscription': {
             loadSubscriptions: async () => { calls.subscriptions++; return { subscriptions: {} }; }
         }
@@ -61,6 +61,21 @@ function fixture() {
     return { Plugin, plugin, sync: exports, timers, calls, storage, settings,
         advance: ms => { now += ms; }, setMtime: value => { mtime = value; } };
 }
+
+test('修改提醒筛选设置后即使任务文件未变，下次计划同步仍上传一次', async () => {
+    const f = fixture();
+    f.setMtime(Date.parse(f.settings.icsLastSyncAt));
+    await f.sync.initIcsSync(f.plugin);
+    f.advance(1000);
+    f.settings.icsReminderVisibility = 'none';
+    f.settings.icsReminderFilterChangedAt = Date.parse(f.settings.icsLastSyncAt) + 1000;
+    f.advance(15 * 60 * 1000 - 1000);
+    await f.timers.get(30000)();
+    assert.equal(f.calls.uploads, 1);
+    f.advance(15 * 60 * 1000);
+    await f.timers.get(30000)();
+    assert.equal(f.calls.uploads, 1);
+});
 
 test('ICS 自动同步和订阅定时回调可调用真实插件协调方法，卸载清理计时器', async () => {
     const { plugin, sync, timers, calls, advance } = fixture();

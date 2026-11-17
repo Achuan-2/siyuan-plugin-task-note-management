@@ -38,6 +38,7 @@ import { ProjectKanbanView } from "./components/panel/ProjectKanbanView";
 import { PomodoroManager } from "./components/dataManager/pomodoroManager";
 import SettingPanelComponent from "./SettingPanel.svelte";
 import { exportIcsFile } from "./utils/icsExport";
+import { getIcsReminderVisibility, type IcsReminderVisibility } from "./utils/icsReminderVisibility";
 import { getFile, cancelNotification, pushErrMsg, pushMsg, isInMobileApp } from "./api";
 import { resolveAudioPath, playTaskCompleteSound as playTaskCompleteSoundUtil, playNotificationSound as playNotificationSoundUtil, getNotificationSound as getNotificationSoundUtil } from "./utils/audioUtils";
 import { showVipDialog } from "./components/vip/VipDialog";
@@ -254,6 +255,8 @@ export const DEFAULT_SETTINGS = {
     icsSilentUpload: false, // 是否静默上传ICS文件，不显示成功提示
     icsTaskFilter: 'all', // 'all' | 'completed' | 'uncompleted' - 任务筛选
     icsDateFilter: 'thisYear', // 'all' | 'thisYear' | 'lastWeek' | 'lastMonth' | 'lastHalfYear'
+    icsReminderVisibility: 'hideCompleted' as IcsReminderVisibility,
+    icsReminderFilterChangedAt: 0,
     // ICS 同步方式配置
     icsSyncMethod: 'siyuan', // 'siyuan' | 's3' | 'webdav' - 同步方式
     // WebDAV 配置
@@ -2013,6 +2016,8 @@ export default class ReminderPlugin extends Plugin {
                 ...(data.datatransfer || {}),
             },
         };
+
+        settings.icsReminderVisibility = getIcsReminderVisibility(data);
 
         // 旧版子菜单模式统一迁移为置底，只保留一个手动排序方向。
         settings.taskListSortMenuMode = settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom';

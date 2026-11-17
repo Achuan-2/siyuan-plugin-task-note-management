@@ -26,6 +26,7 @@
         restoreTaskListMarkers,
     } from './api';
     import { exportIcsFile, uploadIcsToCloud } from './utils/icsExport';
+    import { getIcsReminderVisibility } from './utils/icsReminderVisibility';
     import { importIcsFile } from './utils/icsImport';
     import { syncHolidays } from './utils/icsSubscription';
     import { PomodoroManager } from './components/dataManager/pomodoroManager';
@@ -1819,6 +1820,18 @@
                             },
                         },
                         {
+                            key: 'icsReminderVisibility',
+                            value: getIcsReminderVisibility(settings),
+                            type: 'select',
+                            title: i18n('icsReminderVisibility'),
+                            description: i18n('icsReminderVisibilityDesc'),
+                            options: {
+                                all: i18n('icsReminderVisibilityAll'),
+                                hideCompleted: i18n('icsReminderVisibilityHideCompleted'),
+                                none: i18n('icsReminderVisibilityNone'),
+                            },
+                        },
+                        {
                             key: 'icsDateFilter',
                             value: settings.icsDateFilter || 'thisYear',
                             type: 'select',
@@ -2361,7 +2374,9 @@
 
         // 统一处理特殊类型的转换
         let newValue = value;
-        if (key === 'weekStartDay' && typeof value === 'string') {
+        if (key === 'icsReminderVisibility') {
+            newValue = getIcsReminderVisibility({ icsReminderVisibility: value });
+        } else if (key === 'weekStartDay' && typeof value === 'string') {
             const parsed = parseInt(value, 10);
             newValue = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
         } else if (key === 'calendarMultiDaysCount') {
@@ -2447,6 +2462,9 @@
         }
 
         settings[key] = newValue;
+        if (oldValue !== newValue && ['icsTaskFilter', 'icsDateFilter', 'icsReminderVisibility'].includes(key)) {
+            settings.icsReminderFilterChangedAt = Date.now();
+        }
         settings = settings; // 触发布尔响应式（如果需要）
         updateGroupItems(); // 同步更新 UI 数据，避免异步保存期间 UI 反弹/闪烁
 
@@ -2658,6 +2676,7 @@
                 const updatedItem = {
                     ...item,
                     value: (() => {
+                        if (item.key === 'icsReminderVisibility') return getIcsReminderVisibility(settings);
                         const v = settings[item.key] ?? item.value;
                         // If this is a select input, use string representation for UI matching
                         if (item.type === 'select') {

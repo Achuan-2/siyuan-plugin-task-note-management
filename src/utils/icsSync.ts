@@ -307,7 +307,8 @@ async function performIcsSync(plugin: IcsSyncPlugin, isCurrent: () => boolean): 
         const stat = await getFileStat(reminderPath);
         if (!isCurrent()) return;
         const lastSync = settings.icsLastSyncAt ? new Date(settings.icsLastSyncAt).getTime() : 0;
-        if (stat && stat.mtime <= lastSync) {
+        const filterChangedAt = Number(settings.icsReminderFilterChangedAt) || 0;
+        if (stat && stat.mtime <= lastSync && filterChangedAt <= lastSync) {
             // 没有新事件时不回写设置，避免定时检查触发思源同步。
             state.lastCheckedAt = Date.now();
             return;
