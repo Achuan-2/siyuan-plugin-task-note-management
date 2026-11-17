@@ -82,7 +82,7 @@ export class HabitPanel {
     private linkedTaskPomodoroStats: Map<string, Map<string, LinkedTaskPomodoroDayStats>> = new Map();
     private linkedTaskIdsByHabit: Map<string, Set<string>> = new Map();
     private miniCheckInGlyphContext?: CanvasRenderingContext2D | null;
-    private miniCheckInGlyphPositions = new Map<string, { x: number; y: number; extent: number }>();
+    private miniCheckInGlyphImages = new Map<string, { url: string; width: number; height: number } | null>();
 
     constructor(container: HTMLElement, plugin?: any) {
         this.container = container;
@@ -1733,6 +1733,84 @@ export class HabitPanel {
         return start;
     }
 
+    private createMiniCheckInGlyph(symbol: string): { element: SVGElement; extent: number } {
+        const ns = 'http://www.w3.org/2000/svg';
+        const color = getComputedStyle(this.container).color || '#000';
+        const key = `${color}\0${symbol}`;
+        this.miniCheckInGlyphImages ||= new Map();
+        let image = this.miniCheckInGlyphImages.get(key);
+        if (image === undefined) {
+            image = null;
+            try {
+                this.miniCheckInGlyphContext ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+                const context = this.miniCheckInGlyphContext;
+                if (context) {
+                    const scale = 4;
+                    const fontSize = 12 * scale;
+                    const font = `${fontSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+                    context.font = font;
+                    const metrics = context.measureText(symbol);
+                    const padding = fontSize * 2;
+                    context.canvas.width = Math.ceil(Math.max(metrics.width, fontSize) + padding * 2);
+                    context.canvas.height = fontSize * 4;
+                    context.font = font;
+                    context.textAlign = 'left';
+                    context.textBaseline = 'alphabetic';
+                    context.fillStyle = color;
+                    context.fillText(symbol, padding, fontSize * 2);
+                    const { width, height } = context.canvas;
+                    const pixels = context.getImageData(0, 0, width, height).data;
+                    let left = width, top = height, right = -1, bottom = -1;
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) {
+                            if (!pixels[(y * width + x) * 4 + 3]) continue;
+                            left = Math.min(left, x);
+                            top = Math.min(top, y);
+                            right = Math.max(right, x);
+                            bottom = Math.max(bottom, y);
+                        }
+                    }
+                    if (right >= left && bottom >= top) {
+                        const cropped = document.createElement('canvas');
+                        cropped.width = right - left + 1;
+                        cropped.height = bottom - top + 1;
+                        const croppedContext = cropped.getContext('2d');
+                        if (croppedContext) {
+                            // Measure and display the same painted pixels: SVG text and Canvas
+                            // can use different emoji baselines on Apple devices.
+                            croppedContext.drawImage(context.canvas, left, top, cropped.width, cropped.height,
+                                0, 0, cropped.width, cropped.height);
+                            image = { url: cropped.toDataURL('image/png'), width: cropped.width / scale, height: cropped.height / scale };
+                        }
+                    }
+                }
+            } catch {
+                // Restricted Canvas access still leaves a native text fallback.
+            }
+            this.miniCheckInGlyphImages.set(key, image);
+        }
+        if (image) {
+            const element = document.createElementNS(ns, 'image');
+            element.classList.add('habit-mini__ring-glyph');
+            element.setAttribute('href', image.url);
+            element.setAttribute('x', String(14 - image.width / 2));
+            element.setAttribute('y', String(14 - image.height / 2));
+            element.setAttribute('width', String(image.width));
+            element.setAttribute('height', String(image.height));
+            return { element, extent: Math.max(image.width, image.height) };
+        }
+        const element = document.createElementNS(ns, 'text');
+        element.classList.add('habit-mini__ring-glyph');
+        element.style.font = '12px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+        element.style.textAnchor = 'middle';
+        element.style.dominantBaseline = 'central';
+        element.style.letterSpacing = 'normal';
+        element.setAttribute('x', '14');
+        element.setAttribute('y', '14');
+        element.textContent = symbol;
+        return { element, extent: 12 };
+    }
+
     private createMiniCheckInRing(percentage: number, symbols: string | string[]): SVGSVGElement {
         const ns = 'http://www.w3.org/2000/svg';
         const ring = document.createElementNS(ns, 'svg');
@@ -1778,38 +1856,9 @@ export class HabitPanel {
                 }
                 item.appendChild(center);
             } else {
-                const glyph = document.createElementNS(ns, 'text');
-                glyph.classList.add('habit-mini__ring-glyph');
-                glyph.style.font = '12px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
-                glyph.style.textAnchor = 'start';
-                glyph.style.dominantBaseline = 'alphabetic';
-                glyph.style.letterSpacing = 'normal';
-                glyph.textContent = symbol;
-                this.miniCheckInGlyphPositions ||= new Map();
-                let position = this.miniCheckInGlyphPositions.get(symbol);
-                if (!position) {
-                    this.miniCheckInGlyphContext ??= document.createElement('canvas').getContext('2d');
-                    const context = this.miniCheckInGlyphContext;
-                    if (context) {
-                        context.font = glyph.style.font;
-                        const metrics = context.measureText(symbol);
-                        position = {
-                            x: 14 + (metrics.actualBoundingBoxLeft - metrics.actualBoundingBoxRight) / 2,
-                            y: 14 + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2,
-                            extent: Math.max(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
-                                metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent, 1),
-                        };
-                        this.miniCheckInGlyphPositions.set(symbol, position);
-                    }
-                }
-                glyph.setAttribute('x', String(position?.x ?? 14));
-                glyph.setAttribute('y', String(position?.y ?? 14));
-                if (!position) {
-                    glyph.setAttribute('text-anchor', 'middle');
-                    glyph.setAttribute('dominant-baseline', 'central');
-                }
-                extent = position?.extent ?? 12;
-                item.appendChild(glyph);
+                const glyph = this.createMiniCheckInGlyph(symbol);
+                extent = glyph.extent;
+                item.appendChild(glyph.element);
             }
             if (records.length > 1) {
                 const row = Math.floor(index / columns);
