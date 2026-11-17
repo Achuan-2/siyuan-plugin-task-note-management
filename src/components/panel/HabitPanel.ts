@@ -51,14 +51,6 @@ interface HabitPomodoroStats {
     todayFocusMinutes: number;
 }
 
-interface MiniCheckInGlyphPosition {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    extent: number;
-}
-
 export class HabitPanel {
     private disposed = false;
     private container: HTMLElement;
@@ -90,8 +82,7 @@ export class HabitPanel {
     private linkedTaskPomodoroStats: Map<string, Map<string, LinkedTaskPomodoroDayStats>> = new Map();
     private linkedTaskIdsByHabit: Map<string, Set<string>> = new Map();
     private miniCheckInGlyphContext?: CanvasRenderingContext2D | null;
-    private miniCheckInGlyphPositions = new Map<string, MiniCheckInGlyphPosition>();
-    private miniCheckInGlyphMeasurements = new Map<string, Promise<MiniCheckInGlyphPosition | null>>();
+    private miniCheckInGlyphImages = new Map<string, { url: string; width: number; height: number } | null>();
 
     constructor(container: HTMLElement, plugin?: any) {
         this.container = container;
@@ -1742,96 +1733,82 @@ export class HabitPanel {
         return start;
     }
 
-    private measureMiniCheckInGlyph(symbol: string, font: string): Promise<MiniCheckInGlyphPosition | null> {
+    private createMiniCheckInGlyph(symbol: string): { element: SVGElement; extent: number } {
         const ns = 'http://www.w3.org/2000/svg';
-        this.miniCheckInGlyphMeasurements ||= new Map();
-        let measurement = this.miniCheckInGlyphMeasurements.get(symbol);
-        if (measurement) return measurement;
-        measurement = new Promise<MiniCheckInGlyphPosition | null>(resolve => {
-            const context = this.miniCheckInGlyphContext;
-            if (!context) { resolve(null); return; }
-            context.font = font;
-            const origin = 32, height = origin * 2, scale = 4;
-            const width = Math.max(height, Math.ceil(context.measureText(symbol).width) + height);
-            const svg = document.createElementNS(ns, 'svg');
-            svg.setAttribute('width', String(width * scale));
-            svg.setAttribute('height', String(height * scale));
-            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-            const text = document.createElementNS(ns, 'text');
-            text.style.font = font;
-            text.style.textAnchor = 'start';
-            text.style.dominantBaseline = 'alphabetic';
-            text.style.letterSpacing = 'normal';
-            text.setAttribute('x', String(origin)); text.setAttribute('y', String(origin));
-            text.textContent = symbol; svg.appendChild(text);
-            const probe = new Image();
-            probe.onerror = () => resolve(null);
-            probe.onload = () => {
-                try {
-                    context.canvas.width = width * scale; context.canvas.height = height * scale;
-                    context.drawImage(probe, 0, 0);
-                    const pixels = context.getImageData(0, 0, context.canvas.width, context.canvas.height).data;
-                    let left = context.canvas.width, top = context.canvas.height, right = -1, bottom = -1;
-                    for (let y = 0; y < context.canvas.height; y++) for (let x = 0; x < context.canvas.width; x++) {
-                        if (!pixels[(y * context.canvas.width + x) * 4 + 3]) continue;
-                        left = Math.min(left, x); top = Math.min(top, y);
-                        right = Math.max(right, x); bottom = Math.max(bottom, y);
+        const color = getComputedStyle(this.container).color || '#000';
+        const key = `${color}\0${symbol}`;
+        this.miniCheckInGlyphImages ||= new Map();
+        let image = this.miniCheckInGlyphImages.get(key);
+        if (image === undefined) {
+            image = null;
+            try {
+                this.miniCheckInGlyphContext ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+                const context = this.miniCheckInGlyphContext;
+                if (context) {
+                    const scale = 4;
+                    const fontSize = 12 * scale;
+                    const font = `${fontSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+                    context.font = font;
+                    const metrics = context.measureText(symbol);
+                    const padding = fontSize * 2;
+                    context.canvas.width = Math.ceil(Math.max(metrics.width, fontSize) + padding * 2);
+                    context.canvas.height = fontSize * 4;
+                    context.font = font;
+                    context.textAlign = 'left';
+                    context.textBaseline = 'alphabetic';
+                    context.fillStyle = color;
+                    context.fillText(symbol, padding, fontSize * 2);
+                    const { width, height } = context.canvas;
+                    const pixels = context.getImageData(0, 0, width, height).data;
+                    let left = width, top = height, right = -1, bottom = -1;
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) {
+                            if (!pixels[(y * width + x) * 4 + 3]) continue;
+                            left = Math.min(left, x);
+                            top = Math.min(top, y);
+                            right = Math.max(right, x);
+                            bottom = Math.max(bottom, y);
+                        }
                     }
-                    if (right < left || bottom < top) { resolve(null); return; }
-                    const bounds = { width: (right - left + 1) / scale, height: (bottom - top + 1) / scale };
-                    const position = { x: 14 + origin - (left + right + 1) / (2 * scale), y: 14 + origin - (top + bottom + 1) / (2 * scale),
-                        ...bounds, extent: Math.max(bounds.width, bounds.height) };
-                    this.miniCheckInGlyphPositions.set(symbol, position);
-                    resolve(position);
-                } catch { resolve(null); }
-            };
-            // Calibrate the same SVG renderer used by the visible text, once per symbol.
-            // Only numeric offsets are retained; no generated images are displayed or cached.
-            probe.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
-        }).catch(() => null);
-        this.miniCheckInGlyphMeasurements.set(symbol, measurement);
-        return measurement;
-    }
-
-    private createMiniCheckInGlyph(symbol: string): { element: SVGTextElement; extent: number; ready?: Promise<number> } {
-        const ns = 'http://www.w3.org/2000/svg';
+                    if (right >= left && bottom >= top) {
+                        const cropped = document.createElement('canvas');
+                        cropped.width = right - left + 1;
+                        cropped.height = bottom - top + 1;
+                        const croppedContext = cropped.getContext('2d');
+                        if (croppedContext) {
+                            // Measure and display the same painted pixels: SVG text and Canvas
+                            // can use different emoji baselines on Apple devices.
+                            croppedContext.drawImage(context.canvas, left, top, cropped.width, cropped.height,
+                                0, 0, cropped.width, cropped.height);
+                            image = { url: cropped.toDataURL('image/png'), width: cropped.width / scale, height: cropped.height / scale };
+                        }
+                    }
+                }
+            } catch {
+                // Restricted Canvas access still leaves a native text fallback.
+            }
+            this.miniCheckInGlyphImages.set(key, image);
+        }
+        if (image) {
+            const element = document.createElementNS(ns, 'image');
+            element.classList.add('habit-mini__ring-glyph');
+            element.setAttribute('href', image.url);
+            element.setAttribute('x', String(14 - image.width / 2));
+            element.setAttribute('y', String(14 - image.height / 2));
+            element.setAttribute('width', String(image.width));
+            element.setAttribute('height', String(image.height));
+            return { element, extent: Math.max(image.width, image.height) };
+        }
         const element = document.createElementNS(ns, 'text');
         element.classList.add('habit-mini__ring-glyph');
         element.style.font = '12px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
-        element.style.textAnchor = 'start';
-        element.style.dominantBaseline = 'alphabetic';
+        element.style.textAnchor = 'middle';
+        element.style.dominantBaseline = 'central';
         element.style.letterSpacing = 'normal';
+        element.setAttribute('x', '14');
+        element.setAttribute('y', '14');
         element.textContent = symbol;
-        this.miniCheckInGlyphPositions ||= new Map();
-        const cached = this.miniCheckInGlyphPositions.get(symbol);
-        let position = cached;
-        try {
-            this.miniCheckInGlyphContext ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
-            const context = this.miniCheckInGlyphContext;
-            if (!position && context) {
-                context.font = element.style.font;
-                const metrics = context.measureText(symbol);
-                position = { x: 14 + (metrics.actualBoundingBoxLeft - metrics.actualBoundingBoxRight) / 2,
-                    y: 14 + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2,
-                    width: metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
-                    height: metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent,
-                    extent: Math.max(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
-                        metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent, 1) };
-                if (!Object.values(position).every(Number.isFinite)) position = undefined;
-            }
-        } catch { /* Native centered text remains available when Canvas is restricted. */ }
-        const apply = (value: typeof position) => {
-            element.setAttribute('x', String(value?.x ?? 14)); element.setAttribute('y', String(value?.y ?? 14));
-            element.style.textAnchor = value ? 'start' : 'middle';
-            element.style.dominantBaseline = value ? 'alphabetic' : 'central';
-        };
-        apply(position);
-        const extent = position?.extent ?? 12;
-        const ready = cached || !this.miniCheckInGlyphContext ? undefined : this.measureMiniCheckInGlyph(symbol, element.style.font).then(value => {
-            if (value) apply(value);
-            return value?.extent ?? extent;
-        });
-        return { element, extent, ready };
+        return { element, extent: 12 };
     }
 
     private createMiniCheckInRing(percentage: number, symbols: string | string[]): SVGSVGElement {
@@ -1867,7 +1844,6 @@ export class HabitPanel {
             item.classList.add('habit-mini__record-icon');
             item.dataset.symbol = symbol;
             let extent = 6;
-            let glyphReady: Promise<number> | undefined;
             if (['○', '×', '—'].includes(symbol)) {
                 const center = document.createElementNS(ns, symbol === '○' ? 'circle' : 'path');
                 center.classList.add('habit-mini__ring-center');
@@ -1882,7 +1858,6 @@ export class HabitPanel {
             } else {
                 const glyph = this.createMiniCheckInGlyph(symbol);
                 extent = glyph.extent;
-                glyphReady = glyph.ready;
                 item.appendChild(glyph.element);
             }
             if (records.length > 1) {
@@ -1890,12 +1865,8 @@ export class HabitPanel {
                 const rowCount = Math.min(columns, records.length - row * columns);
                 const x = 14 - rowCount * cell / 2 + (index % columns + 0.5) * cell;
                 const y = 14 - rows * cell / 2 + (row + 0.5) * cell;
-                const position = (size: number) => {
-                    const scale = Math.min(1, cell * 0.88 / size);
-                    item.setAttribute('transform', `translate(${x} ${y}) scale(${scale}) translate(-14 -14)`);
-                };
-                position(extent);
-                glyphReady?.then(position);
+                const scale = Math.min(1, cell * 0.88 / extent);
+                item.setAttribute('transform', `translate(${x} ${y}) scale(${scale}) translate(-14 -14)`);
             }
             icon.appendChild(item);
         });
