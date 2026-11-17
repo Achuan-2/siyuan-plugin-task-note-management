@@ -81,6 +81,8 @@ export class HabitPanel {
     private pomodoroRecordManager: PomodoroRecordManager;
     private linkedTaskPomodoroStats: Map<string, Map<string, LinkedTaskPomodoroDayStats>> = new Map();
     private linkedTaskIdsByHabit: Map<string, Set<string>> = new Map();
+    private miniCheckInGlyphContext?: CanvasRenderingContext2D | null;
+    private miniCheckInGlyphPositions = new Map<string, { x: number; y: number; extent: number }>();
 
     constructor(container: HTMLElement, plugin?: any) {
         this.container = container;
@@ -1731,6 +1733,98 @@ export class HabitPanel {
         return start;
     }
 
+    private createMiniCheckInRing(percentage: number, symbols: string | string[]): SVGSVGElement {
+        const ns = 'http://www.w3.org/2000/svg';
+        const ring = document.createElementNS(ns, 'svg');
+        ring.classList.add('habit-mini__ring');
+        ring.setAttribute('viewBox', '0 0 28 28');
+        ring.setAttribute('aria-hidden', 'true');
+        for (const part of ['fill', 'track', 'progress']) {
+            const circle = document.createElementNS(ns, 'circle');
+            circle.classList.add(`habit-mini__ring-${part}`);
+            circle.setAttribute('cx', '14');
+            circle.setAttribute('cy', '14');
+            circle.setAttribute('r', '12');
+            circle.setAttribute('pathLength', '100');
+            if (part === 'progress') {
+                circle.setAttribute('stroke-dasharray', `${percentage} 100`);
+                circle.setAttribute('transform', 'rotate(-90 14 14)');
+                if (!percentage) circle.style.display = 'none';
+            }
+            ring.appendChild(circle);
+        }
+        const icon = document.createElementNS(ns, 'g');
+        icon.classList.add('habit-mini__day-icon');
+        const records = typeof symbols === 'string' ? [symbols] : symbols;
+        icon.dataset.symbol = records.join('');
+        const columns = Math.ceil(Math.sqrt(records.length));
+        const rows = Math.ceil(records.length / columns);
+        // Fit the whole grid inside the ring, preserving every record and duplicate.
+        const cell = records.length === 1 ? 28 : 20 / Math.hypot(columns, rows);
+        records.forEach((symbol, index) => {
+            const item = document.createElementNS(ns, 'g');
+            item.classList.add('habit-mini__record-icon');
+            item.dataset.symbol = symbol;
+            let extent = 6;
+            if (['○', '×', '—'].includes(symbol)) {
+                const center = document.createElementNS(ns, symbol === '○' ? 'circle' : 'path');
+                center.classList.add('habit-mini__ring-center');
+                if (symbol === '○') {
+                    center.setAttribute('cx', '14');
+                    center.setAttribute('cy', '14');
+                    center.setAttribute('r', '3');
+                } else {
+                    center.setAttribute('d', symbol === '×' ? 'M10.5 10.5l7 7m0-7l-7 7' : 'M9 14h10');
+                }
+                item.appendChild(center);
+            } else {
+                const glyph = document.createElementNS(ns, 'text');
+                glyph.classList.add('habit-mini__ring-glyph');
+                glyph.style.font = '12px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+                glyph.style.textAnchor = 'start';
+                glyph.style.dominantBaseline = 'alphabetic';
+                glyph.style.letterSpacing = 'normal';
+                glyph.textContent = symbol;
+                this.miniCheckInGlyphPositions ||= new Map();
+                let position = this.miniCheckInGlyphPositions.get(symbol);
+                if (!position) {
+                    this.miniCheckInGlyphContext ??= document.createElement('canvas').getContext('2d');
+                    const context = this.miniCheckInGlyphContext;
+                    if (context) {
+                        context.font = glyph.style.font;
+                        const metrics = context.measureText(symbol);
+                        position = {
+                            x: 14 + (metrics.actualBoundingBoxLeft - metrics.actualBoundingBoxRight) / 2,
+                            y: 14 + (metrics.actualBoundingBoxAscent - metrics.actualBoundingBoxDescent) / 2,
+                            extent: Math.max(metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight,
+                                metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent, 1),
+                        };
+                        this.miniCheckInGlyphPositions.set(symbol, position);
+                    }
+                }
+                glyph.setAttribute('x', String(position?.x ?? 14));
+                glyph.setAttribute('y', String(position?.y ?? 14));
+                if (!position) {
+                    glyph.setAttribute('text-anchor', 'middle');
+                    glyph.setAttribute('dominant-baseline', 'central');
+                }
+                extent = position?.extent ?? 12;
+                item.appendChild(glyph);
+            }
+            if (records.length > 1) {
+                const row = Math.floor(index / columns);
+                const rowCount = Math.min(columns, records.length - row * columns);
+                const x = 14 - rowCount * cell / 2 + (index % columns + 0.5) * cell;
+                const y = 14 - rows * cell / 2 + (row + 0.5) * cell;
+                const scale = Math.min(1, cell * 0.88 / extent);
+                item.setAttribute('transform', `translate(${x} ${y}) scale(${scale}) translate(-14 -14)`);
+            }
+            icon.appendChild(item);
+        });
+        ring.appendChild(icon);
+        return ring;
+    }
+
     private createWeekCheckIns(habit: Habit, today: string, mini = false): HTMLElement {
         const week = document.createElement('div');
         week.className = 'habit-card__week';
@@ -1758,7 +1852,7 @@ export class HabitPanel {
                 ? getHabitSuccessfulCheckInCount(habit, date) / progress.count.target
                 : progress.current / progress.target) : 0;
             const percentage = completed ? 100 : Math.max(0, Math.min(99, Math.round((Number.isFinite(ratio) ? ratio : 0) * 100)));
-            const showPercentage = mini && (hasRecord || ratio > 0)
+            const showProgress = mini && (hasRecord || ratio > 0)
                 && (this.getHabitGoalType(habit) !== 'count' || progress.count.target > 1);
             const button = document.createElement('button');
             button.type = 'button';
@@ -1769,18 +1863,12 @@ export class HabitPanel {
             button.style.setProperty('--habit-color', this.getHabitProgressColor(habit));
 
             if (mini) {
-                const recordedEmoji = emojis[emojis.length - 1];
-                const defaultEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
-                const icon = document.createElement('span');
-                icon.className = 'habit-mini__day-icon';
-                icon.textContent = hasRecord ? recordedEmoji || defaultEmoji : required ? '○' : '—';
-                button.appendChild(icon);
-                if (showPercentage) {
-                    const percent = document.createElement('span');
-                    percent.className = 'habit-mini__day-progress';
-                    percent.textContent = `${percentage}%`;
-                    button.appendChild(percent);
-                }
+                const defaultEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '○';
+                const symbols = hasRecord
+                    ? Array.from({ length: count }, (_, index) => emojis[index] || defaultEmoji)
+                    : required ? (date < today ? '×' : '○') : '—';
+                button.dataset.progress = String(percentage);
+                button.appendChild(this.createMiniCheckInRing(percentage, symbols));
                 if (hasRecord) button.classList.add('habit-mini__day--recorded');
                 if (!completed && hasRecord) button.classList.add('habit-mini__day--partial');
             } else {
@@ -1821,7 +1909,7 @@ export class HabitPanel {
                 : hasRecord ? i18n('habitWeekIncomplete')
                     : required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired');
             const progressDescription = mini ? this.getHabitProgressDescription(habit, date) : '';
-            const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}${showPercentage ? ` · ${percentage}%` : ''}${progressDescription ? ` · ${progressDescription}` : ''}`;
+            const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}${showProgress ? ` · ${percentage}%` : ''}${progressDescription ? ` · ${progressDescription}` : ''}`;
             const label = mini ? `${description}\n${i18n('habitMiniDayActionHint')}` : description;
             button.title = label;
             button.setAttribute('aria-label', label);

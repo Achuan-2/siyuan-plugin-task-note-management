@@ -148,15 +148,15 @@
         border: 0;
         border-radius: 4px;
         background: transparent;
-        box-shadow: none;
-        transition: background-color 0.15s;
+        box-shadow: inset 0 0 0 1px transparent;
+        transition: box-shadow 0.15s;
         overflow: visible;
 
         &:hover,
         &:active {
             transform: none;
-            box-shadow: none;
-            background: var(--b3-theme-surface);
+            box-shadow: inset 0 0 0 1px var(--b3-border-color);
+            background: transparent;
         }
     }
 
@@ -246,52 +246,103 @@
     }
 
     .habit-mini .habit-card__week-day {
+        position: relative;
         box-sizing: border-box;
         width: var(--habit-mini-day-width);
         min-height: 30px;
         height: 30px;
         padding: 0;
-        border-radius: 4px;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
         font-size: 12px;
         line-height: 1;
     }
 
-    .habit-mini__day--partial {
-        background: var(--b3-theme-primary-lightest);
+    .habit-mini .habit-mini__ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: var(--habit-mini-day-width);
+        height: var(--habit-mini-day-width);
+        fill: none;
+        pointer-events: none;
     }
 
-    .habit-mini .habit-card__week-day--today {
-        border-width: 1px;
-        border-color: transparent;
+    .habit-mini__ring-track {
+        stroke: var(--b3-border-color);
+        stroke-width: 1.5;
     }
 
-    .habit-mini__day-icon {
-        line-height: 16px;
+    .habit-mini__ring-progress {
+        stroke: var(--habit-color);
+        stroke-width: 2;
+        stroke-linecap: round;
     }
 
-    .habit-mini__day-progress {
-        font: clamp(7px, calc(var(--habit-mini-day-width) * 0.35), 9px) / 10px Arial, sans-serif;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: -0.2px;
-        color: var(--b3-theme-on-surface-light);
+    .habit-mini__ring-fill {
+        fill: transparent;
+        stroke: none;
+        transition: fill 0.15s;
     }
 
-    .habit-mini .habit-mini__day--recorded {
-        font-size: 14px;
+    .habit-mini__day--recorded .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 12%, transparent);
+    }
+
+    .habit-card__week-day--done .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 20%, transparent);
+    }
+
+    .habit-mini__ring-center {
+        fill: none;
+        stroke: var(--b3-theme-on-surface-light);
+        stroke-width: 1.1;
+        stroke-linecap: round;
+    }
+
+    .habit-mini__ring-glyph {
+        fill: currentColor;
+        stroke: none;
+    }
+
+    .habit-mini__day--partial .habit-mini__day-icon,
+    .habit-mini__day--partial .habit-mini__ring-center {
+        opacity: 0.4;
+    }
+
+    .habit-card__week-day--not-required .habit-mini__ring-track {
+        stroke-dasharray: 2 3;
+    }
+
+    .habit-mini .habit-card__week-day:hover .habit-mini__ring-fill,
+    .habit-mini .habit-card__week-day:focus-visible .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 8%, transparent);
+    }
+
+    .habit-mini .habit-mini__day--recorded:hover .habit-mini__ring-fill,
+    .habit-mini .habit-mini__day--recorded:focus-visible .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 20%, transparent);
+    }
+
+    .habit-mini .habit-card__week-day--done:hover .habit-mini__ring-fill,
+    .habit-mini .habit-card__week-day--done:focus-visible .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 28%, transparent);
     }
 
 }
 
 @container habit-mini (min-width: 300px) {
     .habit-panel[data-view-mode='mini'] .habit-mini-layout--week {
-        --habit-mini-day-width: 24px;
+        --habit-mini-day-width: 26px;
         --habit-mini-day-gap: 2px;
     }
 }
 
 @container habit-mini (min-width: 360px) {
     .habit-panel[data-view-mode='mini'] .habit-mini-layout--week {
-        --habit-mini-day-width: 26px;
+        --habit-mini-day-width: 30px;
     }
 }
 
