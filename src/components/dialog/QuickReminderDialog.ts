@@ -2172,6 +2172,7 @@ export class QuickReminderDialog {
 
         applyTabStyle(currentTaskTab, this.activeDialogTab === 'task');
         applyTabStyle(subtasksTab, this.activeDialogTab === 'subtasks');
+        applyTabStyle(this.dialog.element.querySelector('#quickCreateTaskTab'), this.activeDialogTab !== 'select-task');
         applyTabStyle(this.dialog.element.querySelector('#quickSelectTaskTab'), this.activeDialogTab === 'select-task');
     }
 
@@ -2259,9 +2260,29 @@ export class QuickReminderDialog {
 
     public async enableTaskSelection(onSelected: (task: any) => Promise<void>, initiallySelected = false) {
         this.onSelectExistingTask = onSelected;
-        if (this.mode === 'quick') {
-            this.dialog.element.querySelector('#quickCurrentTaskTab').textContent = i18n('newTask');
-        }
+        const content = this.dialog.element.querySelector('.b3-dialog__content') as HTMLElement;
+        const creationPanel = document.createElement('div');
+        creationPanel.id = 'quickTaskCreationPanel';
+        creationPanel.setAttribute('role', 'tabpanel');
+        creationPanel.setAttribute('aria-labelledby', 'quickCreateTaskTab');
+        creationPanel.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto';
+        creationPanel.append(...Array.from(content.children));
+        const detailTabs = creationPanel.querySelector('#quickReminderTabs') as HTMLElement;
+        detailTabs.style.flexShrink = '0';
+        creationPanel.querySelector('#quickCurrentTaskTab').textContent = i18n('taskDetails');
+
+        const tabs = document.createElement('div');
+        tabs.id = 'quickTaskSelectionTabs';
+        tabs.setAttribute('role', 'tablist');
+        tabs.style.cssText = 'display:flex;flex-shrink:0;gap:12px;margin-bottom:12px;border-bottom:1px solid var(--b3-border-color)';
+        const createTab = document.createElement('button');
+        createTab.type = 'button';
+        createTab.id = 'quickCreateTaskTab';
+        createTab.className = 'b3-button b3-button--text';
+        createTab.setAttribute('role', 'tab');
+        createTab.setAttribute('aria-controls', creationPanel.id);
+        createTab.textContent = i18n(this.mode === 'quick' ? 'newTask' : 'currentTask');
+        createTab.style.cssText = 'border-radius:0;border-bottom:2px solid transparent;padding:6px 8px';
         const tab = document.createElement('button');
         tab.type = 'button';
         tab.id = 'quickSelectTaskTab';
@@ -2275,11 +2296,12 @@ export class QuickReminderDialog {
         panel.setAttribute('role', 'tabpanel');
         panel.setAttribute('aria-labelledby', tab.id);
         panel.style.cssText = 'display:none;flex:1;min-height:0;height:auto;overflow:hidden';
-        this.dialog.element.querySelector('#quickReminderTabs').appendChild(tab);
-        this.dialog.element.querySelector('.b3-dialog__content').appendChild(panel);
+        tabs.append(createTab, tab);
+        content.append(tabs, creationPanel, panel);
+        createTab.addEventListener('click', () => { void this.switchQuickDialogTab('task'); });
         tab.addEventListener('click', () => { void this.switchQuickDialogTab('select-task'); });
         if (initiallySelected) await this.switchQuickDialogTab('select-task');
-        else this.updateQuickDialogTabStyles();
+        else await this.switchQuickDialogTab(this.activeDialogTab);
     }
 
     private async mountTaskSelectionTab() {
@@ -2320,6 +2342,8 @@ export class QuickReminderDialog {
             : 'task';
 
         this.activeDialogTab = nextTab;
+        const creationPanel = this.dialog.element.querySelector('#quickTaskCreationPanel') as HTMLElement;
+        if (creationPanel) creationPanel.style.display = nextTab === 'select-task' ? 'none' : 'flex';
         if (taskPanel) {
             taskPanel.style.display = nextTab === 'task'
                 ? (this.activeDetailTab === 'notes' ? 'flex' : '')
@@ -2334,7 +2358,7 @@ export class QuickReminderDialog {
         }
 
         if (contentEl) {
-            if (nextTab === 'select-task' || (nextTab === 'task' && this.activeDetailTab === 'notes')) {
+            if (creationPanel || nextTab === 'select-task' || (nextTab === 'task' && this.activeDetailTab === 'notes')) {
                 contentEl.style.overflow = 'hidden';
                 contentEl.style.display = 'flex';
                 contentEl.style.flexDirection = 'column';
@@ -7111,7 +7135,7 @@ export class QuickReminderDialog {
             '#quickProjectSearchInput',
             '#quickHabitSearchInput',
             '.quick-reminder-dialog__add-time',
-            '.b3-button:not(#quickCancelBtn):not(#quickCurrentTaskTab):not(#quickSubtasksTab):not(#quickSelectTaskTab):not(#quickViewParentBtn):not(#quickTaskSettingsTab):not(#quickTaskNotesTab)'
+            '.b3-button:not(#quickCancelBtn):not(#quickCreateTaskTab):not(#quickCurrentTaskTab):not(#quickSubtasksTab):not(#quickSelectTaskTab):not(#quickViewParentBtn):not(#quickTaskSettingsTab):not(#quickTaskNotesTab)'
         ].join(', ')).forEach((el: any) => {
             if (el.closest?.('#quickSelectTaskPanel')) return;
             el.style.pointerEvents = 'none';
