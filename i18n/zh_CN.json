@@ -1705,6 +1705,7 @@
     "icsSyncIntervalDesc": "设置自动同步ICS文件到云端的频率",
     "icsSilentUpload": "静默上传ICS文件",
     "icsSilentUploadDesc": "启用后，定时上传ICS文件时不显示成功提示消息",
+    "icsShowUploadInTaskMenu": "在任务管理的更多菜单中显示 ICS 上传入口",
     "uploadIcsToCloud": "生成并上传 ICS 到云端",
     "uploadIcsToCloudDesc": "生成ICS文件并立即上传到云端",
     "icsUploading": "正在生成并上传 ICS 文件到云端...",

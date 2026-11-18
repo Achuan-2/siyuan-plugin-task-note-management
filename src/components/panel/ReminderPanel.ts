@@ -11759,20 +11759,22 @@ export class ReminderPanel {
                 click: () => this.showFilterManagement()
             });
 
-            menu.addItem({
-                icon: 'iconTNCalendarUpload',
-                label: i18n('uploadIcsToCloud'),
-                click: async () => {
-                    try {
-                        const settings = await this.plugin.loadSettings();
-                        await pushMsg(i18n('icsUploading'));
-                        await uploadIcsToCloud(this.plugin, settings);
-                    } catch (error) {
-                        const message = error instanceof Error ? error.message : String(error);
-                        await pushErrMsg(i18n('icsCloudUploadFailedPrefix') + message);
+            if (this.plugin.settings?.icsShowUploadInTaskMenu === true) {
+                menu.addItem({
+                    icon: 'iconTNCalendarUpload',
+                    label: i18n('uploadIcsToCloud'),
+                    click: async () => {
+                        try {
+                            const settings = await this.plugin.loadSettings();
+                            await pushMsg(i18n('icsUploading'));
+                            await uploadIcsToCloud(this.plugin, settings);
+                        } catch (error) {
+                            const message = error instanceof Error ? error.message : String(error);
+                            await pushErrMsg(i18n('icsCloudUploadFailedPrefix') + message);
+                        }
                     }
-                }
-            });
+                });
+            }
 
             // 添加插件设置
             menu.addItem({

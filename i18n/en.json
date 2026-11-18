@@ -1705,6 +1705,7 @@
     "icsSyncIntervalDesc": "Set the frequency for automatically syncing ICS files to the cloud",
     "icsSilentUpload": "Silent ICS Upload",
     "icsSilentUploadDesc": "When enabled, scheduled ICS uploads will not show success notification messages",
+    "icsShowUploadInTaskMenu": "Show ICS upload in the Task Management More menu",
     "uploadIcsToCloud": "Generate and Upload ICS to Cloud",
     "uploadIcsToCloudDesc": "Generate ICS file and immediately upload it to the cloud",
     "icsUploading": "Generating and uploading ICS file to cloud...",

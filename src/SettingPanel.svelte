@@ -1910,6 +1910,13 @@
                             description: i18n('icsSilentUploadDesc'),
                         },
                         {
+                            key: 'icsShowUploadInTaskMenu',
+                            value: settings.icsShowUploadInTaskMenu === true,
+                            type: 'checkbox',
+                            title: i18n('icsShowUploadInTaskMenu'),
+                            description: '',
+                        },
+                        {
                             key: 'uploadIcsToCloud',
                             value: '',
                             type: 'button',

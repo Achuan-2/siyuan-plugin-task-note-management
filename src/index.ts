@@ -251,6 +251,7 @@ export const DEFAULT_SETTINGS = {
     icsCloudUrl: '',
     icsLastSyncAt: '', // 上一次上传时间
     icsSyncEnabled: false, // 是否启用ICS云端同步
+    icsShowUploadInTaskMenu: false,
     icsFileName: '', // ICS文件名，默认为空时自动生成
     icsSilentUpload: false, // 是否静默上传ICS文件，不显示成功提示
     icsTaskFilter: 'all', // 'all' | 'completed' | 'uncompleted' - 任务筛选
