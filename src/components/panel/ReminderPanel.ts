@@ -3,7 +3,7 @@ import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { duplicateTaskTree } from "../../utils/taskDuplication";
 import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
-import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../../api";
+import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushErrMsg, pushMsg, sql } from "../../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../../utils/sortConfig";
 import { getLuteInstance } from "../../utils/luteSingleton";
@@ -35,6 +35,7 @@ import { getSolarDateLunarString, getNextLunarMonthlyDate, getNextLunarYearlyDat
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { isEventPast } from "../../utils/icsImport";
+import { uploadIcsToCloud } from "../../utils/icsExport";
 import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
 import LoadingDialog from '../dialog/LoadingDialog.svelte';
 import { VipManager } from '../vip/vip';
@@ -11756,6 +11757,21 @@ export class ReminderPanel {
                 icon: 'iconFilter',
                 label: i18n("manageFilters"),
                 click: () => this.showFilterManagement()
+            });
+
+            menu.addItem({
+                icon: 'iconTNCalendarUpload',
+                label: i18n('uploadIcsToCloud'),
+                click: async () => {
+                    try {
+                        const settings = await this.plugin.loadSettings();
+                        await pushMsg(i18n('icsUploading'));
+                        await uploadIcsToCloud(this.plugin, settings);
+                    } catch (error) {
+                        const message = error instanceof Error ? error.message : String(error);
+                        await pushErrMsg(i18n('icsCloudUploadFailedPrefix') + message);
+                    }
+                }
             });
 
             // 添加插件设置
