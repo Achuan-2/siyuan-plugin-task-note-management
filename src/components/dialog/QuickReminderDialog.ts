@@ -2263,17 +2263,21 @@ export class QuickReminderDialog {
     }
 
     public async enableTaskSelection(onSelected: (task: any) => Promise<void>, initiallySelected = false) {
+        if (!this.dialog?.element) return;
+        const content = this.dialog.element.querySelector('.b3-dialog__content') as HTMLElement | null;
+        const header = this.dialog.element.querySelector('.b3-dialog__header') as HTMLElement | null;
+        if (!content || !header) return;
         this.onSelectExistingTask = onSelected;
-        const content = this.dialog.element.querySelector('.b3-dialog__content') as HTMLElement;
         const creationPanel = document.createElement('div');
         creationPanel.id = 'quickTaskCreationPanel';
         creationPanel.setAttribute('role', 'tabpanel');
         creationPanel.setAttribute('aria-labelledby', 'quickCreateTaskTab');
         creationPanel.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto';
         creationPanel.append(...Array.from(content.children));
-        const detailTabs = creationPanel.querySelector('#quickReminderTabs') as HTMLElement;
-        detailTabs.style.flexShrink = '0';
-        creationPanel.querySelector('#quickCurrentTaskTab').textContent = i18n('taskDetails');
+        const detailTabs = creationPanel.querySelector('#quickReminderTabs') as HTMLElement | null;
+        if (detailTabs) detailTabs.style.flexShrink = '0';
+        const currentTaskTab = creationPanel.querySelector('#quickCurrentTaskTab');
+        if (currentTaskTab) currentTaskTab.textContent = i18n('taskDetails');
 
         const tabs = document.createElement('div');
         tabs.id = 'quickTaskSelectionTabs';
@@ -2302,7 +2306,6 @@ export class QuickReminderDialog {
         panel.setAttribute('aria-labelledby', tab.id);
         panel.style.cssText = 'display:none;flex:1;min-height:0;height:auto;overflow:hidden';
         tabs.append(createTab, tab);
-        const header = this.dialog.element.querySelector('.b3-dialog__header') as HTMLElement;
         const closeButton = header.querySelector('.b3-dialog__close');
         header.replaceChildren(tabs);
         if (closeButton) header.appendChild(closeButton);
@@ -2444,7 +2447,7 @@ export class QuickReminderDialog {
                 prosemirror.style.overflowY = 'auto';
             }
         } else {
-            if (contentEl) {
+            if (contentEl && !this.dialog.element.querySelector('#quickTaskCreationPanel')) {
                 contentEl.style.overflow = '';
                 contentEl.style.display = '';
                 contentEl.style.flexDirection = '';

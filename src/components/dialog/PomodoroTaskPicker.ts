@@ -1,3 +1,4 @@
+import { showMessage } from 'siyuan';
 import { ReminderPanel } from '../panel/ReminderPanel';
 import { i18n } from '../../pluginInstance';
 import { getLogicalDateString } from '../../utils/dateUtils';
@@ -16,7 +17,10 @@ export async function mountPomodoroTaskPicker(container: HTMLElement, plugin: an
             if (!container.isConnected) return;
             const current = data[task.id] || ReminderTaskLogic.generateAllRemindersWithInstances(
                 data, getLogicalDateString(), settings, holidays).find(item => item.id === task.id);
-            if (!current) throw new Error(i18n('pomodoroTaskUnavailable'));
+            if (!current) {
+                showMessage(i18n('pomodoroTaskUnavailable'), 3000, 'error');
+                return;
+            }
             await onSelected(current);
         }
     });
