@@ -110,6 +110,7 @@ export class CalendarView {
     private lightOpacityValueEl: HTMLDivElement | null = null;
     private darkOpacitySlider: HTMLInputElement | null = null;
     private darkOpacityValueEl: HTMLDivElement | null = null;
+    private completionFilterSelect: HTMLSelectElement | null = null;
     private externalReminderUpdatedHandler: ((e: Event) => void) | null = null;
     private externalCalendarConfigUpdatedHandler: ((e: Event) => void) | null = null;
     private settingUpdateHandler: ((e: Event) => void) | null = null;
@@ -279,6 +280,9 @@ export class CalendarView {
                 this.currentCompletionFilter = this.calendarConfigManager.getCompletionFilter();
             } catch (e) {
                 this.currentCompletionFilter = 'all';
+            }
+            if (this.completionFilterSelect) {
+                this.completionFilterSelect.value = this.currentCompletionFilter;
             }
         }
 
@@ -581,6 +585,7 @@ export class CalendarView {
         this.completedTaskTimeUseTaskColor = this.calendarConfigManager.getCompletedTaskTimeUseTaskColor();
         this.calendarOpacityLight = this.calendarConfigManager.getCalendarOpacityLight();
         this.calendarOpacityDark = this.calendarConfigManager.getCalendarOpacityDark();
+        this.currentCompletionFilter = this.calendarConfigManager.getCompletionFilter();
         this.holidays = await loadHolidays(this.plugin);
         if (this.disposed) return;
 
@@ -1248,6 +1253,7 @@ export class CalendarView {
             statusGroup.appendChild(createStatusBtn(i18n("uncompleted") || "未完成", 'incomplete'));
         } else {
             const statusSelect = document.createElement('select');
+            this.completionFilterSelect = statusSelect;
             statusSelect.className = 'b3-select';
             statusSelect.setAttribute('aria-label', i18n("taskStatusFilter"));
             statusSelect.add(new Option(i18n("all"), 'all'));
