@@ -477,6 +477,8 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         if (normalizedRelativeDate.hasRelativeDateKeyword) {
             processedText = normalizedRelativeDate.normalizedText;
         }
+        // 带“农历”标记时跳过公历数字日期规则，避免先把“农历10月20”识别为公历10月20日。
+        const hasLunarKeyword = /农历/.test(processedText);
 
         // --- 优先提取末尾时间 (针对 "任务0：14:20" 这种场景) ---
         // 匹配模式：(起始/空格/中英文冒号) + (1-2位数字) + (中英文冒号/点) + (2位数字) + (可选分) + 结尾
@@ -518,7 +520,7 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
 
         // 处理包含8位数字日期的情况
         const compactDateInTextMatch = processedText.match(/(?:^|.*?)(\d{8})(?:\s|$|.*)/);
-        if (compactDateInTextMatch) {
+        if (!hasLunarKeyword && compactDateInTextMatch) {
             const dateStr = compactDateInTextMatch[1];
             const year = dateStr.substring(0, 4);
             const month = dateStr.substring(4, 6);
@@ -560,7 +562,7 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         const timePattern = /(?:\s+|T)?(\d{1,2})[:点](\d{1,2})?(?:分)?/;
 
         const fullMatch = processedText.match(new RegExp(datePattern.source + "(?:" + timePattern.source + ")?"));
-        if (fullMatch) {
+        if (!hasLunarKeyword && fullMatch) {
             const year = parseInt(fullMatch[1]);
             const month = parseInt(fullMatch[2]);
             const day = parseInt(fullMatch[3]);
@@ -591,7 +593,7 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         // 移除了 ^ 和 $ 锚点
         const monthDayPattern = /(\d{1,2})[-\/\.月日](\d{1,2})[日号]?/;
         const monthDayMatch = processedText.match(new RegExp(monthDayPattern.source + "(?:" + timePattern.source + ")?"));
-        if (monthDayMatch) {
+        if (!hasLunarKeyword && monthDayMatch) {
             const year = new Date().getFullYear();
             const month = parseInt(monthDayMatch[1]);
             const day = parseInt(monthDayMatch[2]);
@@ -621,7 +623,6 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         // 处理农历日期格式（例如：八月廿一、正月初一、农历七月十三）
         // 1. 如果文本包含"农历"关键字，强制以农历解析
         // 2. 尝试直接解析纯农历格式（如"正月初一"、"腊月三十"、"大年二十九"等）
-        const hasLunarKeyword = /农历/.test(processedText);
         const lunarDate = parseLunarDateText(processedText);
         if (lunarDate && (hasLunarKeyword || lunarDate.month > 0)) {
             // 如果只识别到日期（month === 0），使用当前月作为默认月
