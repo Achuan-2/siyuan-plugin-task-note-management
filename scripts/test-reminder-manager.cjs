@@ -14,6 +14,7 @@ function createLoader() {
         [path.join(root, 'src/utils/dateUtils.ts'), { getLogicalDateString: () => '2026-10-08' }],
         [path.join(root, 'src/utils/reminderTaskLogic.ts'), { ReminderTaskLogic: {} }],
         [path.join(root, 'src/kernel/utils/siyuanApi.ts'), {}],
+        [path.join(root, 'src/api.ts'), { fetchSyncPost: async () => ({ code: 0, data: { content: '', revision: 'missing' } }) }],
     ]);
 
     function load(filename) {
@@ -44,9 +45,12 @@ function existingTask(id = 'existing', extra = {}) {
 
 function createFixture(initial = { existing: existingTask() }) {
     const load = createLoader();
-    const state = { data: clone(initial), writes: 0, readError: null, writeError: null };
+    const state = { data: clone(initial), notes: {}, writes: 0, readError: null, writeError: null };
     const plugin = {
         async loadData(filename) {
+            if (filename.startsWith('notes/')) {
+                return state.notes[filename] ?? null;
+            }
             assert.equal(filename, 'reminder.json');
             if (state.readError) throw state.readError;
             const snapshot = clone(state.data);
@@ -54,12 +58,21 @@ function createFixture(initial = { existing: existingTask() }) {
             return snapshot;
         },
         async saveData(filename, data) {
+            if (filename.startsWith('notes/')) {
+                state.notes[filename] = typeof data === 'string' ? data : String(data ?? '');
+                return;
+            }
             assert.equal(filename, 'reminder.json');
             if (state.writeError) throw state.writeError;
             const snapshot = clone(data);
             await new Promise(resolve => setImmediate(resolve));
             state.data = snapshot;
             state.writes++;
+        },
+        async removeData(filename) {
+            if (filename.startsWith('notes/')) {
+                delete state.notes[filename];
+            }
         },
     };
     const { ReminderManager } = load('src/components/dataManager/reminderManager.ts');
@@ -120,7 +133,10 @@ test('并发 MCP 创建和更新串行保存，不相互覆盖', async () => {
     assert.ok(results.slice(0, 12).every(result => result.success));
     assert.equal(Object.keys(state.data).length, 13);
     assert.equal(state.data.existing.completed, true);
-    assert.equal(state.data.existing.note, '保留完成状态的备注更新');
+    assert.equal(state.data.existing.notes, true);
+    assert.equal(state.data.existing.note, undefined);
+    assert.equal(state.data.existing.noteSummary, '保留完成状态的备注更新');
+    assert.equal(state.notes['notes/existing.md'], '保留完成状态的备注更新');
 });
 
 test('更新只修改明确传入的字段，删除不复活其他已删除任务', async () => {

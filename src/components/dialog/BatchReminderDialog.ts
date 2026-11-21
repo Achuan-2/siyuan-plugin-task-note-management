@@ -10,6 +10,7 @@ import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import LoadingDialog from './LoadingDialog.svelte';
 import type { DatabaseTaskSource } from '../../utils/databaseTaskSource';
+import { applyTaskNoteMetadata, saveTaskNote } from '../../utils/taskNoteStorage';
 
 export interface ListItemNode {
     id: string;        // 列表项 block ID
@@ -1710,8 +1711,9 @@ class SmartBatchDialog {
                     reminder.endTime = setting.endTime;
                 }
 
-                if (setting.note) {
-                    reminder.note = setting.note;
+                if (setting.note && setting.note.trim()) {
+                    const savedNote = await saveTaskNote(this.plugin, reminder.id, setting.note);
+                    applyTaskNoteMetadata(reminder, savedNote);
                 }
 
                 // 如果是周期任务，自动完成所有过去的实例

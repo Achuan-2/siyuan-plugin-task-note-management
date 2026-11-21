@@ -2,6 +2,7 @@ import { i18n } from "../../pluginInstance";
 import { openTab } from "siyuan";
 import { getLogicalDateString, getLocaleTag } from "../../utils/dateUtils";
 import { openBlock } from "../../api"
+import { getTaskNotePreviewText } from "../../utils/taskNoteStorage";
 
 interface ReminderInfo {
     id: string;
@@ -235,7 +236,7 @@ export class NotificationDialog {
                                 </div>
                             </div>
                             <div class="item-time ${isReminderOverdue ? 'overdue-time' : ''}">${getTimeDisplay(reminder)}</div>
-                            ${reminder.note ? `<div class="item-note">${this.escapeHtml(reminder.note)}</div>` : ''}
+                            ${(() => { const noteText = getTaskNotePreviewText(reminder); return noteText ? `<div class="item-note">${this.escapeHtml(noteText)}</div>` : ''; })()}
                         </div>
                     `;
         }).join('')}

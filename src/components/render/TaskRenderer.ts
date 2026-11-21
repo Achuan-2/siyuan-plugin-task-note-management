@@ -20,6 +20,13 @@ import { shouldTreatStartDateOnlyAsOverdue, isOpenEndedStartDateTask } from "../
 import { applyProjectTagColor } from "../../utils/projectTagColor";
 import type { PanelViewMode } from "../menu/PanelViewMenu";
 import { getReminderSkipWeekendsEffective, getReminderSkipHolidaysEffective, shouldSkipReminderOnDate } from "../../utils/reminderSkipDate";
+import {
+    getCachedTaskNote,
+    getTaskNotePreviewText,
+    hasTaskNote,
+    loadTaskNote,
+    resolveTaskNoteRef,
+} from "../../utils/taskNoteStorage";
 
 export type TaskPriorityDisplayStyle = 'background' | 'checkboxBorder';
 
@@ -1852,7 +1859,7 @@ export class TaskRenderer {
         if (task.estimatedPomodoroDuration) add(i18n('estimatedPomodoro'), `${task.estimatedPomodoroDuration} ${i18n('minutes')}`);
         if (task.completed && task.completedTime) add(i18n('completedAt'), task.completedTime);
         const title = String(task.title || i18n('unnamedNote'));
-        const note = String(task.note || '').trim();
+        const note = String(getTaskNotePreviewText(task) || '').trim();
         const escape = (value: string) => value.replace(/[&<>"']/g, character => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
         })[character]);
@@ -1876,14 +1883,10 @@ export class TaskRenderer {
         });
     }
 
-    /** 与完整卡片共用备注渲染，供侧栏局部更新时保留卡片节点和交互状态。 */
-    public static createNoteElement(task: any, context: TaskRenderContext, onNoteClick?: (task: any, event: Event) => void): HTMLElement | null {
-        if (context.viewMode === 'mini' || !task.note) return null;
-        const noteEl = document.createElement('div');
-        noteEl.className = 'reminder-item__note';
-        const lute = context.lute ?? getLuteInstance();
+    /** 将备注 Markdown 渲染到指定容器中，统一处理段落、图片与附件链接样式。 */
+    private static renderNoteMarkdownInto(noteEl: HTMLElement, markdown: string, lute: any): void {
         if (lute) {
-            noteEl.innerHTML = lute.Md2HTML(task.note);
+            noteEl.innerHTML = lute.Md2HTML(markdown);
             noteEl.querySelectorAll('p').forEach(p => {
                 p.style.margin = '0';
                 p.style.lineHeight = 'inherit';
@@ -1932,8 +1935,21 @@ export class TaskRenderer {
                 }
             });
         } else {
-            noteEl.textContent = task.note;
+            noteEl.textContent = markdown;
         }
+        if (noteEl.querySelector('img')) {
+            noteEl.style.maxHeight = 'none';
+            noteEl.style.display = 'block';
+            noteEl.style.webkitLineClamp = 'unset';
+        }
+    }
+
+    /** 与完整卡片共用备注渲染，供侧栏局部更新时保留卡片节点和交互状态；拆分正文按需加载。 */
+    public static createNoteElement(task: any, context: TaskRenderContext, onNoteClick?: (task: any, event: Event) => void): HTMLElement | null {
+        if (context.viewMode === 'mini' || !hasTaskNote(task)) return null;
+        const noteEl = document.createElement('div');
+        noteEl.className = 'reminder-item__note';
+        const lute = context.lute ?? getLuteInstance();
         noteEl.style.cssText = `
             font-size: 12px;
             margin-top: 4px;
@@ -1951,11 +1967,33 @@ export class TaskRenderer {
             transition: background-color 0.2s, color 0.2s;
             position: relative;
         `;
-        if (noteEl.querySelector('img')) {
-            noteEl.style.maxHeight = 'none';
-            noteEl.style.display = 'block';
-            noteEl.style.webkitLineClamp = 'unset';
+
+        const ref = resolveTaskNoteRef(task);
+        const immediateMarkdown = ref.inlineNote
+            ?? getCachedTaskNote(ref.noteId)
+            ?? (ref.fallbackNoteId ? getCachedTaskNote(ref.fallbackNoteId) : undefined);
+
+        if (immediateMarkdown !== undefined) {
+            if (!immediateMarkdown.trim()) return null;
+            this.renderNoteMarkdownInto(noteEl, immediateMarkdown, lute);
+        } else {
+            if (ref.summary) {
+                noteEl.textContent = ref.summary;
+            }
+            const requestToken = `${ref.noteId}:${Date.now()}:${Math.random()}`;
+            noteEl.dataset.noteLoadToken = requestToken;
+            void loadTaskNote(context.plugin, task).then(markdown => {
+                if (noteEl.dataset.noteLoadToken !== requestToken) return;
+                if (!markdown || !markdown.trim()) {
+                    if (!ref.summary) noteEl.remove();
+                    return;
+                }
+                this.renderNoteMarkdownInto(noteEl, markdown, lute);
+            }).catch(err => {
+                console.warn('Failed to load task note for card:', ref.noteId, err);
+            });
         }
+
         noteEl.addEventListener('click', event => {
             event.stopPropagation();
             event.preventDefault();

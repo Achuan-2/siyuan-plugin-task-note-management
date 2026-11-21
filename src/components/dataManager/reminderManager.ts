@@ -2,6 +2,12 @@ import type { ReminderItem, ReminderData, ReminderTime } from "../../types/remin
 import { getEnvironmentSafeAllReminders, cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { ReminderTaskLogic } from "../../utils/reminderTaskLogic";
 import { getLogicalDateString } from "../../utils/dateUtils";
+import {
+    applyTaskNoteMetadata,
+    cleanupDeletedTaskNotes,
+    getTaskNotePreviewText,
+    saveTaskNote,
+} from "../../utils/taskNoteStorage";
 
 export interface SearchReminderOptions {
     keyword?: string;
@@ -221,7 +227,7 @@ export class ReminderManager {
             const kw = options.keyword.toLowerCase();
             results = results.filter((r) => {
                 const title = (r.title || "").toLowerCase();
-                const note = (r.note || "").toLowerCase();
+                const note = getTaskNotePreviewText(r).toLowerCase();
                 return title.includes(kw) || note.includes(kw);
             });
         }
@@ -234,13 +240,19 @@ export class ReminderManager {
         return this.runMutation(async (reminders) => {
             const now = new Date().toISOString();
             const id = `reminder_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+            const { note, ...rest } = input;
             const reminder: ReminderItem = {
-                ...input,
+                ...rest,
                 id,
                 date: input.date ?? "",
                 completed: input.completed ?? false,
                 createdAt: now,
             };
+
+            if (typeof note === "string" && note.trim()) {
+                const metadata = await saveTaskNote(this.plugin, id, note, { allReminders: reminders });
+                applyTaskNoteMetadata(reminder, metadata);
+            }
 
             reminders[id] = reminder;
             await this.saveReminders(reminders);
@@ -261,7 +273,13 @@ export class ReminderManager {
 
                 const patched: ReminderItem = { ...existing };
                 if (update.title !== undefined) patched.title = update.title;
-                if (update.note !== undefined) patched.note = update.note;
+                if (update.note !== undefined) {
+                    const metadata = await saveTaskNote(this.plugin, id, update.note, {
+                        previousAssets: existing.noteAssets,
+                        allReminders: { ...reminders, [id]: { ...patched, noteAssets: undefined } },
+                    });
+                    applyTaskNoteMetadata(patched, metadata);
+                }
                 if (update.date !== undefined) patched.date = update.date;
                 if (update.time !== undefined) patched.time = update.time;
                 if (update.reminderTimes !== undefined) patched.reminderTimes = update.reminderTimes;
@@ -296,11 +314,15 @@ export class ReminderManager {
 
     async deleteReminder(id: string): Promise<boolean> {
         return this.runMutation(async (reminders) => {
-            if (!reminders[id]) {
+            const existing = reminders[id];
+            if (!existing) {
                 return false;
             }
             delete reminders[id];
             await this.saveReminders(reminders);
+            await cleanupDeletedTaskNotes(this.plugin, [existing], reminders).catch((err) => {
+                console.warn("Failed to cleanup deleted reminder note:", id, err);
+            });
             return true;
         });
     }

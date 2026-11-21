@@ -2,6 +2,7 @@ import { getMonthlyWeekRules, getMonthlyWeekdayDate } from '../../utils/monthlyR
 export { getMonthlyWeekRules, getMonthlyWeekdayDate } from '../../utils/monthlyRepeat';
 
 import { RepeatConfig, RepeatInstanceState } from '../dialog/RepeatSettingsDialog';
+import { resolveExpandedInstanceNoteFields } from '../../utils/taskNoteStorage';
 import { compareDateStrings, getLocalDateTimeString, getLocaleTag } from '../../utils/dateUtils';
 import { i18n } from '../../pluginInstance';
 import { solarToLunar, formatLunarMonth, formatLunarDay } from '../../utils/lunarUtils';
@@ -27,6 +28,10 @@ export interface RepeatInstance {
     customGroupName?: string;
     // 实例级别覆盖字段
     note?: string;
+    notes?: boolean;
+    noteId?: string;
+    noteSummary?: string;
+    noteAssets?: string[];
     priority?: string;
     categoryId?: string;
     projectId?: string;
@@ -517,7 +522,7 @@ export function generateRepeatInstances(
             isRepeatedInstance: true,
             completed: isInstanceCompleted,
             completedTime: isInstanceCompleted ? getInstanceField(state, 'completedTime', undefined) : undefined,
-            note: getInstanceField(state, 'note', reminder.note || ''),
+            ...resolveExpandedInstanceNoteFields(reminder, state, originalDateKey),
             priority: getInstanceField(state, 'priority', reminder.priority || 'none'),
             categoryId: getInstanceField(state, 'categoryId', reminder.categoryId),
             projectId: getInstanceField(state, 'projectId', reminder.projectId),

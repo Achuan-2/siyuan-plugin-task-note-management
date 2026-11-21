@@ -20,6 +20,7 @@ import { getLocalDateString } from './dateUtils';
 import { shouldSkipReminderOnDate, type HolidayData } from './reminderSkipDate';
 import { loadHolidays } from './icsSubscription';
 import { generateRepeatInstances, getMonthlyWeekRules } from '../components/dataManager/repeatUtils';
+import { getTaskNotePreviewText, hasTaskNote, loadTaskNote } from './taskNoteStorage';
 
 const useShell = async (cmd: 'showItemInFolder' | 'openPath', filePath: string) => {
     try {
@@ -413,7 +414,7 @@ export async function exportIcsFile(
                 const reminderEvent: any = {
                     uid: `${id}-reminder-${index}@siyuan`,
                     title: `⏰ ${title}`,
-                    description: entry.note || reminder.note || '',
+                    description: entry.note || reminder.note || getTaskNotePreviewText(reminder) || '',
                     status: 'TENTATIVE',
                     start: parsedStart,
                 };
@@ -576,7 +577,7 @@ export async function exportIcsFile(
             const r = reminderMap[id];
 
             const title = r.title || i18n("untitledTask");
-            let description = r.note || '';
+            let description = hasTaskNote(r) ? (await loadTaskNote(plugin, r)) : (r.note || '');
 
             try {
                 const children = Object.keys(reminderMap)
@@ -585,7 +586,7 @@ export async function exportIcsFile(
                 for (const child of children) {
                     try {
                         const childTitle = child.title || i18n("untitledSubtask");
-                        const childNote = child.note || '';
+                        const childNote = hasTaskNote(child) ? (await loadTaskNote(plugin, child)) : (child.note || '');
                         const childHasTime = !!(child.time || child.date);
 
                         if (childHasTime) {

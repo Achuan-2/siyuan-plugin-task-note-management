@@ -45,6 +45,12 @@ function fixture(initial, { failSave = false } = {}) {
         '../components/dataManager/repeatUtils': repeat,
         './taskActionUndo': undo,
         './taskUndoPatch': undo,
+        './taskNoteStorage': {
+            applyTaskNoteMetadata: (target, metadata) => Object.assign(target, metadata),
+            copyTaskNote: async () => false,
+            hasTaskNote: task => Boolean(task?.notes === true || (typeof task?.note === 'string' && task.note.trim())),
+            resolveTaskNoteRef: task => ({ noteId: task?.noteId || task?.id || '', hasNote: Boolean(task?.notes === true) }),
+        },
     };
     const exported = {};
     new Function('require', 'exports', 'window', 'CustomEvent', code)(name => {

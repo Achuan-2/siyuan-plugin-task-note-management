@@ -46,6 +46,14 @@ import { showVipDialog } from "./components/vip/VipDialog";
 import { performDataMigration } from "./components/dataManager/dataMigration";
 import { initIcsSync, initIcsSubscriptionSync, handleIcsSyncSettingsChange, cleanupIcsSync } from "./utils/icsSync";
 import { cleanReminderItem } from "./utils/reminderLoadUtils";
+import {
+    buildTaskNoteIndex,
+    cleanupDeletedTaskNotes,
+    diffTaskNoteIndex,
+    getTaskNotePreviewText,
+    invalidateTaskNoteCache,
+    type TaskNoteIndex,
+} from "./utils/taskNoteStorage";
 import { createPomodoroCache } from './utils/pomodoroCache';
 import type { PomodoroStoreAdapter } from './utils/pomodoroStore';
 import { PomodoroWriteCoordinator } from './utils/pomodoroWriteCoordinator';
@@ -419,6 +427,7 @@ export default class ReminderPlugin extends Plugin {
     private preserveStandalonePomodoroOnUnload: boolean = false;
 
     private reminderDataCache: any = null;
+    private persistedTaskNoteIndex: TaskNoteIndex | null = null;
     private projectDataCache: any = null;
     private statusDataCache: any = null;
     private categoriesDataCache: any = null;
@@ -526,6 +535,7 @@ export default class ReminderPlugin extends Plugin {
             try {
                 const data = await this.loadData(REMINDER_DATA_FILE);
                 this.reminderDataCache = data || {};
+                this.persistedTaskNoteIndex = buildTaskNoteIndex(this.reminderDataCache);
             } catch (error) {
                 console.error('Failed to load reminder data:', error);
                 throw error;
@@ -538,6 +548,7 @@ export default class ReminderPlugin extends Plugin {
      * @param data 提醒数据
      */
     public async saveReminderData(data: any): Promise<void> {
+        const previousIndex = this.persistedTaskNoteIndex;
         if (data && typeof data === 'object') {
             for (const key of Object.keys(data)) {
                 if (data[key]) {
@@ -547,6 +558,15 @@ export default class ReminderPlugin extends Plugin {
         }
         await this.saveData(REMINDER_DATA_FILE, data);
         this.reminderDataCache = data;
+        this.persistedTaskNoteIndex = buildTaskNoteIndex(data);
+        if (previousIndex && previousIndex.size > 0) {
+            const { removedTasks, keepNoteIds } = diffTaskNoteIndex(previousIndex, data);
+            if (removedTasks.length > 0) {
+                void cleanupDeletedTaskNotes(this, removedTasks, data, { keepNoteIds }).catch(err => {
+                    console.warn('Failed to cleanup deleted reminder notes:', err);
+                });
+            }
+        }
     }
 
     /**
@@ -1664,6 +1684,10 @@ export default class ReminderPlugin extends Plugin {
                         window.dispatchEvent(new CustomEvent('projectUpdated'));
                     } else if (normalizedPath === 'reminder.json') {
                         await this.loadReminderData(true);
+                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                    } else if (normalizedPath.startsWith('notes/')) {
+                        const noteId = normalizedPath.match(/^notes\/(.+)\.md$/)?.[1];
+                        invalidateTaskNoteCache(noteId || undefined);
                         window.dispatchEvent(new CustomEvent('reminderUpdated'));
                     } else if (normalizedPath === 'habit.json' || normalizedPath.startsWith('habitCheckin/')) {
                         await this.loadHabitData(true);
@@ -5281,7 +5305,10 @@ export default class ReminderPlugin extends Plugin {
             const has = (group: PluginDataGroup) => !changed || changed.has(group);
             const reloads: Promise<any>[] = [];
             if (has('settings')) reloads.push(this.loadSettings(true));
-            if (has('reminders')) reloads.push(this.loadReminderData(true));
+            if (has('reminders')) {
+                invalidateTaskNoteCache();
+                reloads.push(this.loadReminderData(true));
+            }
             if (has('projects')) reloads.push(this.loadProjectData(true));
             if (has('statuses')) reloads.push(this.loadProjectStatus(true));
             if (has('categories')) reloads.push(this.loadCategories(true));
@@ -6091,8 +6118,9 @@ export default class ReminderPlugin extends Plugin {
             }
         }
 
-        if (reminder.note) {
-            message += `\n📝 ${reminder.note}`;
+        const notePreview = getTaskNotePreviewText(reminder);
+        if (notePreview) {
+            message += `\n📝 ${notePreview}`;
         }
 
         return message;

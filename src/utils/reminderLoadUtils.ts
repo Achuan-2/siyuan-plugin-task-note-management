@@ -155,6 +155,9 @@ export function cleanReminderItem(reminder: any): any {
         'endDate',
         'endTime',
         'note',
+        'notes',
+        'noteSummary',
+        'noteId',
         'categoryId',
         'projectId',
         'linkedHabitId',
@@ -198,6 +201,17 @@ export function cleanReminderItem(reminder: any): any {
 
     if (Array.isArray(reminder.tagIds) && reminder.tagIds.length === 0) {
         delete reminder.tagIds;
+    }
+
+    if (Array.isArray(reminder.noteAssets)) {
+        const cleanedAssets = Array.from(new Set(reminder.noteAssets.filter((x: unknown) => typeof x === 'string' && x.trim())));
+        if (cleanedAssets.length > 0) {
+            reminder.noteAssets = cleanedAssets;
+        } else {
+            delete reminder.noteAssets;
+        }
+    } else if ('noteAssets' in reminder) {
+        delete reminder.noteAssets;
     }
 
     if (Array.isArray(reminder.reminderTimes) && reminder.reminderTimes.length === 0) {
@@ -317,6 +331,31 @@ export function cleanInstanceState(state: RepeatInstanceState, reminder: any, ex
         }
     }
 
-    // 彻底清除历史遗留属性
+    // 彻底清除历史遗留属性及运行时临时属性
     delete (state as any).notifiedCustomTime;
+    delete (state as any).noteId;
+
+    // 拆分备注字段清理：
+    // - state.notes === true 表示该实例拥有独立备注文件 notes/<id>_<date>.md，保留 notes / noteSummary / noteAssets
+    // - state.notes === false 仅当父任务有备注时保留（表示显式清空），否则移除
+    // - state.notes 未定义时移除 noteSummary / noteAssets（继承父任务）
+    if (state.notes === true) {
+        if (!state.noteSummary) delete state.noteSummary;
+        if (Array.isArray(state.noteAssets) && state.noteAssets.length > 0) {
+            state.noteAssets = Array.from(new Set(state.noteAssets.filter((x: unknown) => typeof x === 'string' && x.trim())));
+            if (state.noteAssets.length === 0) delete state.noteAssets;
+        } else {
+            delete state.noteAssets;
+        }
+    } else if (state.notes === false) {
+        delete state.noteSummary;
+        delete state.noteAssets;
+        if (reminder?.notes !== true) {
+            delete state.notes;
+        }
+    } else {
+        delete state.notes;
+        delete state.noteSummary;
+        delete state.noteAssets;
+    }
 }

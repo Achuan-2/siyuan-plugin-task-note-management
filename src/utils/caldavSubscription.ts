@@ -1,6 +1,7 @@
 import { i18n } from "../pluginInstance";
 import { parseIcsFile, ParsedIcsEvent } from './icsImport';
 import type { IcsSubscription } from './icsSubscription';
+import { getTaskNotePreviewText } from './taskNoteStorage';
 
 export interface CalDavRemoteEvent {
     event: ParsedIcsEvent;
@@ -515,8 +516,9 @@ function buildReplacementLines(task: any): string[] {
         `LAST-MODIFIED:${now}`
     ];
 
-    if (task.note || task.description) {
-        lines.push(`DESCRIPTION:${escapeIcsText(task.note || task.description)}`);
+    const taskDescription = task.note || getTaskNotePreviewText(task) || task.description;
+    if (taskDescription) {
+        lines.push(`DESCRIPTION:${escapeIcsText(taskDescription)}`);
     }
 
     if (task.completed) {

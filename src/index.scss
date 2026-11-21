@@ -2799,7 +2799,7 @@
         .quick-reminder-dialog__form,
         #quickTaskNotesPanel,
         #quickReminderNote,
-        .milkdown {
+        .tn-lite-protyle {
             display: flex;
             flex: 1;
             flex-direction: column;
@@ -2808,14 +2808,11 @@
 
         #quickReminderNote {
             width: 100%;
-            border: 1px solid var(--b3-theme-surface-lighter);
-            border-radius: 4px;
+            border: 1px solid var(--b3-border-color);
+            border-radius: var(--b3-border-radius);
+            background-color: var(--b3-theme-background);
             position: relative;
-        }
-
-        .ProseMirror {
-            flex: 1;
-            overflow-y: auto;
+            overflow: hidden;
         }
     }
 
@@ -3111,80 +3108,53 @@
     background: var(--b3-theme-surface-light);
 }
 
-/* Milkdown Editor Integration */
-.milkdown {
-    background-color: var(--b3-theme-background) !important;
-    color: var(--b3-theme-on-background) !important;
-    border: 1px solid var(--b3-theme-surface-lighter) !important;
-    border-radius: 4px;
-    margin-top: 0px;
-    overflow-x: hidden !important;
-    /* 防止水平滚动条 */
-    max-height: 400px;
-    /* 限制最大高度 */
+/* 精简版 Protyle 编辑器样式（参考思源官方智能体输入框） */
+.tn-lite-protyle {
     display: flex;
     flex-direction: column;
+    min-height: 180px;
+    width: 100%;
+    box-sizing: border-box;
+    background-color: var(--b3-theme-background);
+    border: 1px solid var(--b3-border-color);
+    border-radius: var(--b3-border-radius);
+    overflow: hidden;
     position: relative;
 
-    .milkdown-menu-wrapper,
-    .slash-menu {
-        display: none !important;
-    }
-
-    .ProseMirror {
-        outline: none !important;
-        padding: 8px 8px 8px 24px !important;
-        /* 给左侧块标留出空间，减少冗余间距 */
-        font-family: var(--b3-font-family) !important;
-        font-size: 14px !important;
-        line-height: 1.5 !important;
-        min-height: 100px;
-        max-height: 360px;
-        /* 编辑区域最大高度 */
-        overflow-y: auto !important;
-        /* 内部滚动 */
+    .protyle-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 4px 0 16px;
         box-sizing: border-box;
-        white-space: pre-wrap;
-
-        blockquote {
-            border-left: 4px solid var(--b3-theme-primary-lightest) !important;
-            padding-left: 12px !important;
-            margin: 4px 0 !important;
-            color: var(--b3-theme-on-surface-light) !important;
-        }
-
-        code {
-            background-color: var(--b3-theme-surface-lighter) !important;
-            padding: 2px 4px !important;
-            border-radius: 3px !important;
-            font-family: var(--b3-font-family-code) !important;
-        }
-
-        p {
-            margin: 0 !important;
-            font-size: var(--b3-font-size) !important;
-        }
-
-        ul,
-        ol {
-            padding-left: 16px !important;
-            margin-bottom: 4px !important;
-        }
+        background-color: transparent;
     }
 
-    /* Crepe specific overrides to match Siyuan */
-    .crepe-toolbar {
-        background-color: var(--b3-theme-surface) !important;
-        border-bottom: 1px solid var(--b3-theme-surface-lighter) !important;
-        width: 100%;
+    .protyle-wysiwyg {
+        padding: 6px 12px !important;
+        min-height: 150px;
+        font-size: var(--b3-font-size);
         box-sizing: border-box;
     }
 
-    .crepe-block-handle {
-        color: var(--b3-theme-primary) !important;
-        z-index: 10;
-        /* 减少左侧边距 */
-        left: 2px !important;
+    .protyle-wysiwyg .img img {
+        max-width: 100%;
+        height: auto;
+        border-radius: var(--b3-border-radius);
+    }
+}
+
+.quick-reminder-dialog__note-only #quickReminderNote.tn-lite-protyle {
+    min-height: 220px;
+    max-height: 60vh;
+}
+
+.tn-paste-task-editor.tn-lite-protyle {
+    height: 300px;
+    min-height: 260px;
+
+    .protyle-wysiwyg {
+        min-height: 250px;
     }
 }
 

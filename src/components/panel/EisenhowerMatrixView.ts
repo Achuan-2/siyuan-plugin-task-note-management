@@ -25,6 +25,7 @@ import { generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKe
 import { createPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { shouldTreatStartDateOnlyAsOverdue } from "../../utils/startDateOverdue";
 import { shouldSkipReminderOnDate, type HolidayData } from "../../utils/reminderSkipDate";
+import { resolveExpandedInstanceNoteFields } from "../../utils/taskNoteStorage";
 interface QuadrantTask {
     id: string;
     title: string;
@@ -4853,7 +4854,7 @@ export class EisenhowerMatrixView {
                 endDate: task.endDate,
                 time: task.time,
                 endTime: task.endTime,
-                note: instanceState?.note !== undefined ? instanceState.note : (originalReminder.note || ''),
+                ...resolveExpandedInstanceNoteFields(originalReminder, instanceState, originalInstanceDate),
                 priority: instanceState?.priority !== undefined ? instanceState.priority : (originalReminder.priority || 'none'),
                 treatStartDateAsDeadline: instanceState?.treatStartDateAsDeadline !== undefined ? instanceState.treatStartDateAsDeadline : originalReminder.treatStartDateAsDeadline,
                 isInstance: true,

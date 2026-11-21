@@ -3,6 +3,7 @@ import { addDaysToDate, getDaysDifference, getRepeatInstanceOriginalKey, getRepe
 import { i18n } from '../pluginInstance';
 import { TaskActionUndo } from './taskActionUndo';
 import { cloneTaskData } from './taskUndoPatch';
+import { applyTaskNoteMetadata, copyTaskNote } from './taskNoteStorage';
 
 const copyQueues = new WeakMap<object, Promise<void>>();
 
@@ -115,6 +116,14 @@ export function buildTaskTreeCopy(data: Record<string, any>, target: any): { roo
             if (state && Object.prototype.hasOwnProperty.call(state, 'endDate')) copy.endDate = state.endDate;
         }
         copy.id = ids.get(entry.id)!;
+        // 记录源备注 ID，供 duplicateTaskTree 异步复制 notes/<id>.md 文件，落盘前由 cleanReminderItem 清除。
+        if (copy.notes === true) {
+            if (entry.id === sourceId && instanceKey && state?.notes === true) {
+                copy.__sourceNoteId = `${sourceId}_${instanceKey}`;
+            } else {
+                copy.__sourceNoteId = entry.id;
+            }
+        }
         // 对损坏的循环关系断开根的父引用；正常复制子任务时仍保留其外部父任务。
         copy.parentId = entry.id === sourceId
             ? (seen.has(source.parentId) ? undefined : source.parentId)
@@ -140,6 +149,19 @@ export function duplicateTaskTree(plugin: any, target: any): Promise<TaskActionU
     const pending = (copyQueues.get(plugin) || Promise.resolve()).then(async () => {
         const data = cloneTaskData(await plugin.loadReminderData() || {});
         const { tasks } = buildTaskTreeCopy(data, target);
+        // 复制拆分存储的备注文件 notes/<任务ID>.md
+        for (const copiedTask of Object.values(tasks)) {
+            const sourceNoteId = copiedTask.__sourceNoteId;
+            delete copiedTask.__sourceNoteId;
+            if (copiedTask.notes === true && sourceNoteId) {
+                try {
+                    const metadata = await copyTaskNote(plugin, sourceNoteId, copiedTask.id);
+                    applyTaskNoteMetadata(copiedTask, metadata);
+                } catch (err) {
+                    console.warn('Failed to copy task note during duplication:', sourceNoteId, copiedTask.id, err);
+                }
+            }
+        }
         const undo = new TaskActionUndo(plugin, data);
         await undo.save({ ...data, ...tasks });
         window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { refreshDelayMs: 0 } }));

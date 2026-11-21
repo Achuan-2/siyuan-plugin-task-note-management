@@ -23,7 +23,7 @@ module.exports = function loadTaskActionUndo(dependencies) {
             compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
         }).outputText;
         const requireDependency = id => {
-            if (['./taskUndoPatch', './reminderLoadUtils', './taskUndoToast', './taskActionUndo'].includes(id)) return load(id.slice(2));
+            if (['./taskUndoPatch', './reminderLoadUtils', './taskUndoToast', './taskActionUndo', './taskNoteStorage', './assetCleanupIgnore'].includes(id)) return load(id.slice(2));
             if (id === '../components/dataManager/repeatUtils') return repeatExports;
             if (id === './dateUtils') return {};
             if (['siyuan', '../api', '../pluginInstance', './icsSubscription'].includes(id)) return dependencies;

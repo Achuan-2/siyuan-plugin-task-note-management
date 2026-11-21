@@ -26,6 +26,9 @@ export interface RepeatInstanceState {
     docId?: string | null;
     url?: string;
     note?: string;
+    notes?: boolean;
+    noteSummary?: string;
+    noteAssets?: string[];
     priority?: string;
     categoryId?: string;
     projectId?: string;

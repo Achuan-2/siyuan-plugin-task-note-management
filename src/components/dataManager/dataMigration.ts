@@ -1,6 +1,17 @@
-import { setBlockAttrs } from "../../api";
+import { removeFile, setBlockAttrs } from "../../api";
 import { normalizeReminderSkipWeekendMode } from "../../utils/reminderSkipDate";
 import { RepeatInstanceState } from "../dialog/RepeatSettingsDialog";
+import {
+    addAssetCleanupIgnore,
+    convertLegacyHtmlImgToMarkdown,
+    extractNoteAssetPaths,
+    migrateLegacyAssetsInMarkdown,
+} from "../../utils/assetCleanupIgnore";
+import {
+    applyTaskNoteMetadata,
+    loadTaskNote,
+    saveTaskNote,
+} from "../../utils/taskNoteStorage";
 
 interface AudioFileItemLike {
     path: string;
@@ -234,6 +245,10 @@ export async function performDataMigration(plugin: MigrationPlugin): Promise<voi
 
         if (!settings.datatransfer?.repeatInstanceStateTransfer) {
             await migrateRepeatInstanceState(plugin, settings);
+        }
+
+        if (!settings.datatransfer?.taskNotesSplitTransfer) {
+            await migrateTaskNotesAndAssets(plugin, settings);
         }
     } catch (error) {
         console.error("Data migration failed:", error);
@@ -583,5 +598,147 @@ async function migrateRepeatInstanceState(plugin: MigrationPlugin, settings: any
         console.log("Repeat instance state migration complete");
     } catch (error) {
         console.error("Repeat instance state migration failed:", error);
+    }
+}
+
+/**
+ * 迁移任务备注正文至 notes/<任务ID>.md，并将旧版插件私有目录图片迁移到思源全局 assets/
+ * 同时注册到 data/.siyuan/assets-cleanup-ignore 避免被清理未引用资源误删。
+ */
+export async function migrateTaskNotesAndAssets(plugin: MigrationPlugin, settings: any): Promise<void> {
+    if (settings?.datatransfer?.taskNotesSplitTransfer) {
+        return;
+    }
+    try {
+        console.log("Starting task notes split & legacy assets migration...");
+        const reminderData = await plugin.loadReminderData(true);
+        if (!reminderData || typeof reminderData !== "object") {
+            settings.datatransfer = settings.datatransfer || {};
+            settings.datatransfer.taskNotesSplitTransfer = true;
+            await plugin.saveSettings(settings);
+            console.log("No reminder data found; skipping task notes migration");
+            return;
+        }
+
+        let changed = false;
+        let migratedNoteCount = 0;
+        const allAssetsToIgnore = new Set<string>();
+        const migratedLegacyPaths = new Set<string>();
+        const failedLegacyPaths = new Set<string>();
+
+        const processNote = async (noteId: string, rawMarkdown: string) => {
+            const migrated = await migrateLegacyAssetsInMarkdown(rawMarkdown, undefined, { skipAddIgnore: true });
+            for (const p of migrated.legacyPaths) migratedLegacyPaths.add(p);
+            for (const p of migrated.failedLegacyPaths) failedLegacyPaths.add(p);
+            const normalizedMd = convertLegacyHtmlImgToMarkdown(migrated.markdown).trim();
+            const metadata = await saveTaskNote(plugin, noteId, normalizedMd);
+            for (const asset of metadata.noteAssets || []) {
+                allAssetsToIgnore.add(asset);
+            }
+            for (const asset of extractNoteAssetPaths(normalizedMd)) {
+                allAssetsToIgnore.add(asset);
+            }
+            return metadata;
+        };
+
+        for (const [taskId, item] of Object.entries(reminderData) as [string, any][]) {
+            if (!item || typeof item !== "object") continue;
+
+            const originalTaskInlineNote = typeof item.note === "string" ? item.note : undefined;
+
+            if (originalTaskInlineNote !== undefined) {
+                const trimmed = originalTaskInlineNote.trim();
+                if (trimmed) {
+                    const metadata = await processNote(taskId, originalTaskInlineNote);
+                    applyTaskNoteMetadata(item, metadata);
+                    migratedNoteCount++;
+                } else {
+                    applyTaskNoteMetadata(item, { notes: false });
+                }
+                changed = true;
+            } else if (item.notes === true) {
+                // 已经拆分的备注：确保旧图片已迁移且 noteAssets / noteSummary 已补齐
+                const existingMd = await loadTaskNote(plugin, taskId, { forceReload: true });
+                if (existingMd.trim()) {
+                    const metadata = await processNote(taskId, existingMd);
+                    applyTaskNoteMetadata(item, metadata);
+                    changed = true;
+                }
+            }
+
+            // 迁移重复任务实例上的备注覆写
+            const instances = item.repeat?.instances;
+            if (instances && typeof instances === "object") {
+                for (const [instanceDate, state] of Object.entries(instances as Record<string, any>)) {
+                    if (!state || typeof state !== "object") continue;
+                    const instanceNoteId = `${taskId}_${instanceDate}`;
+
+                    if (typeof state.note === "string") {
+                        const trimmed = state.note.trim();
+                        if (trimmed) {
+                            if (originalTaskInlineNote !== undefined && state.note === originalTaskInlineNote) {
+                                // 与模板备注完全一致，直接继承父任务
+                                delete state.note;
+                                delete state.notes;
+                                delete state.noteSummary;
+                                delete state.noteAssets;
+                            } else {
+                                const metadata = await processNote(instanceNoteId, state.note);
+                                applyTaskNoteMetadata(state, metadata, {
+                                    isRepeatInstance: true,
+                                    parentHasNote: item.notes === true,
+                                });
+                                migratedNoteCount++;
+                            }
+                        } else {
+                            applyTaskNoteMetadata(state, { notes: false }, {
+                                isRepeatInstance: true,
+                                parentHasNote: item.notes === true,
+                            });
+                        }
+                        changed = true;
+                    } else if (state.notes === true) {
+                        const existingMd = await loadTaskNote(plugin, instanceNoteId, { forceReload: true });
+                        if (existingMd.trim()) {
+                            const metadata = await processNote(instanceNoteId, existingMd);
+                            applyTaskNoteMetadata(state, metadata, {
+                                isRepeatInstance: true,
+                                parentHasNote: item.notes === true,
+                            });
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (allAssetsToIgnore.size > 0) {
+            await addAssetCleanupIgnore(allAssetsToIgnore).catch((err) => {
+                console.warn("Failed to register migrated task note assets in assets-cleanup-ignore:", err);
+            });
+        }
+
+        if (changed) {
+            await plugin.saveReminderData(reminderData);
+        }
+
+        // 仅在数据成功落盘且该旧资源未出现迁移失败时清理旧插件私有图片副本
+        for (const legacyPath of migratedLegacyPaths) {
+            if (failedLegacyPaths.has(legacyPath)) continue;
+            try {
+                await removeFile(legacyPath);
+            } catch (err) {
+                console.warn("Failed to remove migrated legacy plugin asset:", legacyPath, err);
+            }
+        }
+
+        if (failedLegacyPaths.size === 0) {
+            settings.datatransfer = settings.datatransfer || {};
+            settings.datatransfer.taskNotesSplitTransfer = true;
+            await plugin.saveSettings(settings);
+        }
+        console.log(`Task notes split migration complete: migrated ${migratedNoteCount} notes, ${allAssetsToIgnore.size} assets registered`);
+    } catch (error) {
+        console.error("Task notes split migration failed:", error);
     }
 }

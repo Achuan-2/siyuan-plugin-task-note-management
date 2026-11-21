@@ -39,6 +39,11 @@ function fixture(data, { failSave = false, retained = {} } = {}) {
             },
         },
         './taskActionUndo': { TaskActionUndo: Undo },
+        './taskNoteStorage': {
+            copyTaskNote: async () => false,
+            hasTaskNote: task => Boolean(task?.notes === true || (typeof task?.note === 'string' && task.note.trim())),
+            resolveTaskNoteRef: task => ({ noteId: task?.noteId || task?.id || '', hasNote: Boolean(task?.notes === true) }),
+        },
     };
     const exported = {};
     new Function('require', 'exports', code)(name => {

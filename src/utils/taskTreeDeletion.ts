@@ -5,6 +5,7 @@ import { deleteSubscriptionReminderTask, getAllReminders } from './icsSubscripti
 import { createCompletedRemindersForDeletion } from './repeatTaskDeletion';
 import { TaskActionUndo } from './taskActionUndo';
 import type { HolidayData } from './reminderSkipDate';
+import { applyTaskNoteMetadata, copyTaskNote } from './taskNoteStorage';
 
 /** 包括所有层级子任务及落盘的重复实例，损坏的循环关系也只访问一次。 */
 export function collectTaskDeletionIds(data: Record<string, any>, targets: string | Iterable<string>): Set<string> {
@@ -34,6 +35,22 @@ export async function deleteTaskTree(plugin: any, targetId: string, keepComplete
     const retained = keepCompletedInstances
         ? createCompletedRemindersForDeletion(data, ids, { settings: plugin.settings, holidayData })
         : {};
+    // 保留已完成实例时，若实例继承了父模板的拆分备注（没有独立备注文件），先将父模板备注复制到实例 ID 对应的备注文件。
+    for (const [retainedId, retainedTask] of Object.entries(retained)) {
+        if (!retainedTask || retainedTask.notes !== true) continue;
+        const parsed = parseReminderInstanceId(retainedId);
+        if (!parsed) continue;
+        const original = data[parsed.originalId];
+        const instanceState = original?.repeat?.instances?.[parsed.instanceDate];
+        if (original?.notes === true && instanceState?.notes !== true) {
+            try {
+                const metadata = await copyTaskNote(plugin, parsed.originalId, retainedId);
+                applyTaskNoteMetadata(retainedTask, metadata);
+            } catch (err) {
+                console.warn('Failed to copy inherited note to retained completed instance:', retainedId, err);
+            }
+        }
+    }
     const blockIds = new Set<string>();
     const removed = Array.from(ids, id => data[id]).filter(Boolean);
     for (const task of removed) {

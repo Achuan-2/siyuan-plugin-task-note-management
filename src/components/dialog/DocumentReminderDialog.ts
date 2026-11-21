@@ -9,6 +9,7 @@ import { TaskRenderer } from "../render/TaskRenderer";
 import { generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, setRepeatInstanceCompletion, excludeRepeatInstance, addDaysToDate, getDaysDifference, resolveRepeatReminderTimes } from "../dataManager/repeatUtils";
 import { i18n } from "../../pluginInstance";
 import type { HolidayData } from "../../utils/reminderSkipDate";
+import { getTaskNotePreviewText } from "../../utils/taskNoteStorage";
 
 export class DocumentReminderDialog {
     private dialog: Dialog;
@@ -358,7 +359,7 @@ export class DocumentReminderDialog {
         const query = this.searchQuery.toLowerCase();
         return reminders.filter(reminder => {
             const title = (reminder.title || '').toLowerCase();
-            const note = (reminder.note || '').toLowerCase();
+            const note = getTaskNotePreviewText(reminder).toLowerCase();
             const date = reminder.date || '';
             const time = reminder.time || '';
 

@@ -4,6 +4,7 @@ import type { ProjectManager } from "../../components/dataManager/projectManager
 import type { ReminderTime } from "../../types/reminder";
 import type { ToolDefinition } from "./common";
 import { ReminderTaskLogic } from "../../utils/reminderTaskLogic";
+import { hasTaskNote, loadTaskNote } from "../../utils/taskNoteStorage";
 import {
     getBlockByID,
     updateBindBlockAtrrs,
@@ -450,6 +451,13 @@ export function createTaskTool(
                         }
                     }
                     
+                    if (hasTaskNote(task)) {
+                        const fullNote = await loadTaskNote((reminderManager as any).plugin, task);
+                        if (fullNote) {
+                            task = { ...task, note: fullNote };
+                        }
+                    }
+
                     return successResponse(cleanObject(task));
                 }
 

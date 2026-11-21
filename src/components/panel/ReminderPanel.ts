@@ -21,6 +21,11 @@ import { TaskRenderer, type TaskRenderContext } from "../render/TaskRenderer";
 import { MiniTaskHoverTooltipController, showMiniTaskTouchTooltip } from '../render/miniTaskTouchTooltip';
 import { createPanelViewMenu, normalizePanelViewMode, type PanelViewMode } from "../menu/PanelViewMenu";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
+import {
+    getTaskNotePreviewText,
+    getTaskNoteRenderKey,
+    resolveExpandedInstanceNoteFields,
+} from "../../utils/taskNoteStorage";
 import { normalizeReminderGroupMode, orderRemindersByGroup, type ReminderGroup, type ReminderGroupMode } from '../../utils/reminderGrouping';
 import { buildProjectFolderOrderMap } from '../../utils/projectFolderOrder';
 import { ProjectFolderManager } from '../dataManager/projectFolderManager';
@@ -1692,7 +1697,7 @@ export class ReminderPanel {
         return reminders.filter(reminder => {
             const searchableText = [
                 reminder.title || '',
-                reminder.note || '',
+                getTaskNotePreviewText(reminder),
                 reminder.categoryId || ''
             ].join(' ').toLowerCase();
 
@@ -3053,7 +3058,7 @@ export class ReminderPanel {
         const parsedInstance = isRepeatInstance ? parseReminderInstanceId(reminder.id) : null;
         // 对话框保存前后的 none/null/空字段采用相同语义，不能因此替换整张卡片。
         const renderReminder = cleanReminderItem({
-            ...reminder, title: undefined, note: undefined, sort: undefined, createdTime: undefined,
+            ...reminder, title: undefined, note: undefined, notes: undefined, noteSummary: undefined, noteAssets: undefined, noteId: undefined, sort: undefined, createdTime: undefined,
             isInstance: undefined, isRepeatInstance, completed: !!reminder.completed,
             originalId: isRepeatInstance ? (reminder.originalId || parsedInstance?.originalId) : undefined,
             instanceDate: isRepeatInstance ? (reminder.instanceDate || parsedInstance?.instanceDate) : undefined,
@@ -3094,7 +3099,8 @@ export class ReminderPanel {
             Object.assign(state.reminder, reminder);
         }
         const title = reminder.title || '';
-        const tooltipChanged = state.title !== title || state.note !== (reminder.note || '');
+        const noteKey = getTaskNoteRenderKey(reminder);
+        const tooltipChanged = state.title !== title || state.note !== noteKey;
         if (state.title !== title) {
             const titleEl = element.querySelector('.reminder-item__title');
             if (titleEl) {
@@ -3105,15 +3111,13 @@ export class ReminderPanel {
             }
             state.title = title;
         }
-        const note = reminder.note || '';
-        if (state.note !== note) {
+        if (state.note !== noteKey) {
             const currentNote = element.querySelector<HTMLElement>('.reminder-item__note');
             const updatedNote = TaskRenderer.createNoteElement(state.reminder, {
                 plugin: this.plugin, today: getLogicalDateString(), lute: this.lute, viewMode: this.viewMode,
             }, state.onNoteClick);
             if (currentNote && updatedNote) {
-                currentNote.replaceChildren(...Array.from(updatedNote.childNodes));
-                currentNote.style.cssText = updatedNote.style.cssText;
+                currentNote.replaceWith(updatedNote);
             } else if (currentNote) {
                 currentNote.remove();
             } else if (updatedNote) {
@@ -3124,7 +3128,7 @@ export class ReminderPanel {
                 ].some(className => child.classList.contains(className)));
                 info?.insertBefore(updatedNote, before || null);
             }
-            state.note = note;
+            state.note = noteKey;
         }
         if (tooltipChanged && state.tooltipContext) {
             TaskRenderer.updateMiniTaskTooltip(element, state.reminder, state.tooltipContext);
@@ -3424,7 +3428,7 @@ export class ReminderPanel {
         const element = TaskRenderer.render(renderedReminder, context, renderCallbacks, level, allVisibleReminders);
         if (this.selectionOptions) this.configureTaskSelection(element, renderedReminder);
         this.reminderElementStates.set(element, {
-            reminder: renderedReminder, signature, title: reminder.title || '', note: reminder.note || '',
+            reminder: renderedReminder, signature, title: reminder.title || '', note: getTaskNoteRenderKey(renderedReminder),
             onNoteClick: callbacks.onNoteClick,
             tooltipContext: this.viewMode === 'mini' ? context : undefined,
         });
@@ -9924,7 +9928,7 @@ export class ReminderPanel {
                         blockId: getInstanceField(instanceState, 'blockId', originalReminder.blockId),
                         docId: getInstanceField(instanceState, 'docId', originalReminder.docId),
                         url: getInstanceField(instanceState, 'url', originalReminder.url),
-                        note: getInstanceField(instanceState, 'note', originalReminder.note || ''),
+                        ...resolveExpandedInstanceNoteFields(originalReminder, instanceState, originalInstanceDate),
                         priority: getInstanceField(instanceState, 'priority', originalReminder.priority || 'none'),
                         categoryId: getInstanceField(instanceState, 'categoryId', originalReminder.categoryId),
                         projectId: getInstanceField(instanceState, 'projectId', originalReminder.projectId),
@@ -10536,7 +10540,12 @@ export class ReminderPanel {
                 }
             }
             if (cachedTarget) {
-                patchRepeatInstanceState(cachedTarget, instanceDate, { note: savedReminder.note });
+                patchRepeatInstanceState(cachedTarget, instanceDate, {
+                    note: savedReminder.note,
+                    notes: savedReminder.notes,
+                    noteSummary: savedReminder.noteSummary,
+                    noteAssets: savedReminder.noteAssets,
+                });
                 this.optimisticUpdatesCache?.set(targetId, cachedTarget);
             }
         } else {
@@ -10591,6 +10600,9 @@ export class ReminderPanel {
                     if (cachedTarget) {
                         patchRepeatInstanceState(cachedTarget, instanceDate, {
                             note: savedReminder.note,
+                            notes: savedReminder.notes,
+                            noteSummary: savedReminder.noteSummary,
+                            noteAssets: savedReminder.noteAssets,
                             title: savedReminder.title,
                             completed: savedReminder.completed,
                             completedTime: savedReminder.completedTime,

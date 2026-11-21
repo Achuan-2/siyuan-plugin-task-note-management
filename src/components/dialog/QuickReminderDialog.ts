@@ -19,16 +19,14 @@ import { setTaskMetadataText, renderTaskMetadataIcon, renderTaskMetadataText, ty
 import { collectTaskDeletionIds, deleteTaskTree } from "../../utils/taskTreeDeletion";
 import { getAllReminders } from "../../utils/icsSubscription";
 import { showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
-import { Plugin, NodeSelection } from "@milkdown/prose/state";
-import { commonmark } from "@milkdown/kit/preset/commonmark";
-import { gfm } from "@milkdown/kit/preset/gfm";
-import { history } from "@milkdown/kit/plugin/history";
-import { cursor } from "@milkdown/kit/plugin/cursor";
-import { clipboard } from "@milkdown/kit/plugin/clipboard";
-import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
-import { replaceAll, $view } from "@milkdown/utils";
-import { listItemSchema, imageSchema } from "@milkdown/kit/preset/commonmark";
+import { LiteProtyleEditor } from "../editor/LiteProtyleEditor";
+import { addAssetCleanupIgnore, reconcileRemovedTaskAssets } from "../../utils/assetCleanupIgnore";
+import {
+    applyTaskNoteMetadata,
+    buildTaskNoteMetadata,
+    loadTaskNote,
+    saveTaskNote,
+} from "../../utils/taskNoteStorage";
 import { getHabitGoalType } from "../../utils/habitUtils";
 import {
     getGlobalStartDateOnlyOverdue,
@@ -61,161 +59,119 @@ type CustomReminderTimeItem = {
 export class QuickReminderDialog {
     private static activeDialogs: Map<string, QuickReminderDialog> = new Map();
     private dialog: Dialog;
-    private editor?: Editor;
+    private noteEditor?: LiteProtyleEditor;
     private currentNote: string = '';
+    private noteDirty: boolean = false;
+    private noteLoaded: boolean = false;
+    private noteLoadPromise?: Promise<void>;
+    private sessionUploadedAssets: Set<string> = new Set();
+    private savedSuccessfully: boolean = false;
     private blockId?: string;
     private reminder?: any;
     private onSaved?: (modifiedReminder?: any) => void;
     private mode: 'quick' | 'block' | 'edit' | 'batch_edit' | 'note' = 'quick'; // 模式：快速创建、块绑定创建、编辑、批量编辑、仅备注
 
-    private findMarkRange(doc: any, pos: number, type: any) {
-        let $pos = doc.resolve(pos);
-        let from = pos;
-        let to = pos;
+    private initNoteEditor(): void {
+        const noteContainer = this.dialog?.element?.querySelector('#quickReminderNote') as HTMLElement | null;
+        if (!noteContainer) return;
 
-        // 向前找
-        while (from > $pos.start() && type.isInSet(doc.nodeAt(from - 1)?.marks || [])) {
-            from--;
+        let initialNote = '';
+        let shouldAsyncLoad = false;
+        if ((this.mode === 'edit' || this.mode === 'batch_edit' || this.mode === 'note') && this.reminder) {
+            if (typeof this.reminder.note === 'string' && this.reminder.note) {
+                initialNote = this.reminder.note;
+                this.noteLoaded = true;
+            } else if (this.reminder.notes === true && !this.reminder.isSubscribed) {
+                shouldAsyncLoad = true;
+            } else {
+                this.noteLoaded = true;
+            }
+        } else if (this.defaultNote) {
+            initialNote = this.defaultNote;
+            this.noteLoaded = true;
+        } else {
+            this.noteLoaded = true;
         }
-        // 向后找
-        while (to < $pos.end() && type.isInSet(doc.nodeAt(to)?.marks || [])) {
-            to++;
-        }
-        return { from, to };
-    }
 
-    private showLinkOptions(view: any, pos: number, mark: any) {
-        const dialog = new Dialog({
-            title: i18n('linkOptions') || '链接选项',
-            content: `
-                <div class="b3-dialog__content" style="display: flex; flex-direction: column; gap: 12px; padding: 16px;">
-                    <div style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; color: var(--b3-theme-primary);">
-                        ${mark.attrs.href}
-                    </div>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="b3-button b3-button--outline" id="jumpBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconOpenWindow"></use></svg>
-                            ${i18n('jump') || '打开链接'}
-                        </button>
-                        <button class="b3-button b3-button--outline" id="editLinkBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconEdit"></use></svg>
-                            ${i18n('edit') || '编辑'}
-                        </button>
-                        <button class="b3-button b3-button--cancel" id="removeLinkBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
-                            ${i18n('remove') || '取消链接'}
-                        </button>
-                    </div>
-                </div>
-            `,
-            width: "400px"
+        this.currentNote = initialNote;
+        this.noteDirty = false;
+
+        this.noteEditor = new LiteProtyleEditor({
+            app: this.plugin?.app || (window as any).siyuan?.ws?.app,
+            plugin: this.plugin,
+            container: noteContainer,
+            initialMarkdown: initialNote,
+            placeholder: i18n("enterReminderNote") || "输入备注，支持 Markdown、粘贴图片和文件...",
+            readOnly: this.readOnly,
+            enableAssets: true,
+            onChange: (markdown) => {
+                this.noteDirty = true;
+                this.currentNote = markdown;
+            },
+            onAssetUploaded: (assetPaths) => {
+                for (const p of assetPaths) {
+                    this.sessionUploadedAssets.add(p);
+                }
+                void addAssetCleanupIgnore(assetPaths).catch((err) => {
+                    console.warn("Failed to add uploaded note assets to cleanup ignore:", err);
+                });
+            },
+            onImageDoubleClick: (src) => {
+                this.showImageModal(src, i18n("imagePreviewTitle"));
+            },
         });
 
-        const jumpBtn = dialog.element.querySelector('#jumpBtn') as HTMLButtonElement;
-        const editLinkBtn = dialog.element.querySelector('#editLinkBtn') as HTMLButtonElement;
-        const removeLinkBtn = dialog.element.querySelector('#removeLinkBtn') as HTMLButtonElement;
-
-        jumpBtn.onclick = () => {
-            window.open(mark.attrs.href, '_blank');
-            dialog.destroy();
-        };
-
-        editLinkBtn.onclick = () => {
-            dialog.destroy();
-            this.showLinkEditor(view, pos, mark);
-        };
-
-        removeLinkBtn.onclick = () => {
-            const { tr } = view.state;
-            const range = this.findMarkRange(view.state.doc, pos, view.state.schema.marks.link);
-            if (range) {
-                view.dispatch(tr.removeMark(range.from, range.to, view.state.schema.marks.link));
-            }
-            dialog.destroy();
-        };
-    }
-
-    private showLinkEditor(view: any, pos: number, mark: any) {
-        const range = this.findMarkRange(view.state.doc, pos, view.state.schema.marks.link);
-        const currentText = range ? view.state.doc.textBetween(range.from, range.to) : '';
-
-        const dialog = new Dialog({
-            title: i18n('editLink') || '编辑链接',
-            content: `
-                <div class="b3-dialog__content" style="padding: 16px;">
-                    <div style="margin-bottom: 12px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkUrl') || '链接地址'}:</label>
-                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://..." spellcheck="false">${mark.attrs.href}</textarea>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkTitle')}:</label>
-                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder')}" spellcheck="false">${currentText}</textarea>
-                    </div>
-                </div>
-                <div class="b3-dialog__action">
-                    <button class="b3-button b3-button--cancel" id="cancelLinkBtn">${i18n('cancel') || '取消'}</button>
-                    <button class="b3-button b3-button--primary" id="saveLinkBtn">${i18n('save') || '确定'}</button>
-                </div>
-            `,
-            width: "400px"
-        });
-
-        const urlInput = dialog.element.querySelector('#linkUrl') as HTMLInputElement;
-        const titleInput = dialog.element.querySelector('#linkTitle') as HTMLInputElement;
-        const cancelBtn = dialog.element.querySelector('#cancelLinkBtn') as HTMLButtonElement;
-        const saveBtn = dialog.element.querySelector('#saveLinkBtn') as HTMLButtonElement;
-
-        urlInput.focus();
-
-        cancelBtn.onclick = () => dialog.destroy();
-        saveBtn.onclick = () => {
-            const newHref = urlInput.value.trim();
-            const newTitle = titleInput.value.trim();
-            if (newHref && range) {
-                const { tr, schema } = view.state;
-                const linkMark = schema.marks.link.create({ href: newHref });
-
-                // Replace text and apply mark
-                view.dispatch(
-                    tr.replaceWith(range.from, range.to, schema.text(newTitle || newHref))
-                        .addMark(range.from, range.from + (newTitle || newHref).length, linkMark)
-                );
-            }
-            dialog.destroy();
-        };
-    }
-
-    private async handleImagePaste(view: any, file: File) {
-        try {
-            const ext = file.name.split('.').pop() || 'png';
-            const baseName = file.name.replace(/\.[^/.]+$/, "") || 'image';
-
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const mins = String(now.getMinutes()).padStart(2, '0');
-            const secs = String(now.getSeconds()).padStart(2, '0');
-            const dateStr = `${year}${month}${day}${hours}${mins}${secs}`;
-
-            const randomStr = Math.random().toString(36).substring(2, 9);
-            const fileName = `${baseName}-${dateStr}-${randomStr}.${ext}`;
-            const targetPath = `/data/storage/petal/siyuan-plugin-task-note-management/assets/${fileName}`;
-
-            const { putFile } = await import('../../api');
-            await putFile(targetPath, false, file);
-
-            const { state } = view;
-            const { tr, schema } = state;
-            const imageNode = schema.nodes.image.create({
-                src: targetPath,
-                alt: fileName
-            });
-            view.dispatch(tr.replaceSelectionWith(imageNode).scrollIntoView());
-        } catch (e) {
-            console.error("Paste image error", e);
+        if (this.mode === 'note' && !this.readOnly) {
+            setTimeout(() => this.noteEditor?.focus(), 0);
         }
+
+        if (shouldAsyncLoad && this.reminder) {
+            this.noteLoadPromise = loadTaskNote(this.plugin, this.reminder)
+                .then((loaded) => {
+                    this.noteLoaded = true;
+                    if (!this.noteDirty && this.noteEditor) {
+                        this.currentNote = loaded || '';
+                        this.noteEditor.setMarkdown(this.currentNote);
+                    }
+                })
+                .catch((err) => {
+                    this.noteLoaded = true;
+                    console.warn("Failed to load task note on demand:", err);
+                });
+        }
+    }
+
+    private cleanupSessionUploadedAssets(finalReminderData?: Record<string, any>): void {
+        if (this.sessionUploadedAssets.size === 0) return;
+        const candidates = Array.from(this.sessionUploadedAssets);
+        this.sessionUploadedAssets.clear();
+        void (async () => {
+            try {
+                const data = finalReminderData || await this.plugin?.loadReminderData?.();
+                if (data && typeof data === 'object') {
+                    await reconcileRemovedTaskAssets(candidates, data);
+                }
+            } catch (err) {
+                console.warn("Failed to reconcile session uploaded assets:", err);
+            }
+        })();
+    }
+
+    private async persistSplitTaskNote(
+        target: Record<string, any>,
+        noteId: string,
+        markdown: string,
+        reminderData: Record<string, any>,
+        options?: { isRepeatInstance?: boolean; parentHasNote?: boolean; previousAssets?: string[] }
+    ): Promise<void> {
+        const metadata = await saveTaskNote(this.plugin, noteId, markdown, {
+            previousAssets: options?.previousAssets,
+            allReminders: reminderData,
+        });
+        applyTaskNoteMetadata(target, metadata, {
+            isRepeatInstance: options?.isRepeatInstance,
+            parentHasNote: options?.parentHasNote,
+        });
     }
 
     private showImageModal(src: string, title?: string) {
@@ -467,57 +423,6 @@ export class QuickReminderDialog {
             };
             img.onerror = () => reject(new Error("Failed to load image for conversion"));
             img.src = URL.createObjectURL(blob);
-        });
-    }
-
-    private getWidthFromSrc(src: string): string | null {
-        if (!src) return null;
-        const match = src.match(/[?#](?:width|w)=(\d+)(px|%)?/);
-        return match ? match[1] + (match[2] || "px") : null;
-    }
-
-    private convertHtmlImgToMarkdown(note: string): string {
-        if (!note) return note;
-        return note.replace(/<img\s+([^>]+)>/gi, (match, attrsStr) => {
-            const srcMatch = attrsStr.match(/src="([^"]+)"/i);
-            const widthMatch = attrsStr.match(/width="([^"]+)"/i);
-            const altMatch = attrsStr.match(/alt="([^"]+)"/i);
-            const titleMatch = attrsStr.match(/title="([^"]+)"/i);
-
-            const src = srcMatch ? srcMatch[1] : '';
-            const width = widthMatch ? widthMatch[1] : '';
-            const alt = altMatch ? altMatch[1] : '';
-            const title = titleMatch ? ` "${titleMatch[1]}"` : '';
-
-            if (!src) return match;
-
-            if (width) {
-                const baseSrc = src.split('#')[0];
-                return `![${alt}](${baseSrc}#width=${width}${title})`;
-            } else {
-                return `![${alt}](${src}${title})`;
-            }
-        });
-    }
-
-    private convertMarkdownImgToHtml(note: string): string {
-        if (!note) return note;
-        return note.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, urlPart) => {
-            const parts = urlPart.trim().match(/^([^\s]+)(?:\s+["'](.*)["'])?$/);
-            if (!parts) return match;
-
-            const fullUrl = parts[1];
-            const title = parts[2] || '';
-
-            const hashMatch = fullUrl.match(/#width=([^&]+)/);
-            if (hashMatch) {
-                const baseSrc = fullUrl.split('#')[0];
-                const width = hashMatch[1];
-                const titleAttr = title ? ` title="${title}"` : '';
-                const altAttr = alt ? ` alt="${alt}"` : '';
-                return `<img src="${baseSrc}" width="${width}"${altAttr}${titleAttr} />`;
-            }
-            return match;
         });
     }
 
@@ -2381,11 +2286,8 @@ export class QuickReminderDialog {
 
         if (tab === 'subtasks') {
             await this.mountSubtasksTab();
-        } else if (tab === 'notes' && this.editor) {
-            this.editor.action((ctx) => {
-                const view = ctx.get(editorViewCtx);
-                view?.focus();
-            });
+        } else if (tab === 'notes' && this.noteEditor) {
+            this.noteEditor.focus();
         }
     }
 
@@ -2979,9 +2881,9 @@ export class QuickReminderDialog {
         this.dialog = new Dialog({
             title: this.readOnly ? (i18n("viewTasks") || "查看任务") : (this.dateOnly ? i18n("editDate") : (this.mode === 'edit' ? i18n("editReminder") : (this.mode === 'note' ? i18n("editNote") : i18n("createQuickReminder")))),
             content: this.mode === 'note' ? `
-                <div class="quick-reminder-dialog">
+                <div class="quick-reminder-dialog quick-reminder-dialog__note-only">
                     <div class="b3-dialog__content">
-                        <!-- 备注 (Vditor) -->
+                        <!-- 备注 (精简版 Protyle) -->
                         <div class="b3-form__group" style="margin-top: 0;">
                             <div id="quickReminderNote" style="width: 100%;"></div>
                         </div>
@@ -3422,9 +3324,12 @@ export class QuickReminderDialog {
                 this.taskSelectionPanel = undefined;
                 this.subtasksDialog?.dispose();
                 this.subtasksDialog = undefined;
-                if (this.editor) {
-                    this.editor.destroy();
-                    this.editor = undefined;
+                if (this.noteEditor) {
+                    this.noteEditor.destroy();
+                    this.noteEditor = undefined;
+                }
+                if (!this.savedSuccessfully) {
+                    this.cleanupSessionUploadedAssets();
                 }
                 const reminderId = this.reminder?.id;
                 if (reminderId && this.mode === 'edit') {
@@ -3434,427 +3339,10 @@ export class QuickReminderDialog {
             }
         });
 
-        // Initialize Vditor
+        // Initialize Lite Protyle Note Editor
         setTimeout(() => {
-            let initialNote = '';
-            if ((this.mode === 'edit' || this.mode === 'batch_edit' || this.mode === 'note') && this.reminder && this.reminder.note) {
-                initialNote = this.reminder.note;
-            } else if (this.defaultNote) {
-                initialNote = this.defaultNote;
-            }
-            initialNote = this.convertHtmlImgToMarkdown(initialNote);
-
-            const noteContainer = this.dialog.element.querySelector('#quickReminderNote') as HTMLElement;
-            if (!noteContainer) return;
-
-            this.currentNote = initialNote;
-
-
-
-            Editor.make()
-                .config((ctx) => {
-                    ctx.set(rootCtx, noteContainer);
-                    ctx.set(defaultValueCtx, initialNote);
-                    ctx.update(editorViewOptionsCtx, (prev) => ({
-                        ...prev,
-                        editable: () => !this.readOnly,
-                        attributes: {
-                            ...prev.attributes,
-                            spellcheck: "false",
-                        },
-                    }));
-                    ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-                        this.currentNote = markdown;
-                    });
-
-                    // 优先获取纯文本 (Markdown)，并优化粘贴逻辑
-                    ctx.update(prosePluginsCtx, (prev) => [
-                        ...prev,
-                        new Plugin({
-                            props: {
-                                handlePaste: (view, event) => {
-                                    if (event.clipboardData && event.clipboardData.files && event.clipboardData.files.length > 0) {
-                                        const file = event.clipboardData.files[0];
-                                        if (file.type.startsWith('image/')) {
-                                            event.preventDefault();
-                                            this.handleImagePaste(view, file);
-                                            return true;
-                                        }
-                                    }
-
-                                    let text = event.clipboardData?.getData('text/plain');
-                                    if (text) {
-                                        // 统一换行符并将\r替换为\n，同时移除首尾多余的空行
-                                        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-                                        text = text.replace(/^\n+|\n+$/g, '');
-                                        if (!text) return false;
-
-                                        // 关键修复：确保单换行符被视为分段
-                                        // 在 Markdown 中，单个换行符会被解析为软换行，合并到同一段落
-                                        // 我们将其转换为双换行符以强制分段
-                                        if (text.includes('\n')) {
-                                            text = text.replace(/(?<!\n)\n(?!\n)/g, '\n\n');
-                                        }
-
-                                        // 禁用代码块解析：将行首的4个空格替换为2个全角空格
-                                        // 这样可以避免被 Markdown 解析为代码块
-                                        text = text.replace(/^( {4})/gm, '\u3000\u3000');
-
-                                        const { tr, doc } = view.state;
-                                        const isEmpty = doc.childCount === 1 &&
-                                            doc.firstChild?.type.name === 'paragraph' &&
-                                            doc.firstChild.content.size === 0;
-
-                                        const parser = ctx.get(parserCtx);
-                                        const node = parser(text);
-                                        if (!node) return false;
-
-                                        if (isEmpty) {
-                                            const content = node.type.name === 'doc' ? node.content : node;
-                                            // 彻底替换初始的空段落
-                                            view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
-                                            return true;
-                                        } else {
-                                            // 非空文档下，如果不含换行符，证明是行内粘贴，直接 insertText 以避免被切分为新段落
-                                            if (!text.includes('\n')) {
-                                                view.dispatch(tr.insertText(text).scrollIntoView());
-                                                return true;
-                                            }
-                                            // 如果有多行，我们也手动处理以确保刚才的换行符转换生效
-                                            const slice = (node as any).slice(0);
-                                            view.dispatch(tr.replaceSelection(slice).scrollIntoView());
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                },
-                                handleTextInput: (view, from, to, text) => {
-                                    const { state } = view;
-                                    const linkMark = state.schema.marks.link;
-                                    if (!linkMark) return false;
-
-                                    const $pos = state.doc.resolve(from);
-                                    if (linkMark.isInSet($pos.marks())) {
-                                        const range = this.findMarkRange(state.doc, from, linkMark);
-                                        // 如果在链接末尾打字，不应继续表现为链接文本
-                                        if (range && range.to === from) {
-                                            const marks = $pos.marks().filter(m => m.type !== linkMark);
-                                            const tr = state.tr.replaceWith(from, to, state.schema.text(text, marks));
-                                            tr.removeStoredMark(linkMark);
-                                            view.dispatch(tr);
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                },
-                                handleClick: (view, pos) => {
-                                    const { state } = view;
-                                    const linkMark = state.schema.marks.link;
-                                    if (!linkMark) return false;
-
-                                    const node = state.doc.nodeAt(pos);
-                                    const mark = node ? linkMark.isInSet(node.marks) : null;
-
-                                    if (mark) {
-                                        this.showLinkOptions(view, pos, mark);
-                                        return true;
-                                    }
-                                    return false;
-                                }
-                            }
-                        })
-                    ]);
-                })
-                .use(commonmark)
-                .use(gfm)
-                .use(history)
-                .use(clipboard)
-                .use(cursor)
-                .use(listener)
-                .use($view(imageSchema.node, () => (node, view, getPos) => {
-                    const container = document.createElement("div");
-                    container.className = "image-wrapper";
-                    container.style.cssText = `
-                        position: relative;
-                        display: inline-block;
-                        max-width: 100%;
-                    `;
-
-                    const initialWidth = this.getWidthFromSrc(node.attrs.src);
-                    if (initialWidth) {
-                        container.style.width = initialWidth;
-                    } else {
-                        container.style.width = "auto";
-                    }
-
-                    const img = document.createElement("img");
-                    if (node.attrs.alt) img.alt = node.attrs.alt;
-                    if (node.attrs.title) {
-                        img.classList.add('ariaLabel');
-                        img.setAttribute('aria-label', node.attrs.title);
-                    }
-                    img.style.cssText = `
-                        display: block;
-                        width: 100%;
-                        height: auto;
-                        max-width: 100%;
-                        cursor: pointer;
-                    `;
-
-                    img.addEventListener("click", (e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        if (typeof getPos === "function") {
-                            const { tr } = view.state;
-                            const selection = NodeSelection.create(view.state.doc, getPos());
-                            view.dispatch(tr.setSelection(selection));
-                            view.focus();
-                        }
-                    });
-                    img.addEventListener("dblclick", (e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        this.showImageModal(img.src, node.attrs.title || node.attrs.alt || i18n("imagePreviewTitle"));
-                    });
-                    img.addEventListener("contextmenu", (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.showImageContextMenu(e, img.src);
-                    });
-
-                    const handle = document.createElement("div");
-                    handle.style.cssText = `
-                        position: absolute;
-                        right: 0;
-                        top: 0;
-                        bottom: 0;
-                        width: 8px;
-                        cursor: col-resize;
-                        background: transparent;
-                        z-index: 10;
-                        transition: background 0.2s ease, border 0.2s ease;
-                    `;
-
-                    handle.addEventListener("mouseenter", () => {
-                        handle.style.borderRight = "2px solid var(--b3-theme-primary)";
-                    });
-                    handle.addEventListener("mouseleave", () => {
-                        if (!isResizing) {
-                            handle.style.borderRight = "none";
-                        }
-                    });
-
-                    let isResizing = false;
-                    let startClientX = 0;
-                    let startWidth = 0;
-
-                    handle.addEventListener("mousedown", (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        isResizing = true;
-                        startClientX = e.clientX;
-                        startWidth = container.offsetWidth;
-                        handle.style.borderRight = "2px solid var(--b3-theme-primary)";
-                        document.body.style.cursor = "col-resize";
-
-                        const onMouseMove = (moveEvent: MouseEvent) => {
-                            if (!isResizing) return;
-                            const deltaX = moveEvent.clientX - startClientX;
-                            const newWidth = Math.max(50, startWidth + deltaX);
-                            container.style.width = newWidth + "px";
-                        };
-
-                        const onMouseUp = () => {
-                            isResizing = false;
-                            document.body.style.cursor = "";
-                            handle.style.borderRight = "none";
-                            window.removeEventListener("mousemove", onMouseMove);
-                            window.removeEventListener("mouseup", onMouseUp);
-
-                            // Dispatch transaction to ProseMirror
-                            if (typeof getPos === "function") {
-                                const pos = getPos();
-                                const currentSrc = node.attrs.src || "";
-                                const baseAndQuery = currentSrc.split('#')[0];
-                                const finalWidth = container.offsetWidth;
-                                const newSrc = `${baseAndQuery}#width=${finalWidth}`;
-
-                                const { tr } = view.state;
-                                tr.setNodeMarkup(pos, undefined, {
-                                    ...node.attrs,
-                                    src: newSrc
-                                });
-                                view.dispatch(tr);
-                            }
-                        };
-
-                        window.addEventListener("mousemove", onMouseMove);
-                        window.addEventListener("mouseup", onMouseUp);
-                    });
-
-                    container.appendChild(img);
-                    container.appendChild(handle);
-
-                    const src = node.attrs.src;
-                    const cleanSrc = src ? src.split(/[?#]/)[0] : "";
-                    if (cleanSrc && cleanSrc.startsWith("/data/storage/petal/siyuan-plugin-task-note-management/assets/")) {
-                        import('../../api').then(({ getFileBlob }) => {
-                            getFileBlob(cleanSrc).then(blob => {
-                                if (blob) {
-                                    img.src = URL.createObjectURL(blob);
-                                } else {
-                                    img.src = cleanSrc;
-                                }
-                            });
-                        });
-                    } else {
-                        img.src = cleanSrc;
-                    }
-
-                    return {
-                        dom: container,
-                        update: (updatedNode) => {
-                            if (updatedNode.type.name !== 'image') return false;
-                            const newSrc = updatedNode.attrs.src;
-                            const newCleanSrc = newSrc ? newSrc.split(/[?#]/)[0] : "";
-                            const oldCleanSrc = node.attrs.src ? node.attrs.src.split(/[?#]/)[0] : "";
-                            
-                            if (newCleanSrc && newCleanSrc.startsWith("/data/storage/petal/siyuan-plugin-task-note-management/assets/")) {
-                                if (newCleanSrc !== oldCleanSrc) {
-                                    import('../../api').then(({ getFileBlob }) => {
-                                        getFileBlob(newCleanSrc).then(blob => {
-                                            if (blob) {
-                                                img.src = URL.createObjectURL(blob);
-                                            }
-                                        });
-                                    });
-                                }
-                            } else {
-                                img.src = newCleanSrc;
-                            }
-                            if (updatedNode.attrs.alt) img.alt = updatedNode.attrs.alt;
-                            if (updatedNode.attrs.title) {
-                                img.classList.add('ariaLabel');
-                                img.setAttribute('aria-label', updatedNode.attrs.title);
-                            } else {
-                                img.removeAttribute('title');
-                                img.removeAttribute('aria-label');
-                            }
-
-                            // Update width style
-                            const newWidth = this.getWidthFromSrc(newSrc);
-                            if (newWidth) {
-                                container.style.width = newWidth;
-                            } else {
-                                container.style.width = "auto";
-                            }
-                            return true;
-                        },
-                        ignoreMutation: (mutation) => {
-                            if (mutation.type === "attributes" && mutation.attributeName === "style") {
-                                return true;
-                            }
-                            return false;
-                        }
-                    };
-                }))
-                .use($view(listItemSchema.node, () => (node, view, getPos) => {
-                    const dom = document.createElement("li");
-                    const contentDOM = document.createElement("div");
-
-                    if (node.attrs.checked != null) {
-                        dom.classList.add("task-list-item");
-
-                        // Use absolute positioning for the checkbox to align with native list markers
-                        dom.classList.add("task-list-item");
-                        dom.style.listStyleType = "none";
-                        dom.style.position = "relative";
-
-                        const checkbox = document.createElement("input");
-                        checkbox.type = "checkbox";
-                        checkbox.checked = node.attrs.checked;
-
-                        // Position checkbox to the left, similar to a list marker
-                        checkbox.style.position = "absolute";
-                        checkbox.style.left = "-1.4em";
-                        checkbox.style.top = "0.3em";
-                        checkbox.style.margin = "0";
-
-                        // Handle click
-                        checkbox.onclick = (e) => {
-                            if (typeof getPos === "function") {
-                                const { tr } = view.state;
-                                tr.setNodeMarkup(getPos(), undefined, {
-                                    ...node.attrs,
-                                    checked: checkbox.checked
-                                });
-                                view.dispatch(tr);
-                            }
-                            e.stopPropagation();
-                        };
-
-                        dom.appendChild(checkbox);
-
-                        contentDOM.style.minWidth = "0"; // Flex fix for overflow
-                        dom.appendChild(contentDOM);
-
-                        return {
-                            dom,
-                            contentDOM,
-                            ignoreMutation: (mutation) => {
-                                // Ignore checkbox mutations done by user (we handle validation via onclick)
-                                return mutation.type === 'attributes' && mutation.target === checkbox;
-                            },
-                            update: (updatedNode) => {
-                                if (updatedNode.type.name !== "list_item") return false;
-                                // Force re-render if switching between task and normal list
-                                const isTask = node.attrs.checked != null;
-                                const newIsTask = updatedNode.attrs.checked != null;
-                                if (isTask !== newIsTask) return false;
-
-                                if (newIsTask) {
-                                    checkbox.checked = updatedNode.attrs.checked;
-                                }
-                                return true;
-                            }
-                        };
-                    } else {
-                        // Regular list item: just 'li'
-                        return {
-                            dom,
-                            contentDOM: dom
-                        };
-                    }
-                }))
-                .create()
-                .then((editor) => {
-                    this.editor = editor;
-
-                    // Only auto-focus the editor when in 'note' mode (editing note only).
-                    if (this.mode === 'note') {
-                        editor.action((ctx) => {
-                            const view = ctx.get(editorViewCtx);
-                            if (view) {
-                                view.focus();
-                            }
-                        });
-                    }
-
-                    const editorEl = this.dialog.element.querySelector('.milkdown') as HTMLElement;
-                    if (editorEl) {
-                        editorEl.style.height = '100%';
-                        editorEl.style.minHeight = '50px';
-                        editorEl.style.margin = '0px';
-                        const prosemirror = editorEl.querySelector('.ProseMirror') as HTMLElement;
-                        if (prosemirror) {
-                            prosemirror.style.minHeight = '50px';
-                            // Basic styling to mimic previous look roughly
-                            prosemirror.style.padding = '8px';
-                            prosemirror.style.outline = 'none';
-                        }
-                    }
-                });
-        }, 100);
+            this.initNoteEditor();
+        }, 50);
 
         this.bindEvents();
         await this.renderCategorySelector();
@@ -5485,14 +4973,12 @@ export class QuickReminderDialog {
                     this.autoResizeTextarea(titleInput);
 
                     // 如果有备注部分，放到备注
-                    if (noteAppend && this.editor) {
-                        const existingNote = this.currentNote;
-                        // 确保单换行符被视为分段（遵循编辑器本身粘贴逻辑）
+                    if (noteAppend && this.noteEditor) {
                         let formattedNote = noteAppend;
                         if (formattedNote.includes('\n')) {
                             formattedNote = formattedNote.replace(/(?<!\n)\n(?!\n)/g, '\n\n');
                         }
-                        this.editor.action(replaceAll(existingNote ? existingNote + '\n\n' + formattedNote : formattedNote));
+                        this.noteEditor.appendMarkdown(formattedNote);
                     }
 
                     // 如果启用了自动识别，检测日期时间
@@ -7017,9 +6503,9 @@ export class QuickReminderDialog {
     }
 
     private destroyDialog() {
-        if (this.editor) {
-            this.editor.destroy();
-            this.editor = undefined;
+        if (this.noteEditor) {
+            this.noteEditor.destroy();
+            this.noteEditor = undefined;
         }
         if (this.dialog) {
             this.dialog.destroy();
@@ -7084,49 +6570,102 @@ export class QuickReminderDialog {
             return;
         }
         if (!this.reminder) return;
+        if (this.noteLoadPromise) {
+            await this.noteLoadPromise;
+        }
 
-        let note = this.editor ? this.currentNote : this.reminder.note;
-        note = this.convertMarkdownImgToHtml(note);
+        const note = this.noteEditor ? this.noteEditor.getMarkdown() : this.currentNote;
 
         const isInstance = this.isInstanceEdit || !!this.reminder.isInstance || !!this.reminder.isRepeatInstance || (!!this.reminder.originalId && this.reminder.originalId !== this.reminder.id) || parseReminderInstanceId(this.reminder.id) !== null;
         const originalId = this.reminder.originalId || parseReminderInstanceId(this.reminder.id)?.originalId || this.reminder.id;
         const instanceDate = this.reminder.instanceDate || this.instanceDate || parseReminderInstanceId(this.reminder.id)?.instanceDate || this.reminder.date;
+        const isSubscribed = !!this.reminder.isSubscribed;
+        const targetNoteId = isInstance && originalId && instanceDate ? `${originalId}_${instanceDate}` : this.reminder.id;
 
-        // 乐观更新
-        const optimisticReminder = {
+        if (isSubscribed) {
+            const optimisticReminder = {
+                ...this.reminder,
+                note: note,
+                isInstance: isInstance,
+                isRepeatInstance: isInstance,
+                originalId: originalId,
+                instanceDate: instanceDate
+            };
+            this.savedSuccessfully = true;
+            this.onSaved?.(optimisticReminder);
+            this.destroyDialog();
+            try {
+                const { getAllReminders, saveReminders } = await import('../../utils/icsSubscription');
+                const allData = await getAllReminders(this.plugin);
+                if (allData[this.reminder.id]) {
+                    allData[this.reminder.id].note = note;
+                    await saveReminders(this.plugin, allData);
+                }
+            } catch (error) {
+                console.error("Failed to save subscribed note:", error);
+                showMessage(i18n("saveFailed"), 3000, 'error');
+            }
+            return;
+        }
+
+        const optimisticMetadata = buildTaskNoteMetadata(note);
+        const optimisticReminder: any = {
             ...this.reminder,
-            note: note,
             isInstance: isInstance,
             isRepeatInstance: isInstance,
             originalId: originalId,
-            instanceDate: instanceDate
+            instanceDate: instanceDate,
         };
-
-        // 立即回调
-        if (this.onSaved) {
-            this.onSaved(optimisticReminder);
+        applyTaskNoteMetadata(optimisticReminder, optimisticMetadata, {
+            isRepeatInstance: isInstance,
+            parentHasNote: this.reminder.notes === true,
+        });
+        if (optimisticMetadata.notes) {
+            optimisticReminder.noteId = targetNoteId;
         }
 
-        this.destroyDialog();
-
-        // 后台持久化
+        // 先落盘 notes/<id>.md 再通知卡片刷新，确保卡片读取到最新正文与 revision
         try {
-            if (isInstance && originalId && instanceDate) {
-                // 实例备注修改
-                await this.saveInstanceModification({
-                    originalId: originalId,
-                    instanceDate: instanceDate,
-                    note: note
-                });
-                console.debug("Instance note updated in background");
-            } else {
-                const reminderData = await this.plugin.loadReminderData();
-                if (reminderData[this.reminder.id]) {
-                    reminderData[this.reminder.id].note = note;
-                    await this.plugin.saveReminderData(reminderData);
-                    console.debug("Note updated in background");
-                }
+            const reminderData = await this.plugin.loadReminderData();
+            const originalTask = isInstance ? reminderData[originalId] : reminderData[this.reminder.id];
+            const prevInstanceState = isInstance ? originalTask?.repeat?.instances?.[instanceDate] : undefined;
+            const prevAssets = isInstance
+                ? (prevInstanceState?.noteAssets || [])
+                : (originalTask?.noteAssets || this.reminder.noteAssets || []);
+
+            const metadata = await saveTaskNote(this.plugin, targetNoteId, note, {
+                previousAssets: [...prevAssets, ...this.sessionUploadedAssets],
+                allReminders: reminderData,
+            });
+            applyTaskNoteMetadata(optimisticReminder, metadata, {
+                isRepeatInstance: isInstance,
+                parentHasNote: !!originalTask?.notes,
+            });
+            if (metadata.notes) {
+                optimisticReminder.noteId = targetNoteId;
             }
+
+            if (isInstance && originalId && instanceDate) {
+                const instanceNotePatch: Record<string, any> = {
+                    originalId,
+                    instanceDate,
+                    notes: metadata.notes ? true : (originalTask?.notes === true ? false : undefined),
+                    noteSummary: metadata.noteSummary,
+                    noteAssets: metadata.noteAssets,
+                    note: undefined,
+                };
+                await this.saveInstanceModification(instanceNotePatch);
+            } else if (reminderData[this.reminder.id]) {
+                applyTaskNoteMetadata(reminderData[this.reminder.id], metadata);
+                await this.plugin.saveReminderData(reminderData);
+            }
+
+            this.savedSuccessfully = true;
+            this.cleanupSessionUploadedAssets(reminderData);
+            if (this.onSaved) {
+                this.onSaved(optimisticReminder);
+            }
+            this.destroyDialog();
         } catch (error) {
             console.error("Failed to save note:", error);
             showMessage(i18n("saveFailed"), 3000, 'error');
@@ -7176,11 +6715,10 @@ export class QuickReminderDialog {
         const rawBlockVal = blockInput?.value?.trim() || undefined;
         const inputId = rawBlockVal ? (this.extractBlockId(rawBlockVal) || rawBlockVal) : undefined;
         const url = urlInput?.value?.trim() || undefined;
-        // const note = noteInput.value.trim() || undefined;
-        let note = this.editor ? this.currentNote : undefined;
-        if (note !== undefined) {
-            note = this.convertMarkdownImgToHtml(note);
+        if (this.noteLoadPromise) {
+            await this.noteLoadPromise;
         }
+        const note = this.noteEditor ? this.noteEditor.getMarkdown() : undefined;
         const priority = selectedPriority?.getAttribute('data-priority') || 'none';
 
         // 获取多分类ID
@@ -7384,7 +6922,14 @@ export class QuickReminderDialog {
                 optimisticReminder.time = time;
                 optimisticReminder.endDate = endDate;
                 optimisticReminder.endTime = endTime;
-                optimisticReminder.note = note;
+                if (note !== undefined) {
+                    if (optimisticReminder.isSubscribed) {
+                        optimisticReminder.note = note;
+                    } else {
+                        const optimisticMeta = buildTaskNoteMetadata(note);
+                        applyTaskNoteMetadata(optimisticReminder, optimisticMeta);
+                    }
+                }
                 optimisticReminder.priority = priority;
                 optimisticReminder.categoryId = categoryId;
                 optimisticReminder.projectId = projectId;
@@ -7499,7 +7044,7 @@ export class QuickReminderDialog {
                 // 检查是否是实例编辑
                 if (this.isInstanceEdit && this.reminder.isInstance) {
                     // 实例编辑：保存实例级别的修改
-                    const instanceModification = {
+                    const instanceModification: Record<string, any> = {
                         title: title,
                         date: date,
                         endDate: endDate,
@@ -7508,7 +7053,6 @@ export class QuickReminderDialog {
                         blockId: inputId || null,
                         docId: optimisticDocId || null,
                         url: url,
-                        note: note,
                         priority: priority,
                         notified: false, // 重置通知状态
                         projectId: projectId,
@@ -7529,6 +7073,28 @@ export class QuickReminderDialog {
                         customProgress: customProgress,
                         pinned: pinned
                     };
+                    if (note !== undefined) {
+                        const originalTask = reminderData[this.reminder.originalId];
+                        const prevInstanceState = originalTask?.repeat?.instances?.[this.reminder.instanceDate];
+                        const instanceNoteId = `${this.reminder.originalId}_${this.reminder.instanceDate}`;
+                        await this.persistSplitTaskNote(instanceModification, instanceNoteId, note, reminderData, {
+                            isRepeatInstance: true,
+                            parentHasNote: !!originalTask?.notes,
+                            previousAssets: [...(prevInstanceState?.noteAssets || []), ...(this.sessionUploadedAssets || [])],
+                        });
+                        if (instanceModification.notes) {
+                            optimisticReminder.notes = true;
+                            optimisticReminder.noteId = instanceNoteId;
+                            optimisticReminder.noteSummary = instanceModification.noteSummary;
+                            optimisticReminder.noteAssets = instanceModification.noteAssets;
+                            delete optimisticReminder.note;
+                        } else {
+                            optimisticReminder.notes = originalTask?.notes ? false : undefined;
+                            delete optimisticReminder.note;
+                            delete optimisticReminder.noteSummary;
+                            delete optimisticReminder.noteAssets;
+                        }
+                    }
                     this.applyStartDateOnlyOverdueOverride(instanceModification, date, endDate);
                     this.applyReminderSkipDateOverrides(instanceModification);
 
@@ -7538,6 +7104,8 @@ export class QuickReminderDialog {
                         instanceDate: this.reminder.instanceDate,
                         ...instanceModification
                     });
+                    this.savedSuccessfully = true;
+                    this.cleanupSessionUploadedAssets?.(reminderData);
 
                     this.onSaved?.(optimisticReminder);
                     this.destroyDialog();
@@ -7584,7 +7152,15 @@ export class QuickReminderDialog {
                     reminder.time = time;
                     reminder.endDate = endDate || undefined;
                     reminder.endTime = endTime;
-                    reminder.note = note;
+                    if (note !== undefined) {
+                        if (reminder.isSubscribed) {
+                            reminder.note = note;
+                        } else {
+                            await this.persistSplitTaskNote(reminder, reminderId, note, reminderData, {
+                                previousAssets: [...(latestReminder?.noteAssets || this.reminder?.noteAssets || []), ...(this.sessionUploadedAssets || [])],
+                            });
+                        }
+                    }
                     reminder.priority = priority;
                     reminder.categoryId = categoryId;
                     reminder.projectId = projectId;
@@ -7803,8 +7379,14 @@ export class QuickReminderDialog {
                     reminder.endTime = endTime;
                 }
 
-                if (note) {
-                    reminder.note = note;
+                if (note && note.trim()) {
+                    if (reminder.isSubscribed) {
+                        reminder.note = note;
+                    } else {
+                        await this.persistSplitTaskNote(reminder, reminderId, note, reminderData, {
+                            previousAssets: [...(this.sessionUploadedAssets || [])],
+                        });
+                    }
                 }
 
                 reminder.pinned = pinned;
@@ -7859,6 +7441,8 @@ export class QuickReminderDialog {
             } else {
                 await this.plugin.saveReminderData(reminderData);
             }
+            this.savedSuccessfully = true;
+            this.cleanupSessionUploadedAssets?.(reminderData);
 
             this.onSaved?.(reminder);
             this.destroyDialog();
@@ -7985,7 +7569,7 @@ export class QuickReminderDialog {
             };
 
             const directFields = [
-                'title', 'date', 'endDate', 'time', 'endTime', 'note', 'priority',
+                'title', 'date', 'endDate', 'time', 'endTime', 'note', 'notes', 'noteSummary', 'noteAssets', 'priority',
                 'notified', 'projectId', 'customGroupId', 'milestoneId', 'kanbanStatus',
                 'reminderTimes', 'estimatedPomodoroDuration', 'customProgress',
                 'treatStartDateAsDeadline', 'reminderSkipWeekendMode', 'reminderSkipHolidays',
@@ -8150,13 +7734,17 @@ export class QuickReminderDialog {
                     createdTime: nowStr,
                     kanbanStatus: tempSubtask.kanbanStatus || 'todo',
                     sort: tempSubtask.sort || 0,
-                    note: tempSubtask.note || undefined,
                     reminderTimes: tempSubtask.reminderTimes || undefined,
                     estimatedPomodoroDuration: tempSubtask.estimatedPomodoroDuration || undefined,
                     customProgress: this.normalizeCustomProgressValue(tempSubtask.customProgress),
                     pinned: tempSubtask.pinned || false,
                     notifiedTime: false
                 };
+
+                // 保存临时子任务的拆分备注
+                if (typeof tempSubtask.note === 'string' && tempSubtask.note.trim()) {
+                    await this.persistSplitTaskNote(subtask, subtaskId, tempSubtask.note, reminderData);
+                }
 
                 // 如果子任务有完成时间，保留它
                 if (tempSubtask.completed && tempSubtask.completedTime) {
@@ -8332,6 +7920,9 @@ export class QuickReminderDialog {
             'docId',
             'url',
             'note',
+            'notes',
+            'noteSummary',
+            'noteAssets',
             'priority',
             'categoryId',
             'projectId',
@@ -8455,6 +8046,9 @@ export class QuickReminderDialog {
             'docId',
             'url',
             'note',
+            'notes',
+            'noteSummary',
+            'noteAssets',
             'priority',
             'categoryId',
             'projectId',

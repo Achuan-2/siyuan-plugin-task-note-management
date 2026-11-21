@@ -70,9 +70,14 @@ function detachCompletedReminder(reminder: any): any {
     for (const field of [
         'repeat', 'isRepeated', 'isRepeatedInstance', 'isRepeatInstance', 'originalId', 'instanceId', 'instanceDate',
         'deleted', 'modifiedAt', 'preservedFromSeriesEdit', 'isSubscribed', 'subscriptionId', 'subscriptionType',
-        'caldavEditable', 'caldavDeletable', 'caldavHref', 'caldavEtag', 'caldavRawIcs',
+        'caldavEditable', 'caldavDeletable', 'caldavHref', 'caldavEtag', 'caldavRawIcs', 'noteId',
     ]) {
         delete snapshot[field];
+    }
+    if (snapshot.notes === false) {
+        delete snapshot.notes;
+        delete snapshot.noteSummary;
+        delete snapshot.noteAssets;
     }
     return snapshot;
 }

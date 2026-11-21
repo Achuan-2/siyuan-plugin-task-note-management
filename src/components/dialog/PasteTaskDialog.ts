@@ -5,17 +5,7 @@ import { autoDetectDateTimeFromTitle, getLocalDateTimeString } from "../../utils
 import { getBlockByID, updateBindBlockAtrrs, addBlockProjectId, putFile, getFile, readDir, removeFile } from "../../api";
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import LoadingDialog from './LoadingDialog.svelte';
-import { Editor, rootCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx } from "@milkdown/kit/core";
-import { commonmark } from "@milkdown/kit/preset/commonmark";
-import { gfm } from "@milkdown/kit/preset/gfm";
-import { history } from "@milkdown/kit/plugin/history";
-import { cursor } from "@milkdown/kit/plugin/cursor";
-import { clipboard } from "@milkdown/kit/plugin/clipboard";
-import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
-import { $view, replaceAll } from "@milkdown/utils";
-import { listItemSchema } from "@milkdown/kit/preset/commonmark";
-import { Plugin } from "@milkdown/prose/state";
-import { prosePluginsCtx, parserCtx } from "@milkdown/kit/core";
+import { LiteProtyleEditor } from "../editor/LiteProtyleEditor";
 
 export interface HierarchicalTask {
     title: string;
@@ -62,128 +52,11 @@ export interface PasteTaskDialogConfig {
 export class PasteTaskDialog {
     private config: PasteTaskDialogConfig;
     private loadingDialog: Dialog | null = null;
-    private editor?: Editor;
+    private noteEditor?: LiteProtyleEditor;
     private taskListContent: string = '';
 
     constructor(config: PasteTaskDialogConfig) {
         this.config = config;
-    }
-
-    private findMarkRange(doc: any, pos: number, type: any) {
-        let $pos = doc.resolve(pos);
-        let from = pos;
-        let to = pos;
-
-        // 向前找
-        while (from > $pos.start() && type.isInSet(doc.nodeAt(from - 1)?.marks || [])) {
-            from--;
-        }
-        // 向后找
-        while (to < $pos.end() && type.isInSet(doc.nodeAt(to)?.marks || [])) {
-            to++;
-        }
-        return { from, to };
-    }
-
-    private showLinkOptions(view: any, pos: number, mark: any) {
-        const dialog = new Dialog({
-            title: i18n('linkOptions') || '链接选项',
-            content: `
-                <div class="b3-dialog__content" style="display: flex; flex-direction: column; gap: 12px; padding: 16px;">
-                    <div style="font-weight: bold; overflow: hidden; text-overflow: ellipsis; color: var(--b3-theme-primary);">
-                        ${mark.attrs.href}
-                    </div>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="b3-button b3-button--outline" id="jumpBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconLink"></use></svg>
-                            ${i18n('jump') || '打开链接'}
-                        </button>
-                        <button class="b3-button b3-button--outline" id="editLinkBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconEdit"></use></svg>
-                            ${i18n('edit') || '编辑'}
-                        </button>
-                        <button class="b3-button b3-button--cancel" id="removeLinkBtn" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconTrashcan"></use></svg>
-                            ${i18n('remove') || '取消链接'}
-                        </button>
-                    </div>
-                </div>
-            `,
-            width: "400px"
-        });
-
-        const jumpBtn = dialog.element.querySelector('#jumpBtn') as HTMLButtonElement;
-        const editLinkBtn = dialog.element.querySelector('#editLinkBtn') as HTMLButtonElement;
-        const removeLinkBtn = dialog.element.querySelector('#removeLinkBtn') as HTMLButtonElement;
-
-        jumpBtn.onclick = () => {
-            window.open(mark.attrs.href, '_blank');
-            dialog.destroy();
-        };
-
-        editLinkBtn.onclick = () => {
-            dialog.destroy();
-            this.showLinkEditor(view, pos, mark);
-        };
-
-        removeLinkBtn.onclick = () => {
-            const { tr } = view.state;
-            const range = this.findMarkRange(view.state.doc, pos, view.state.schema.marks.link);
-            if (range) {
-                view.dispatch(tr.removeMark(range.from, range.to, view.state.schema.marks.link));
-            }
-            dialog.destroy();
-        };
-    }
-
-    private showLinkEditor(view: any, pos: number, mark: any) {
-        const range = this.findMarkRange(view.state.doc, pos, view.state.schema.marks.link);
-        const currentText = range ? view.state.doc.textBetween(range.from, range.to) : '';
-
-        const dialog = new Dialog({
-            title: i18n('editLink') || '编辑链接',
-            content: `
-                <div class="b3-dialog__content" style="padding: 16px;">
-                    <div style="margin-bottom: 12px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkUrl') || '链接地址'}:</label>
-                        <textarea id="linkUrl" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="https://..." spellcheck="false">${mark.attrs.href}</textarea>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--b3-theme-on-surface); opacity: 0.8;">${i18n('linkTitle') || '显示文本'}:</label>
-                        <textarea id="linkTitle" class="b3-text-field" style="width: 100%; resize: vertical;" rows="2" placeholder="${i18n('linkTitlePlaceholder') || '输入链接文本'}" spellcheck="false">${currentText}</textarea>
-                    </div>
-                </div>
-                <div class="b3-dialog__action">
-                    <button class="b3-button b3-button--cancel" id="cancelLinkBtn">${i18n('cancel') || '取消'}</button>
-                    <button class="b3-button b3-button--primary" id="saveLinkBtn">${i18n('save') || '确定'}</button>
-                </div>
-            `,
-            width: "400px"
-        });
-
-        const urlInput = dialog.element.querySelector('#linkUrl') as HTMLInputElement;
-        const titleInput = dialog.element.querySelector('#linkTitle') as HTMLInputElement;
-        const cancelBtn = dialog.element.querySelector('#cancelLinkBtn') as HTMLButtonElement;
-        const saveBtn = dialog.element.querySelector('#saveLinkBtn') as HTMLButtonElement;
-
-        urlInput.focus();
-
-        cancelBtn.onclick = () => dialog.destroy();
-        saveBtn.onclick = () => {
-            const newHref = urlInput.value.trim();
-            const newTitle = titleInput.value.trim();
-            if (newHref && range) {
-                const { tr, schema } = view.state;
-                const linkMark = schema.marks.link.create({ href: newHref });
-
-                // Replace text and apply mark
-                view.dispatch(
-                    tr.replaceWith(range.from, range.to, schema.text(newTitle || newHref))
-                        .addMark(range.from, range.from + (newTitle || newHref).length, linkMark)
-                );
-            }
-            dialog.destroy();
-        };
     }
 
     async show() {
@@ -224,7 +97,7 @@ export class PasteTaskDialog {
                         ${i18n("supportHierarchy") || "支持多层级：使用缩进或多个<code>-</code>符号创建父子任务关系"}
                     </p>
                     ${selectorsHtml}
-                    <div id="taskList" style="height: 300px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 4px;"></div>
+                    <div id="taskList" class="tn-paste-task-editor" style="height: 300px;"></div>
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
                         <div style="display: flex; align-items: center; justify-content: space-between;">
                             <label class="b3-checkbox" style="display: flex; align-items: center;">
@@ -263,8 +136,9 @@ export class PasteTaskDialog {
             `,
             width: "520px",
             destroyCallback: () => {
-                if (this.editor) {
-                    this.editor.destroy();
+                if (this.noteEditor) {
+                    this.noteEditor.destroy();
+                    this.noteEditor = undefined;
                 }
             }
         });
@@ -346,200 +220,27 @@ export class PasteTaskDialog {
             });
         }
 
-        // Initialize Milkdown Editor
+        // Initialize Lite Protyle Editor
         setTimeout(() => {
             if (!taskListContainer) return;
 
-            Editor.make()
-                .config((ctx) => {
-                    ctx.set(rootCtx, taskListContainer);
-                    ctx.set(defaultValueCtx, "");
-                    ctx.update(editorViewOptionsCtx, (prev) => ({
-                        ...prev,
-                        attributes: {
-                            ...prev.attributes,
-                            spellcheck: "false",
-                        },
-                    }));
-                    ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-                        this.taskListContent = markdown;
-                    });
-
-                    // 优先获取纯文本 (Markdown)
-                    ctx.update(prosePluginsCtx, (prev) => [
-                        ...prev,
-                        new Plugin({
-                            props: {
-                                handlePaste: (view, event) => {
-                                    let text = event.clipboardData?.getData('text/plain');
-                                    if (text) {
-                                        // 统一换行符并将\r替换为\n，同时移除首尾多余的空行
-                                        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-                                        text = text.replace(/^\n+|\n+$/g, '');
-                                        if (!text) return false;
-
-                                        // 关键修复：确保单换行符被视为分段（即每个任务一行）
-                                        // 在 Markdown 中，单个换行符会被解析为软换行，合并到同一段落
-                                        // 我们将其转换为双换行符以强制分段，从而使 parseHierarchicalTaskList 能够正确按行切分
-                                        if (text.includes('\n')) {
-                                            text = text.replace(/(?<!\n)\n(?!\n)/g, '\n\n');
-                                        }
-
-                                        const { tr, doc } = view.state;
-                                        const isEmpty = doc.childCount === 1 &&
-                                            doc.firstChild?.type.name === 'paragraph' &&
-                                            doc.firstChild.content.size === 0;
-
-                                        const parser = ctx.get(parserCtx);
-                                        const node = parser(text);
-                                        if (!node) return false;
-
-                                        if (isEmpty) {
-                                            const content = node.type.name === 'doc' ? node.content : node;
-                                            // 彻底替换初始的空段落
-                                            view.dispatch(tr.replaceWith(0, doc.content.size, content).scrollIntoView());
-                                            return true;
-                                        } else {
-                                            // 非空文档下，如果不含换行符，证明是行内粘贴，直接 insertText 以避免被切分为新段落
-                                            if (!text.includes('\n')) {
-                                                view.dispatch(tr.insertText(text).scrollIntoView());
-                                                return true;
-                                            }
-                                            // 如果有多行，我们也手动处理以确保刚才的换行符转换生效
-                                            // 使用 Node.slice(0) 将文档内容转为 Slice 以便 replaceSelection
-                                            const slice = (node as any).slice(0);
-                                            view.dispatch(tr.replaceSelection(slice).scrollIntoView());
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                },
-                                handleTextInput: (view, from, to, text) => {
-                                    const { state } = view;
-                                    const linkMark = state.schema.marks.link;
-                                    if (!linkMark) return false;
-
-                                    const $pos = state.doc.resolve(from);
-                                    if (linkMark.isInSet($pos.marks())) {
-                                        const range = this.findMarkRange(state.doc, from, linkMark);
-                                        // 如果在链接末尾打字，不应继续表现为链接文本
-                                        if (range && range.to === from) {
-                                            const marks = $pos.marks().filter(m => m.type !== linkMark);
-                                            const tr = state.tr.replaceWith(from, to, state.schema.text(text, marks));
-                                            tr.removeStoredMark(linkMark);
-                                            view.dispatch(tr);
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                },
-                                handleClick: (view, pos) => {
-                                    const { state } = view;
-                                    const linkMark = state.schema.marks.link;
-                                    if (!linkMark) return false;
-
-                                    const node = state.doc.nodeAt(pos);
-                                    const mark = node ? linkMark.isInSet(node.marks) : null;
-
-                                    if (mark) {
-                                        this.showLinkOptions(view, pos, mark);
-                                        return true;
-                                    }
-                                    return false;
-                                }
-                            }
-                        })
-                    ]);
-                })
-                .use(commonmark)
-                .use(gfm)
-                .use(history)
-                .use(clipboard)
-                .use(cursor)
-                .use(listener)
-                .use($view(listItemSchema.node, () => (node, view, getPos) => {
-                    const dom = document.createElement("li");
-                    const contentDOM = document.createElement("div");
-
-                    if (node.attrs.checked != null) {
-                        dom.classList.add("task-list-item");
-                        dom.style.listStyleType = "none";
-                        dom.style.position = "relative";
-
-                        const checkbox = document.createElement("input");
-                        checkbox.type = "checkbox";
-                        checkbox.checked = node.attrs.checked;
-                        checkbox.style.position = "absolute";
-                        checkbox.style.left = "-1.4em";
-                        checkbox.style.top = "0.3em";
-                        checkbox.style.margin = "0";
-
-                        checkbox.onclick = (e) => {
-                            if (typeof getPos === "function") {
-                                const { tr } = view.state;
-                                tr.setNodeMarkup(getPos(), undefined, {
-                                    ...node.attrs,
-                                    checked: checkbox.checked
-                                });
-                                view.dispatch(tr);
-                            }
-                            e.stopPropagation();
-                        };
-
-                        dom.appendChild(checkbox);
-                        contentDOM.style.minWidth = "0";
-                        dom.appendChild(contentDOM);
-
-                        return {
-                            dom,
-                            contentDOM,
-                            ignoreMutation: (mutation) => {
-                                return mutation.type === 'attributes' && mutation.target === checkbox;
-                            },
-                            update: (updatedNode) => {
-                                if (updatedNode.type.name !== "list_item") return false;
-                                const isTask = node.attrs.checked != null;
-                                const newIsTask = updatedNode.attrs.checked != null;
-                                if (isTask !== newIsTask) return false;
-                                if (newIsTask) {
-                                    checkbox.checked = updatedNode.attrs.checked;
-                                }
-                                return true;
-                            }
-                        };
-                    } else {
-                        return { dom, contentDOM: dom };
-                    }
-                }))
-                .create()
-                .then((editor) => {
-                    this.editor = editor;
-
-                    editor.action((ctx) => {
-                        const view = ctx.get(editorViewCtx);
-                        if (view) {
-                            view.focus();
-                        }
-                    });
-
-                    const editorEl = dialog.element.querySelector('.milkdown') as HTMLElement;
-                    if (editorEl) {
-                        editorEl.style.height = '100%';
-                        editorEl.style.margin = '0px';
-                        const prosemirror = editorEl.querySelector('.ProseMirror') as HTMLElement;
-                        if (prosemirror) {
-                            prosemirror.style.minHeight = '250px';
-                            prosemirror.style.padding = '8px';
-                            prosemirror.style.outline = 'none';
-                        }
-                    }
-                });
-        }, 100);
+            this.noteEditor = new LiteProtyleEditor({
+                app: this.config.plugin?.app || (window as any).siyuan?.ws?.app,
+                plugin: this.config.plugin,
+                container: taskListContainer,
+                initialMarkdown: "",
+                enableAssets: false,
+                onChange: (markdown) => {
+                    this.taskListContent = markdown;
+                },
+            });
+            setTimeout(() => this.noteEditor?.focus(), 0);
+        }, 50);
 
         cancelBtn.addEventListener('click', () => dialog.destroy());
 
         saveTemplateBtn.addEventListener('click', () => {
-            const fileContent = this.taskListContent.trim();
+            const fileContent = (this.noteEditor ? this.noteEditor.getMarkdown() : this.taskListContent).trim();
             if (!fileContent) {
                 showMessage(i18n("contentNotEmpty") || "列表内容不能为空");
                 return;
@@ -769,8 +470,9 @@ export class PasteTaskDialog {
                         e.stopPropagation();
                         const tName = btn.getAttribute('data-name');
                         const targetTemplate = validTemplates.find(t => t.name === tName);
-                        if (targetTemplate && this.editor) {
-                            this.editor.action(replaceAll(targetTemplate.content));
+                        if (targetTemplate && this.noteEditor) {
+                            this.noteEditor.setMarkdown(targetTemplate.content);
+                            this.taskListContent = targetTemplate.content;
                             templatesDialog.destroy();
                         }
                     };
@@ -839,7 +541,7 @@ export class PasteTaskDialog {
             // 防止重复点击
             if ((createBtn as HTMLButtonElement).disabled) return;
 
-            const text = this.taskListContent.trim();
+            const text = (this.noteEditor ? this.noteEditor.getMarkdown() : this.taskListContent).trim();
             if (!text) {
                 showMessage(i18n("contentNotEmpty") || "列表内容不能为空");
                 return;

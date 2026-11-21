@@ -9,6 +9,7 @@
     import { generateRepeatInstances, getRepeatInstanceOriginalKey, getRepeatDescription } from "../dataManager/repeatUtils";
     import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
     import { getLuteInstance } from "../../utils/luteSingleton";
+    import { hasTaskNote, loadTaskNote, resolveExpandedInstanceNoteFields } from "../../utils/taskNoteStorage";
     import { Dialog, showMessage, platformUtils } from "siyuan";
 
     export let plugin: any;
@@ -154,6 +155,11 @@
             stats = await calculateStats(dateRange.start, dateRange.end);
             const filteredEvents = filterEventsByDateRange(events, dateRange);
             const groupedTasks = await groupTasksByDateAndProject(filteredEvents, dateRange, stats, events);
+
+            // 按需加载当前汇总范围内的任务备注（仅当开启显示备注时加载，避免全量加载）
+            if (showTaskNotes) {
+                await hydrateGroupedTaskNotes(groupedTasks);
+            }
             
             // 计算统计数据
             totalTasks = 0;
@@ -172,6 +178,79 @@
         } finally {
             loading = false;
         }
+    }
+
+    async function hydrateGroupedTaskNotes(groupedTasks: Map<string, Map<string, TaskItem[]>>) {
+        const tasksToLoad: TaskItem[] = [];
+        groupedTasks.forEach((projMap) => {
+            projMap.forEach((tasks) => {
+                tasks.forEach((task) => {
+                    if (!task.note && hasTaskNote(task.extendedProps)) {
+                        tasksToLoad.push(task);
+                    }
+                });
+            });
+        });
+        if (tasksToLoad.length === 0) return;
+
+        await Promise.all(tasksToLoad.map(async (task) => {
+            const loaded = await loadTaskNote(plugin, {
+                id: task.extendedProps?.originalId || task.id,
+                noteId: task.extendedProps?.noteId,
+                notes: task.extendedProps?.notes,
+                note: task.extendedProps?.note,
+                noteSummary: task.extendedProps?.noteSummary,
+            });
+            if (loaded) {
+                task.note = loaded;
+                if (task.extendedProps) {
+                    task.extendedProps.note = loaded;
+                }
+            }
+        }));
+    }
+
+    async function hydrateDisplayedDateGroupNotes() {
+        if (!showTaskNotes || !dateGroups.length) return;
+        const tasksToLoad: TaskItem[] = [];
+        dateGroups.forEach((dg) => {
+            dg.projects.forEach((proj) => {
+                proj.tasks.forEach((task) => {
+                    if (!task.note && hasTaskNote(task.extendedProps)) {
+                        tasksToLoad.push(task);
+                    }
+                });
+                proj.groups.forEach((grp) => {
+                    grp.tasks.forEach((task) => {
+                        if (!task.note && hasTaskNote(task.extendedProps)) {
+                            tasksToLoad.push(task);
+                        }
+                    });
+                });
+            });
+        });
+        if (tasksToLoad.length === 0) return;
+
+        await Promise.all(tasksToLoad.map(async (task) => {
+            const loaded = await loadTaskNote(plugin, {
+                id: task.extendedProps?.originalId || task.id,
+                noteId: task.extendedProps?.noteId,
+                notes: task.extendedProps?.notes,
+                note: task.extendedProps?.note,
+                noteSummary: task.extendedProps?.noteSummary,
+            });
+            if (loaded) {
+                task.note = loaded;
+                if (task.extendedProps) {
+                    task.extendedProps.note = loaded;
+                }
+            }
+        }));
+        dateGroups = [...dateGroups];
+    }
+
+    $: if (showTaskNotes && dateGroups.length > 0) {
+        void hydrateDisplayedDateGroupNotes();
     }
 
     function buildDateGroups(
@@ -420,11 +499,16 @@
                         const originalKey = getRepeatInstanceOriginalKey(instance);
                         const isInstanceCompleted = instance.completed ?? false;
 
+                        const instanceNoteFields = resolveExpandedInstanceNoteFields(reminder, instance, originalKey);
                         const instanceReminder = {
                             ...reminder,
                             ...instance,
                             completed: isInstanceCompleted,
-                            note: instance.note || "",
+                            note: instanceNoteFields.note || "",
+                            notes: instanceNoteFields.notes,
+                            noteId: instanceNoteFields.noteId,
+                            noteSummary: instanceNoteFields.noteSummary,
+                            noteAssets: instanceNoteFields.noteAssets,
                             docTitle: reminder.docTitle,
                         };
 
@@ -491,6 +575,10 @@
                 completed: isCompleted,
                 completedTime: reminder.completedTime || null,
                 note: reminder.note || "",
+                notes: reminder.notes,
+                noteId: reminder.noteId,
+                noteSummary: reminder.noteSummary,
+                noteAssets: reminder.noteAssets,
                 dailyCompletions: reminder.dailyCompletions || {},
                 date: reminder.date,
                 endDate: reminder.endDate || null,

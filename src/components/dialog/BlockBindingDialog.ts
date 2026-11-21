@@ -395,9 +395,19 @@ export class BlockBindingDialog {
             docTitleInput.value = (this.reminder?.title || this.defaultTitle) || '';
         }
 
-        // 自动填充备注到内容域
-        if (docContentInput && this.reminder?.note) {
-            docContentInput.value = this.reminder.note;
+        // 自动填充备注到内容域（按需加载 notes/<任务ID>.md）
+        if (docContentInput && this.reminder) {
+            if (typeof this.reminder.note === 'string' && this.reminder.note) {
+                docContentInput.value = this.reminder.note;
+            } else if (this.reminder.notes === true) {
+                import("../../utils/taskNoteStorage").then(({ loadTaskNote }) => {
+                    void loadTaskNote(this.plugin, this.reminder).then((loaded) => {
+                        if (loaded && !docContentInput.value) {
+                            docContentInput.value = loaded;
+                        }
+                    });
+                });
+            }
         }
 
         // 加载笔记本列表
@@ -622,9 +632,19 @@ export class BlockBindingDialog {
             headingContentInput.value = (this.reminder?.title || this.defaultTitle) || '';
         }
 
-        // 自动填充备注到标题下内容域
-        if (headingSubContentInput && this.reminder?.note) {
-            headingSubContentInput.value = this.reminder.note;
+        // 自动填充备注到标题下内容域（按需加载 notes/<任务ID>.md）
+        if (headingSubContentInput && this.reminder) {
+            if (typeof this.reminder.note === 'string' && this.reminder.note) {
+                headingSubContentInput.value = this.reminder.note;
+            } else if (this.reminder.notes === true) {
+                import("../../utils/taskNoteStorage").then(({ loadTaskNote }) => {
+                    void loadTaskNote(this.plugin, this.reminder).then((loaded) => {
+                        if (loaded && !headingSubContentInput.value) {
+                            headingSubContentInput.value = loaded;
+                        }
+                    });
+                });
+            }
         }
 
         // 加载默认设置

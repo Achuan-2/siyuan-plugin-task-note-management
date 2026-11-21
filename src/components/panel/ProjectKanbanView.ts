@@ -2,6 +2,10 @@ import { setTaskMetadataText, renderTaskMetadataText } from "../render/taskMetad
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { duplicateTaskTree } from "../../utils/taskDuplication";
+import {
+    getTaskNotePreviewText,
+    resolveExpandedInstanceNoteFields,
+} from "../../utils/taskNoteStorage";
 import { colorWithOpacity, generateRandomColor } from "../../utils/uiUtils";
 import { applyProjectTagColor } from "../../utils/projectTagColor";
 import { getLuteInstance } from "../../utils/luteSingleton";
@@ -3655,7 +3659,7 @@ export class ProjectKanbanView {
                 const keywords = this.searchKeyword.toLowerCase().split(/\s+/).filter(k => !!k);
                 const matches = (t: any) => {
                     const title = (t.title || '').toLowerCase();
-                    const note = (t.note || '').toLowerCase();
+                    const note = getTaskNotePreviewText(t).toLowerCase();
                     const combined = `${title} ${note}`;
                     return keywords.every(k => combined.includes(k));
                 };
@@ -11757,6 +11761,20 @@ export class ProjectKanbanView {
             } else {
                 delete item.note;
             }
+            if (savedTask.notes !== undefined) {
+                item.notes = savedTask.notes;
+            } else {
+                delete item.notes;
+            }
+            if (savedTask.noteId) item.noteId = savedTask.noteId;
+            else delete item.noteId;
+            if (savedTask.noteSummary) item.noteSummary = savedTask.noteSummary;
+            else delete item.noteSummary;
+            if (Array.isArray(savedTask.noteAssets) && savedTask.noteAssets.length > 0) {
+                item.noteAssets = savedTask.noteAssets;
+            } else {
+                delete item.noteAssets;
+            }
         };
 
         // 现有事件回调持有任务对象引用，原地同步备注，避免再次打开备注弹窗读取旧值。
@@ -11769,7 +11787,12 @@ export class ProjectKanbanView {
             if (isRepeatInstance && originalId && instanceDate) {
                 const originalReminder = this.reminderData[originalId];
                 if (originalReminder) {
-                    patchRepeatInstanceState(originalReminder, instanceDate, { note: savedTask.note });
+                    patchRepeatInstanceState(originalReminder, instanceDate, {
+                        note: savedTask.note,
+                        notes: savedTask.notes,
+                        noteSummary: savedTask.noteSummary,
+                        noteAssets: savedTask.noteAssets,
+                    });
                 }
             } else if (savedTask.id) {
                 const existingRaw = this.reminderData[savedTask.id];
@@ -14416,7 +14439,7 @@ export class ProjectKanbanView {
                 endDate: task.endDate,
                 time: task.time,
                 endTime: task.endTime,
-                note: getInstanceField(instanceState, 'note', originalReminder.note || ''),
+                ...resolveExpandedInstanceNoteFields(originalReminder, instanceState, originalInstanceDate),
                 priority: getInstanceField(instanceState, 'priority', originalReminder.priority || 'none'),
                 projectId: getInstanceField(instanceState, 'projectId', originalReminder.projectId),
                 customGroupId: getInstanceField(instanceState, 'customGroupId', originalReminder.customGroupId),

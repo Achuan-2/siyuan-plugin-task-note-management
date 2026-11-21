@@ -5,6 +5,11 @@ import { i18n } from '../pluginInstance';
 import { getAllReminders, saveReminders } from './icsSubscription';
 import { cleanReminderItem } from './reminderLoadUtils';
 import { applyTaskUndoPatches, cloneTaskData, createTaskUndoPatches, type TaskUndoPatch } from './taskUndoPatch';
+import {
+    diffRemovedTasksAndInstances,
+    restoreTaskNotesFromSnapshot,
+    snapshotTaskNotes,
+} from './taskNoteStorage';
 
 export { dismissTaskUndo } from './taskUndoToast';
 
@@ -26,6 +31,7 @@ export class TaskActionUndo {
     private patches: TaskUndoPatch[] = [];
     private touchesSubscription = false;
     private saveInProgress = false;
+    private deletedNotesSnapshot = new Map<string, string>();
 
     constructor(private plugin: any, data: any) {
         this.before = snapshot(data);
@@ -41,6 +47,11 @@ export class TaskActionUndo {
             const patches = createTaskUndoPatches(this.before, after);
             this.touchesSubscription = patches.some(({ path }) =>
                 [this.before[path[0]], after[path[0]]].some(task => task?.isSubscribed && task.subscriptionId));
+            // 删除任务前拍摄待删除备注快照，便于点击撤回时恢复 notes/<任务ID>.md 及 assets-cleanup-ignore。
+            const { removedTasks } = diffRemovedTasksAndInstances(this.before, after);
+            if (removedTasks.length > 0) {
+                this.deletedNotesSnapshot = await snapshotTaskNotes(this.plugin, removedTasks);
+            }
             await this.saveChanges(data);
             this.patches = patches;
             this.before = null;
@@ -74,6 +85,12 @@ export class TaskActionUndo {
             return false;
         }
         await this.saveChanges(restored);
+        if (this.deletedNotesSnapshot.size > 0) {
+            await restoreTaskNotesFromSnapshot(this.plugin, this.deletedNotesSnapshot).catch(err => {
+                console.warn('Failed to restore task notes after undo:', err);
+            });
+            this.deletedNotesSnapshot.clear();
+        }
         const taskIds = new Set(this.patches.map(patch => patch.path[0]));
         this.patches = [];
         const blockIds = new Set<string>();

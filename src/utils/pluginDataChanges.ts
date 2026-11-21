@@ -20,6 +20,7 @@ const FILE_GROUPS: Record<string, PluginDataGroup> = {
 const DIRECTORY_GROUPS: Record<string, PluginDataGroup> = {
     habitCheckin: 'habits', habit: 'habits', Subscribe: 'subscriptions',
     pomodoroRecords: 'pomodoros', mobileNotify: 'mobileNotifications',
+    notes: 'reminders',
 };
 const ALL_GROUPS = new Set<PluginDataGroup>(Object.values(FILE_GROUPS));
 
@@ -41,7 +42,8 @@ export class PluginDataChanges {
         await Promise.all(['', ...Object.keys(DIRECTORY_GROUPS)].map(async directory => {
             const entries = await this.readDirectory(directory ? `${root}/${directory}` : root, true);
             for (const entry of entries) {
-                if (entry.isDir || !entry.name.endsWith('.json')) continue;
+                const isNoteMd = directory === 'notes' && entry.name.endsWith('.md');
+                if (entry.isDir || (!entry.name.endsWith('.json') && !isNoteMd)) continue;
                 const group = directory ? DIRECTORY_GROUPS[directory] : FILE_GROUPS[entry.name];
                 if (!group) continue;
                 if (!Number.isFinite(entry.updated)) throw new Error('插件数据目录缺少文件修改时间');

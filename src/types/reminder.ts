@@ -13,7 +13,10 @@ export interface ReminderItem {
     time?: string;       // 提醒时间 HH:MM，可选
     reminderTimes?: (string | ReminderTime)[]; // 多个提醒时间 HH:MM 或 {time, note}
     notifiedTimes?: { [time: string]: boolean }; // 记录每个时间的提醒状态
-    note?: string;       // 新增备注字段
+    note?: string;       // 运行时/订阅任务内联备注（本地任务正文拆分存放在 notes/<任务ID>.md）
+    notes?: boolean;     // 本地任务存在备注文件时为 true
+    noteSummary?: string; // 备注纯文本摘要（仅用于搜索、通知与轻量预览）
+    noteAssets?: string[]; // 备注引用的思源全局资源路径列表（assets/...）
     completed: boolean;  // 是否已完成
     createdAt: string;   // 创建时间
     notified?: boolean;

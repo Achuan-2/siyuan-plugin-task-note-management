@@ -31,6 +31,16 @@ import { PomodoroTimer } from "./PomodoroTimer";
 import { i18n } from "../../pluginInstance";
 import { generateRepeatInstances, getDaysDifference, addDaysToDate, resolveRepeatReminderTimes, getMonthlyWeekdayDate, getMonthlyWeekRules, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../../utils/icsSubscription";
+import {
+    applyTaskNoteMetadata,
+    copyTaskNote,
+    getCachedTaskNote,
+    getTaskNotePreviewText,
+    hasTaskNote,
+    loadTaskNote,
+    resolveExpandedInstanceNoteFields,
+    resolveTaskNoteRef,
+} from "../../utils/taskNoteStorage";
 import type { ReminderItem } from "../../types/reminder";
 import { CalendarConfigManager, CALENDAR_CONFIG_UPDATED_EVENT } from "../dataManager/calendarConfigManager";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
@@ -5511,7 +5521,6 @@ export class CalendarView {
 
             // 检查实例级别的修改（包括备注）
             const instanceState = getRepeatInstanceState(originalReminder, instanceDate);
-            const instanceNote = getInstanceField(instanceState, 'note', originalReminder.note || '');
 
             // 创建实例数据，包含当前实例的特定信息
             const instanceData = {
@@ -5521,8 +5530,7 @@ export class CalendarView {
                 endDate: calendarEvent.extendedProps.endDate,
                 time: calendarEvent.extendedProps.time,
                 endTime: calendarEvent.extendedProps.endTime,
-                // 修改备注逻辑：复用原始事件的备注，如果实例有明确的备注则优先使用
-                note: instanceNote,
+                ...resolveExpandedInstanceNoteFields(originalReminder, instanceState, instanceDate),
                 isInstance: true,
                 originalId: originalId,
                 instanceDate: instanceDate
@@ -6306,29 +6314,55 @@ export class CalendarView {
             mainFrame.appendChild(timeEl);
         }
 
-        // 6. 备注
-
-        if ((props.note && !props.isSubscribed) || (props.isSubscribed && props.showNoteInCalendar === true)) {
+        // 6. 备注（拆分正文按需加载）
+        const shouldRenderEventNote = (!props.isSubscribed && hasTaskNote(props))
+            || (props.isSubscribed && props.showNoteInCalendar === true && hasTaskNote(props));
+        if (shouldRenderEventNote) {
             const noteEl = document.createElement('div');
             noteEl.className = 'reminder-event-note';
-            noteEl.innerHTML = this.lute ? this.lute.Md2HTML(props.note) : props.note;
-
-            // 处理私有图片路径渲染
-            const imgTags = noteEl.querySelectorAll('img');
-            imgTags.forEach(img => {
-                const src = img.getAttribute('src');
-                if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
-                    import('../../api').then(({ getFileBlob }) => {
-                        getFileBlob(src).then(blob => {
-                            if (blob) {
-                                img.src = URL.createObjectURL(blob);
-                            }
+            const renderCalendarNote = (md: string) => {
+                noteEl.innerHTML = this.lute ? this.lute.Md2HTML(md) : md;
+                const imgTags = noteEl.querySelectorAll('img');
+                imgTags.forEach(img => {
+                    const src = img.getAttribute('src');
+                    if (src && src.startsWith('/data/storage/petal/siyuan-plugin-task-note-management/assets/')) {
+                        import('../../api').then(({ getFileBlob }) => {
+                            getFileBlob(src).then(blob => {
+                                if (blob) {
+                                    img.src = URL.createObjectURL(blob);
+                                }
+                            });
                         });
-                    });
-                }
-            });
+                    }
+                });
+            };
 
-            mainFrame.appendChild(noteEl);
+            const noteRef = resolveTaskNoteRef({ ...props, id: props.eventId || event.id });
+            const immediateNote = noteRef.inlineNote
+                ?? getCachedTaskNote(noteRef.noteId)
+                ?? (noteRef.fallbackNoteId ? getCachedTaskNote(noteRef.fallbackNoteId) : undefined);
+
+            if (immediateNote !== undefined) {
+                if (immediateNote.trim()) {
+                    renderCalendarNote(immediateNote);
+                    mainFrame.appendChild(noteEl);
+                }
+            } else {
+                if (noteRef.summary) {
+                    noteEl.textContent = noteRef.summary;
+                }
+                const loadToken = `${noteRef.noteId}:${Date.now()}:${Math.random()}`;
+                noteEl.dataset.noteLoadToken = loadToken;
+                void loadTaskNote(this.plugin, { ...props, id: props.eventId || event.id }).then((loaded) => {
+                    if (noteEl.dataset.noteLoadToken !== loadToken) return;
+                    if (loaded && loaded.trim()) {
+                        renderCalendarNote(loaded);
+                    } else if (!noteRef.summary) {
+                        noteEl.remove();
+                    }
+                });
+                mainFrame.appendChild(noteEl);
+            }
         }
 
         return { domNodes: [mainFrame] };
@@ -9004,7 +9038,7 @@ export class CalendarView {
                                 ),
                                 completed: isInstanceCompleted,
                                 title: getInstanceField(state, 'title', reminder.title),
-                                note: getInstanceField(state, 'note', reminder.note || ''),
+                                ...resolveExpandedInstanceNoteFields(reminder, state, originalDateKey),
                                 priority: getInstanceField(state, 'priority', reminder.priority || 'none'),
                                 categoryId: getInstanceField(state, 'categoryId', reminder.categoryId),
                                 projectId: getInstanceField(state, 'projectId', reminder.projectId),
@@ -9612,6 +9646,10 @@ export class CalendarView {
                         projectId: reminder.projectId,
                         blockId: reminder.blockId,
                         note: reminder.note,
+                        notes: reminder.notes,
+                        noteId: reminder.noteId,
+                        noteSummary: reminder.noteSummary,
+                        noteAssets: reminder.noteAssets,
                         // 复制普通任务的所有属性以便右键菜单正常工作
                         completed: true,
                         endDate: reminder.endDate,
@@ -9686,6 +9724,11 @@ export class CalendarView {
                     }
 
                     const uniqueInstanceId = `${reminder.id}_${instanceDate}`;
+                    const instanceNoteFields = resolveExpandedInstanceNoteFields(
+                        reminder,
+                        reminder.repeat?.instances?.[instanceDate],
+                        instanceDate
+                    );
                     const eventObj = {
                         id: `completed-${uniqueInstanceId}`,
                         title: `✅ ${reminder.title || i18n('unnamedTask')}`,
@@ -9710,7 +9753,11 @@ export class CalendarView {
                             categoryId: reminder.categoryId,
                             projectId: reminder.projectId,
                             blockId: reminder.blockId,
-                            note: reminder.note,
+                            note: instanceNoteFields.note,
+                            notes: instanceNoteFields.notes,
+                            noteId: instanceNoteFields.noteId,
+                            noteSummary: instanceNoteFields.noteSummary,
+                            noteAssets: instanceNoteFields.noteAssets,
                             // 复制普通任务的所有属性以便右键菜单正常工作
                             completed: true,
                             date: instanceDate,
@@ -10248,8 +10295,12 @@ export class CalendarView {
                             isExpiredReminderTime: isExpired,
                             reminderTimeNote: entry.note,
                             completed: isCompletedOnDate || false,
-                            note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || ''),
-                            taskNote: reminder.note || '',
+                            note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || getTaskNotePreviewText(reminder) || ''),
+                            taskNote: reminder.note || getTaskNotePreviewText(reminder) || '',
+                            notes: reminder.notes,
+                            noteId: reminder.noteId,
+                            noteSummary: reminder.noteSummary,
+                            noteAssets: reminder.noteAssets,
                             date: reminder.date,
                             endDate: reminder.endDate || null,
                             time: reminder.time || null,
@@ -10334,8 +10385,12 @@ export class CalendarView {
                     isExpiredReminderTime,
                     reminderTimeNote: entry.note,
                     completed: isCompletedOnDate || false,
-                    note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || ''),
-                    taskNote: reminder.note || '',
+                    note: (typeof entry.note === 'string' && entry.note.trim()) ? entry.note : (reminder.note || getTaskNotePreviewText(reminder) || ''),
+                    taskNote: reminder.note || getTaskNotePreviewText(reminder) || '',
+                    notes: reminder.notes,
+                    noteId: reminder.noteId,
+                    noteSummary: reminder.noteSummary,
+                    noteAssets: reminder.noteAssets,
                     date: reminder.date,
                     endDate: reminder.endDate || null,
                     time: reminder.time || null,
@@ -10494,6 +10549,10 @@ export class CalendarView {
             extendedProps: {
                 completed: isCompleted,
                 note: reminder.note || '',
+                notes: reminder.notes,
+                noteId: reminder.noteId,
+                noteSummary: reminder.noteSummary,
+                noteAssets: reminder.noteAssets,
                 date: reminder.date,
                 endDate: reminder.endDate || null,
                 time: reminder.time || null,
@@ -11280,12 +11339,16 @@ export class CalendarView {
                 }
             }
 
-            // 7. 备注信息
-            if (reminder.note?.trim()) {
+            // 7. 备注信息（悬浮提示时按需加载正文）
+            let tooltipNote = typeof reminder.note === 'string' && reminder.note.trim() ? reminder.note : '';
+            if (!tooltipNote && reminder.notes === true) {
+                tooltipNote = await loadTaskNote(this.plugin, { ...reminder, id: reminder.eventId || calendarEvent.id });
+            }
+            if (tooltipNote.trim()) {
                 htmlParts.push(
                     `<div style="color: var(--b3-theme-on-surface-light); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--b3-theme-border); font-size: 12px;">`,
                     `<div style="margin-bottom: 4px; opacity: 0.7;">${i18n("note")}:</div>`,
-                    `<div>${this.lute ? this.lute.Md2HTML(reminder.note) : this.escapeHtml(reminder.note)}</div>`,
+                    `<div>${this.lute ? this.lute.Md2HTML(tooltipNote) : this.escapeHtml(tooltipNote)}</div>`,
                     `</div>`
                 );
             }
@@ -11778,7 +11841,12 @@ export class CalendarView {
             newReminder.time = originalReminder.time;
             newReminder.endTime = originalReminder.endTime;
             newReminder.title = originalReminder.title;
-            newReminder.note = originalReminder.note;
+            if (originalReminder.notes === true) {
+                const copiedMeta = await copyTaskNote(this.plugin, originalReminder.id, newId);
+                applyTaskNoteMetadata(newReminder, copiedMeta);
+            } else {
+                newReminder.note = originalReminder.note;
+            }
             newReminder.priority = originalReminder.priority;
 
             // 应用重复设置
