@@ -2713,7 +2713,7 @@
     "noNoteText": "No note",
     "viewThisDay": "View this day",
     "loadHabitsFailed": "Failed to load habits",
-    "statsViewTitle": "📊 Statistics",
+    "statsViewTitle": "Statistics",
     "statsContainerInitFailed": "Failed to initialize statistics container",
     "loadStatsViewFailed": "Failed to load statistics",
     "habitDockTitle": "Habit check-in sidebar",

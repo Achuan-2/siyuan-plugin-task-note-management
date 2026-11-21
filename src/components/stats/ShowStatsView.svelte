@@ -1,6 +1,4 @@
 <script lang="ts">
-    import { renderTaskMetadataIcon } from "../render/taskMetadataIcons";
-
     import PomodoroStatsTab from "./PomodoroStatsTab.svelte";
     import TaskStatsTab from "./TaskStatsTab.svelte";
     import HabitStatsTab from "./HabitStatsTab.svelte";
@@ -9,29 +7,40 @@
     import { setLastStatsMode } from "./statsMode";
     import { i18n } from '../../pluginInstance';
 
+    type StatsTab = "pomodoro" | "task" | "habit" | "summary" | "project";
+
     export let plugin: any;
-    export let initialTab: "pomodoro" | "task" | "habit" | "summary" | "project" = "pomodoro";
+    export let initialTab: StatsTab = "pomodoro";
     export let calendar: any = null;
 
-    let activeTab: "pomodoro" | "task" | "habit" | "summary" | "project" = initialTab;
+    let activeTab: StatsTab = initialTab;
 
-    const switchTab = (tab: "pomodoro" | "task" | "habit" | "summary" | "project") => {
+    const tabs: Array<{ id: StatsTab; icon: string; labelKey: string }> = [
+        { id: "pomodoro", icon: "iconTNPomodoro", labelKey: "pomodoroStats" },
+        { id: "task", icon: "iconTNTodoList", labelKey: "taskStats" },
+        { id: "summary", icon: "iconTNTaskSummary", labelKey: "taskSummary" },
+        { id: "project", icon: "iconTNProject", labelKey: "projectStats" },
+        { id: "habit", icon: "iconTNHabit", labelKey: "habitStats" },
+    ];
+
+    const switchTab = (tab: StatsTab) => {
         activeTab = tab;
         setLastStatsMode(tab);
     };
 
-    export const setActiveTab = (tab: "pomodoro" | "task" | "habit" | "summary" | "project") => {
+    export const setActiveTab = (tab: StatsTab) => {
         switchTab(tab);
     };
 </script>
 
 <div class="stats-root">
     <div class="stats-tabs">
-        <button class:active={activeTab === "pomodoro"} on:click={() => switchTab("pomodoro")}>{@html renderTaskMetadataIcon('tomato')} {i18n('pomodoroStats')}</button>
-        <button class:active={activeTab === "task"} on:click={() => switchTab("task")}>✅ {i18n('taskStats')}</button>
-        <button class:active={activeTab === "summary"} on:click={() => switchTab("summary")}>📝 {i18n('taskSummary')}</button>
-        <button class:active={activeTab === "project"} on:click={() => switchTab("project")}>🎯 {i18n('projectStats')}</button>
-        <button class:active={activeTab === "habit"} on:click={() => switchTab("habit")}>{@html renderTaskMetadataIcon('calendar')} {i18n('habitStats')}</button>
+        {#each tabs as tab (tab.id)}
+            <button class:active={activeTab === tab.id} on:click={() => switchTab(tab.id)}>
+                <svg class="stats-tab-icon" aria-hidden="true"><use href={`#${tab.icon}`} /></svg>
+                <span>{i18n(tab.labelKey)}</span>
+            </button>
+        {/each}
     </div>
 
     <div class="stats-content">
@@ -53,12 +62,22 @@
     .stats-root { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
     .stats-tabs { display: flex; gap: 8px; padding: 8px 0 12px; border-bottom: 1px solid var(--b3-border-color); }
     .stats-tabs button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         border: 1px solid var(--b3-border-color);
         background: var(--b3-theme-surface);
         color: var(--b3-theme-on-surface);
         border-radius: 6px;
         padding: 6px 10px;
         cursor: pointer;
+    }
+    .stats-tab-icon {
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+        color: inherit;
+        fill: none;
     }
     .stats-tabs button.active {
         border-color: var(--b3-theme-primary);

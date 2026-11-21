@@ -2713,7 +2713,7 @@
     "noNoteText": "无备注",
     "viewThisDay": "查看当天",
     "loadHabitsFailed": "加载习惯数据失败",
-    "statsViewTitle": "📊 统计视图",
+    "statsViewTitle": "统计视图",
     "statsContainerInitFailed": "统计视图容器初始化失败",
     "loadStatsViewFailed": "加载统计视图失败",
     "habitDockTitle": "习惯打卡侧栏",

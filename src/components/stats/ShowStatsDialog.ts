@@ -6,6 +6,17 @@ type StatsTab = "pomodoro" | "task" | "habit" | "summary" | "project";
 let activeDialog: Dialog | null = null;
 let activeComponent: any = null;
 
+function buildStatsDialogTitle(): string {
+    const rawTitle = (i18n("statsViewTitle") || i18n("statsView") || "统计视图").replace(/^📊\s*/, "");
+    const safeTitle = rawTitle
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    return `<span style="display:inline-flex;align-items:center;gap:6px;"><svg style="width:16px;height:16px;flex-shrink:0;color:inherit;fill:none;" aria-hidden="true"><use href="#iconTNStatistic"></use></svg><span>${safeTitle}</span></span>`;
+}
+
 export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomodoro", calendar?: any) {
     if (activeDialog) {
         if (activeComponent && typeof activeComponent.setActiveTab === "function") {
@@ -16,7 +27,7 @@ export async function showStatsDialog(plugin: any, initialTab: StatsTab = "pomod
 
     const isMobile = plugin?.isInMobileApp || getFrontend().endsWith("mobile");
     const dialog = new Dialog({
-        title: i18n("statsViewTitle"),
+        title: buildStatsDialogTitle(),
         content: '<div id="showStatsViewContainer" style="height:100%;padding: 8px 16px 16px;box-sizing:border-box;"></div>',
         width: "min(1000px,95%)",
         height: isMobile ? "100%" : "80vh"
