@@ -9,6 +9,7 @@ import { i18n } from "../pluginInstance";
  */
 
 import * as ics from 'ics';
+import { filterIcsReminderEvent, getIcsReminderVisibility } from './icsReminderVisibility';
 import { DateTime } from 'ics';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -367,7 +368,7 @@ export async function exportIcsFile(
             completed: boolean,
             events: any[]
         ) {
-            if (completed) return;
+            if (getIcsReminderVisibility(settings) === 'none' || reminder.hideInCalendar) return;
 
             const reminderEntries = getReminderTimeEntries(reminder);
             if (!reminderEntries || reminderEntries.length === 0) return;
@@ -480,7 +481,7 @@ export async function exportIcsFile(
                     ];
                 }
 
-                events.push(reminderEvent);
+                events.push(...filterIcsReminderEvent(reminderEvent, reminder, !!entry.everyDay, filterType, settings, getDateFilterRange(dateFilter)));
             });
         }
 
@@ -725,6 +726,8 @@ export async function exportIcsFile(
                                 }
                             }
 
+                            processReminderTimes(child, child.id || id, childTitle, child.completed, events);
+
                             if (!childMatches) continue;
 
                             if (childStartTimeArray) {
@@ -901,8 +904,6 @@ export async function exportIcsFile(
                             } else {
                                 events.push(childEvent);
                             }
-
-                            processReminderTimes(child, child.id || id, childTitle, child.completed, events);
                         } else {
                             const prefix = '\n- ';
                             description += `${prefix}${childTitle}${childNote ? '：' + childNote : ''}`;
