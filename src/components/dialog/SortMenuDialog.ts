@@ -61,7 +61,7 @@ export class SortMenuDialog {
                         <!-- 已选择的条件将显示在这里 -->
                     </div>
                 </div>
-                <div class="sort-menu-current-single" style="${!this.isMultiSelect && this.selectedCriteria.length > 0 ? '' : 'display: none;'}; margin-bottom: 16px;">
+                <div class="sort-menu-current-single" style="${this.isMultiSelect ? 'display: none;' : ''} margin-bottom: 16px;">
                     <div class="sort-menu-label" style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 8px;">
                         ${i18n("currentSort") || "当前排序"}
                     </div>
@@ -208,42 +208,32 @@ export class SortMenuDialog {
     }
 
     private renderCurrentSingleItem() {
-        const container = this.dialog?.element.querySelector('.sort-menu-current-single-item');
-        const wrapper = this.dialog?.element.querySelector('.sort-menu-current-single');
+        const container = this.dialog?.element.querySelector<HTMLElement>('.sort-menu-current-single-item');
+        const wrapper = this.dialog?.element.querySelector<HTMLElement>('.sort-menu-current-single');
         if (!container || !wrapper) return;
 
         container.innerHTML = '';
 
-        if (this.selectedCriteria.length === 0) {
-            (wrapper as HTMLElement).style.display = 'none';
-            return;
-        }
+        const criterion = this.selectedCriteria[0];
+        const showCurrent = !this.isMultiSelect && (criterion || this.options.allowEmptyCriteria);
+        wrapper.style.display = showCurrent ? '' : 'none';
+        if (!showCurrent) return;
 
-        if (!this.isMultiSelect) {
-            (wrapper as HTMLElement).style.display = '';
-            const criterion = this.selectedCriteria[0];
+        const name = document.createElement('span');
+        name.textContent = criterion ? getSortCriterionName(criterion) : i18n('manual');
+        name.style.cssText = 'flex: 1; font-size: 13px;';
+        container.appendChild(name);
+        if (!criterion) return;
 
-            // 排序名称
-            const name = document.createElement('span');
-            name.textContent = getSortCriterionName(criterion);
-            name.style.cssText = 'flex: 1; font-size: 13px;';
-
-            // 升序/降序切换按钮
-            const orderBtn = document.createElement('button');
-            orderBtn.className = 'b3-button b3-button--text';
-            orderBtn.innerHTML = criterion.order === 'asc' ? '↑' : '↓';
-            orderBtn.classList.add('ariaLabel'); orderBtn.setAttribute('aria-label', criterion.order === 'asc' ? (i18n("ascending") || "升序") : (i18n("descending") || "降序"));
-            orderBtn.style.cssText = 'padding: 4px 8px; font-size: 14px;';
-            orderBtn.addEventListener('click', () => {
-                this.toggleOrder(0);
-            });
-
-            container.appendChild(name);
-            container.appendChild(orderBtn);
-            if (this.options.allowEmptyCriteria) container.appendChild(this.createRemoveButton(0));
-        } else {
-            (wrapper as HTMLElement).style.display = 'none';
-        }
+        // 升序/降序切换按钮
+        const orderBtn = document.createElement('button');
+        orderBtn.className = 'b3-button b3-button--text ariaLabel';
+        orderBtn.innerHTML = criterion.order === 'asc' ? '↑' : '↓';
+        orderBtn.setAttribute('aria-label', criterion.order === 'asc' ? (i18n("ascending") || "升序") : (i18n("descending") || "降序"));
+        orderBtn.style.cssText = 'padding: 4px 8px; font-size: 14px;';
+        orderBtn.addEventListener('click', () => this.toggleOrder(0));
+        container.appendChild(orderBtn);
+        if (this.options.allowEmptyCriteria) container.appendChild(this.createRemoveButton(0));
     }
 
     private renderAvailableOptions() {
@@ -331,13 +321,9 @@ export class SortMenuDialog {
     private updateModeUI() {
         // 更新已选择列表显示
         const selectedSection = this.dialog?.element.querySelector('.sort-menu-selected') as HTMLElement;
-        const singleSection = this.dialog?.element.querySelector('.sort-menu-current-single') as HTMLElement;
         
         if (selectedSection) {
             (selectedSection as HTMLElement).style.display = this.isMultiSelect ? '' : 'none';
-        }
-        if (singleSection) {
-            (singleSection as HTMLElement).style.display = (!this.isMultiSelect && this.selectedCriteria.length > 0) ? '' : 'none';
         }
 
         // 更新标签文本

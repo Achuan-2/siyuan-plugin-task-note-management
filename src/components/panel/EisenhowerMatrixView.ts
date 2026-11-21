@@ -87,6 +87,7 @@ export class EisenhowerMatrixView {
     private taskSortCriteria = DEFAULT_MATRIX_SORT;
     private groupByProject = true;
     private pendingSortSave = Promise.resolve();
+    private pendingManualReorder = Promise.resolve();
     private kanbanStatusFilter: 'all' | 'doing' | 'todo' = 'doing'; // 任务状态筛选
     private criteriaSettings = {
         importanceThreshold: 'medium' as 'high' | 'medium' | 'low',
@@ -987,6 +988,10 @@ export class EisenhowerMatrixView {
             }
             if (result) return result;
         }
+        return this.compareManualTaskOrder(a, b);
+    }
+
+    private compareManualTaskOrder(a: QuadrantTask, b: QuadrantTask): number {
         return (a.sort || 0) - (b.sort || 0) || compareTaskCreatedTime(b, a);
     }
 
@@ -1135,10 +1140,28 @@ export class EisenhowerMatrixView {
     }
 
     private canReorderTasks(dragged: QuadrantTask, target: QuadrantTask): boolean {
-        return dragged.id !== target.id
-            && (dragged.projectId || '') === (target.projectId || '')
+        if (dragged.id === target.id || dragged.quadrant !== target.quadrant) return false;
+        if (this.taskSortCriteria.length === 0) {
+            return this.getTaskSortId(dragged) !== this.getTaskSortId(target)
+                && this.getManualSortSiblings(dragged).some(task => task.id === target.id);
+        }
+        return (dragged.projectId || '') === (target.projectId || '')
             && this.taskSortCriteria.length === 1
             && this.taskSortCriteria[0].method === 'priority';
+    }
+
+    private getTaskSortId(task: QuadrantTask): string {
+        return task.isRepeatInstance ? task.originalId || task.id : task.id;
+    }
+
+    private getManualSortSiblings(task: QuadrantTask): QuadrantTask[] {
+        const visibleTasks = this.filteredTasks.filter(item => item.quadrant === task.quadrant
+            && (!this.groupByProject || (item.projectId || '') === (task.projectId || '')));
+        const visibleIds = new Set(visibleTasks.map(item => item.id));
+        const getVisibleParent = (item: QuadrantTask) => visibleIds.has(item.parentId) ? item.parentId : undefined;
+        const parentId = getVisibleParent(task);
+        return visibleTasks.filter(item => getVisibleParent(item) === parentId
+            && (!parentId || !item.completed) && !!item.pinned === !!task.pinned);
     }
 
     private createTaskElement(task: QuadrantTask, level: number = 0): HTMLElement {
@@ -1242,7 +1265,7 @@ export class EisenhowerMatrixView {
                         this.showDropIndicator(taskEl, e);
                         taskEl.classList.add('drag-over');
 
-                        if (draggedTask.priority !== t.priority) {
+                        if (this.taskSortCriteria.length && draggedTask.priority !== t.priority) {
                             taskEl.classList.add('priority-drop-' + t.priority);
                             const indicator = taskEl.querySelector<HTMLElement>('.drop-indicator');
                             if (indicator) indicator.style.backgroundColor = this.getPriorityColor(t.priority);
@@ -3272,6 +3295,16 @@ export class EisenhowerMatrixView {
 
     private async handleTaskReorder(draggedTaskId: string, targetTaskId: string, event: DragEvent) {
         try {
+            if (this.taskSortCriteria.length === 0) {
+                // 异步读取任务后 currentTarget 会被清空，先记录落在卡片的哪一侧。
+                const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                const insertAfter = event.clientY >= rect.top + rect.height / 2;
+                const reorder = this.pendingManualReorder.then(() => this.reorderTasksManually(draggedTaskId, targetTaskId, insertAfter));
+                this.pendingManualReorder = reorder.catch(() => {});
+                await reorder;
+                return;
+            }
+
             const reminderData = await getAllReminders(this.plugin);
 
             // 处理重复任务实例的情况
@@ -3358,6 +3391,33 @@ export class EisenhowerMatrixView {
             console.error("Failed to reorder tasks:", error);
             showMessage(i18n('sortUpdateFailed'));
         }
+    }
+
+    private async reorderTasksManually(draggedTaskId: string, targetTaskId: string, insertAfter: boolean) {
+        const reminderData = await getAllReminders(this.plugin);
+        if (this.taskSortCriteria.length) return;
+        const dragged = this.filteredTasks.find(task => task.id === draggedTaskId);
+        const target = this.filteredTasks.find(task => task.id === targetTaskId);
+        if (!dragged || !target || !this.canReorderTasks(dragged, target)) return;
+
+        const siblingIds = [...new Set(this.getManualSortSiblings(dragged)
+            .sort((a, b) => this.compareManualTaskOrder(a, b))
+            .map(task => this.getTaskSortId(task)))].filter(id => reminderData[id]);
+        const sourceId = this.getTaskSortId(dragged);
+        const from = siblingIds.indexOf(sourceId);
+        const targetId = this.getTaskSortId(target);
+        if (from < 0 || !siblingIds.includes(targetId)) return;
+
+        siblingIds.splice(from, 1);
+        const to = siblingIds.indexOf(targetId) + (insertAfter ? 1 : 0);
+        if (to === from) return;
+        siblingIds.splice(to, 0, sourceId);
+        siblingIds.forEach((id, index) => {
+            reminderData[id].sort = index * 10;
+        });
+        await saveReminders(this.plugin, reminderData);
+        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.viewId } }));
+        await this.refresh();
     }
 
     /**
@@ -3917,7 +3977,8 @@ export class EisenhowerMatrixView {
                 const criteria: SortCriterion[] = settings.eisenhowerSortCriteria
                     .filter(criterion => AVAILABLE_SORT_METHODS.some(method => method.key === criterion?.method))
                     .map(criterion => ({ method: criterion.method, order: criterion.order === 'desc' ? 'desc' : 'asc' }));
-                this.taskSortCriteria = criteria.length ? criteria : DEFAULT_MATRIX_SORT;
+                this.taskSortCriteria = criteria.length || settings.eisenhowerSortCriteria.length === 0
+                    ? criteria : DEFAULT_MATRIX_SORT;
             }
         } catch (error) {
             console.warn('Failed to load Eisenhower matrix sort settings:', error);
@@ -3925,7 +3986,7 @@ export class EisenhowerMatrixView {
     }
 
     private updateSortButtonTitle() {
-        const summary = getSortConfigSummary({ criteria: this.taskSortCriteria });
+        const summary = this.taskSortCriteria.length ? getSortConfigSummary({ criteria: this.taskSortCriteria }) : i18n('manual');
         this.container.querySelector('.task-sort-btn')?.setAttribute('aria-label', `${i18n('sortAndGrouping')}<br>${summary}`);
     }
 
@@ -3939,6 +4000,7 @@ export class EisenhowerMatrixView {
         new SortMenuDialog({
             plugin: this.plugin,
             currentCriteria: this.taskSortCriteria,
+            allowEmptyCriteria: true,
             onSave: applySort,
             onChange: applySort,
             grouping: {
