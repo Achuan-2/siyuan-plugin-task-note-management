@@ -104,6 +104,80 @@ export class SubtasksDialog {
         return typeof this.tempParentTask === 'function' ? this.tempParentTask() : this.tempParentTask;
     }
 
+    private getResolvedRootParentTask(): any | null {
+        const liveParent = this.getResolvedTempParentTask();
+        if (this.isTempMode) {
+            return liveParent;
+        }
+        if (liveParent && this.parentTaskCache) {
+            return { ...this.parentTaskCache, ...liveParent };
+        }
+        return liveParent ?? this.parentTaskCache ?? null;
+    }
+
+    private getSubtaskBadgeVisibility(
+        task: any,
+        rootParentId: string,
+        rootParentTask: any | null,
+        subtasksById: Map<string, any>
+    ): Pick<TaskRenderContext, 'showCategoryBadge' | 'showMilestoneBadge' | 'showTagBadge' | 'showProjectTagBadge'> {
+        const parentId = this.getRenderedParentId(task);
+        const parentTask = parentId === rootParentId
+            ? rootParentTask
+            : (subtasksById.get(parentId) ?? null);
+        if (!parentTask) {
+            return {
+                showCategoryBadge: true,
+                showMilestoneBadge: true,
+                showTagBadge: true,
+                showProjectTagBadge: true,
+            };
+        }
+
+        const normalizeId = (value: unknown): string => String(value || '').trim();
+        const normalizeCategories = (categoryId: unknown): string => Array.from(new Set(
+            String(categoryId || '').split(',').map(id => id.trim()).filter(Boolean)
+        )).sort().join(',');
+        const normalizeStringList = (values: unknown): string => JSON.stringify(
+            Array.from(new Set(
+                (Array.isArray(values) ? values : [])
+                    .map(item => String(item || '').trim())
+                    .filter(Boolean)
+            )).sort()
+        );
+
+        const taskCategories = normalizeCategories(task.categoryId);
+        const hasSameParentCategories = !!taskCategories
+            && taskCategories === normalizeCategories(parentTask.categoryId);
+
+        const taskMilestoneId = normalizeId(task.milestoneId);
+        const hasSameParentMilestone = !!taskMilestoneId
+            && taskMilestoneId === normalizeId(parentTask.milestoneId);
+
+        const taskTags = normalizeStringList(task.tags);
+        const hasSameParentTags = taskTags !== '[]'
+            && taskTags === normalizeStringList(parentTask.tags);
+
+        const taskProjectId = normalizeId(task.projectId);
+        const taskTagIds = normalizeStringList(task.tagIds);
+        const hasSameParentProjectTags = !!taskProjectId
+            && taskProjectId === normalizeId(parentTask.projectId)
+            && taskTagIds !== '[]'
+            && taskTagIds === normalizeStringList(parentTask.tagIds);
+
+        return {
+            showCategoryBadge: !hasSameParentCategories,
+            showMilestoneBadge: !hasSameParentMilestone,
+            showTagBadge: !hasSameParentTags,
+            showProjectTagBadge: !hasSameParentProjectTags,
+        };
+    }
+
+    public refreshDisplay() {
+        if (this.closed) return;
+        this.renderSubtasks();
+    }
+
     private getRootElement(): HTMLElement {
         return this.embeddedContainer || this.dialog.element;
     }
@@ -699,6 +773,9 @@ export class SubtasksDialog {
         }
 
         const entries = this.getVisibleSubtaskEntries();
+        const rootParentId = this.isTempMode ? '__TEMP_PARENT__' : this.parentId;
+        const rootParentTask = this.getResolvedRootParentTask();
+        const subtasksById = new Map(this.subtasks.filter(item => item?.id).map(item => [item.id, item]));
         const context: TaskRenderContext = {
             plugin: this.plugin,
             today: getLogicalDateString(),
@@ -765,7 +842,11 @@ export class SubtasksDialog {
         const rows = entries.map(({ task, level }) => {
             const existing = existingRows.get(task.id);
             if (existing) return existing;
-            const taskEl = TaskRenderer.render(task, context, callbacks, level, this.subtasks);
+            const taskContext: TaskRenderContext = {
+                ...context,
+                ...this.getSubtaskBadgeVisibility(task, rootParentId, rootParentTask, subtasksById),
+            };
+            const taskEl = TaskRenderer.render(task, taskContext, callbacks, level, this.subtasks);
             if (this.readOnly) {
                 const checkbox = taskEl.querySelector<HTMLInputElement>('.reminder-task-checkbox');
                 if (checkbox) checkbox.disabled = true;

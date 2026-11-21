@@ -1769,16 +1769,17 @@ export class QuickReminderDialog {
             this.selectedTagIds = [...this.reminder.tagIds];
         }
 
+        // 同步初始化选中的分类ID列表，确保表单初始化完成后可立即读取
+        if (this.reminder.categoryId) {
+            this.selectedCategoryIds = typeof this.reminder.categoryId === 'string'
+                ? this.reminder.categoryId.split(',').map((id: string) => id.trim()).filter(Boolean)
+                : [this.reminder.categoryId];
+        }
+
         // 等待渲染完成后设置分类、优先级和任务状态
         setTimeout(() => {
             // 填充分类
-            // 填充分类
-            if (this.reminder.categoryId) {
-                // 初始化 selectedCategoryIds
-                this.selectedCategoryIds = typeof this.reminder.categoryId === 'string'
-                    ? this.reminder.categoryId.split(',').filter((id: string) => id.trim())
-                    : [this.reminder.categoryId];
-
+            if (this.selectedCategoryIds.length > 0) {
                 // 根据分类数量自动设置多选状态
                 this.isMultiSelectCategory = this.selectedCategoryIds.length > 1;
                 const multiSelectCheckbox = this.dialog.element.querySelector('#quickMultiSelectCategory') as HTMLInputElement;
@@ -1796,10 +1797,8 @@ export class QuickReminderDialog {
                     }
                 });
                 // 如果有选中项，确保无分类未选中
-                if (this.selectedCategoryIds.length > 0) {
-                    const noCat = this.dialog.element.querySelector('.category-option[data-category=""]');
-                    if (noCat) noCat.classList.remove('selected');
-                }
+                const noCat = this.dialog.element.querySelector('.category-option[data-category=""]');
+                if (noCat) noCat.classList.remove('selected');
             }
 
             // 填充优先级
@@ -2092,7 +2091,8 @@ export class QuickReminderDialog {
                 this.isInstanceEdit,
                 isModifyAllInstances,
                 undefined,
-                this.readOnly
+                this.readOnly,
+                () => this.getTempParentTask()
             );
         }
 
@@ -2106,6 +2106,9 @@ export class QuickReminderDialog {
 
     private getCurrentProjectId(): string | undefined {
         const projectSelector = this.dialog?.element?.querySelector('#quickProjectSelector') as HTMLInputElement;
+        if (!this.isFormInitializing && projectSelector) {
+            return projectSelector.value || undefined;
+        }
         return projectSelector?.value || this.defaultProjectId || this.reminder?.projectId;
     }
 
@@ -2121,11 +2124,27 @@ export class QuickReminderDialog {
 
     private getCurrentMilestoneId(): string | undefined {
         const milestoneSelector = this.dialog?.element?.querySelector('#quickMilestoneSelector') as HTMLSelectElement;
-        return milestoneSelector ? (milestoneSelector.value || undefined) : (this.defaultMilestoneId ?? this.reminder?.milestoneId);
+        if (!this.isFormInitializing && milestoneSelector) {
+            return milestoneSelector.value || undefined;
+        }
+        return milestoneSelector?.value || this.defaultMilestoneId || this.reminder?.milestoneId;
     }
 
     private getCurrentCategoryId(): string | undefined {
+        if (!this.isFormInitializing) {
+            return this.selectedCategoryIds.length > 0 ? this.selectedCategoryIds.join(',') : undefined;
+        }
         return this.selectedCategoryIds.length > 0 ? this.selectedCategoryIds.join(',') : (this.defaultCategoryId ?? this.reminder?.categoryId);
+    }
+
+    private getCurrentTagIds(): string[] | undefined {
+        if (!this.isFormInitializing) {
+            return this.selectedTagIds.length > 0 ? [...this.selectedTagIds] : undefined;
+        }
+        if (this.selectedTagIds.length > 0) return [...this.selectedTagIds];
+        return Array.isArray(this.reminder?.tagIds) && this.reminder.tagIds.length > 0
+            ? [...this.reminder.tagIds]
+            : undefined;
     }
 
     private getCurrentPriority(): string | undefined {
@@ -2141,6 +2160,8 @@ export class QuickReminderDialog {
             kanbanStatus: this.getCurrentStatus(),
             milestoneId: this.getCurrentMilestoneId(),
             categoryId: this.getCurrentCategoryId(),
+            tagIds: this.getCurrentTagIds(),
+            ...(Array.isArray(this.reminder?.tags) ? { tags: [...this.reminder.tags] } : {}),
             priority: this.getCurrentPriority()
         };
     }
@@ -2153,7 +2174,13 @@ export class QuickReminderDialog {
     private async mountSubtasksTab() {
         const dialog = this.dialog;
         const subtasksPanel = dialog.element.querySelector<HTMLElement>('#quickSubtasksTabPanel');
-        if (!subtasksPanel || subtasksPanel.dataset.mounted) return;
+        if (!subtasksPanel) return;
+        if (subtasksPanel.dataset.mounted) {
+            if (subtasksPanel.dataset.mounted === 'true') {
+                this.subtasksDialog?.refreshDisplay();
+            }
+            return;
+        }
 
         subtasksPanel.dataset.mounted = 'loading';
         try {

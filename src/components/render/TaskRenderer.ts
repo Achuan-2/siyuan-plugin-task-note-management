@@ -46,6 +46,8 @@ export interface TaskRenderContext {
     showDocumentTitle?: boolean;
     showCategoryBadge?: boolean; // 是否显示分类标签（默认 true）
     showMilestoneBadge?: boolean; // 是否显示里程碑标签（默认 true）
+    showTagBadge?: boolean; // 是否显示自定义标签（默认 true）
+    showProjectTagBadge?: boolean; // 是否显示项目标签（默认 true）
     priorityDisplayStyle?: TaskPriorityDisplayStyle;
     allTasks?: any[]; // All tasks in context (e.g. for subtask progress ratio)
     taskHierarchy?: TaskHierarchyIndex;
@@ -1720,7 +1722,7 @@ export class TaskRenderer {
         }
 
         // 自定义标签
-        if (task.tags && Array.isArray(task.tags) && task.tags.length > 0) {
+        if (context.showTagBadge !== false && task.tags && Array.isArray(task.tags) && task.tags.length > 0) {
             const tagsContainer = document.createElement('div');
             tagsContainer.className = 'reminder-item__tags';
             tagsContainer.style.cssText = `
@@ -1751,7 +1753,7 @@ export class TaskRenderer {
         }
 
         // 项目标签显示
-        if (task.projectId && task.tagIds && Array.isArray(task.tagIds) && task.tagIds.length > 0) {
+        if (context.showProjectTagBadge !== false && task.projectId && task.tagIds && Array.isArray(task.tagIds) && task.tagIds.length > 0) {
             const tagsContainer = document.createElement('div');
             tagsContainer.className = 'reminder-item__tags reminder-item__project-tags';
             tagsContainer.style.cssText = `
