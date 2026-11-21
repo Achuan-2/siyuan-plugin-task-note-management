@@ -245,7 +245,7 @@ export class ProjectKanbanView {
     public manageGroupsHideNoDoingCheckbox: HTMLInputElement | null = null;
     public manageGroupsHideNoTodayCheckbox: HTMLInputElement | null = null;
     private customGroupTabsMode: boolean = false; // 自定义分组看板是否使用页签显示
-    private groupTabCountMode: GroupTabCountMode = 'doing';
+    private groupTabCountMode: GroupTabCountMode = 'unfinished';
     private displayGroupTabCountSelect: HTMLSelectElement | null = null;
     private displayCustomGroupStatusModeSelect: HTMLSelectElement | null = null;
     private activeCustomGroupTabId: string | null = null; // 当前选中的分组页签
@@ -863,9 +863,9 @@ export class ProjectKanbanView {
             this.hasCustomGroups = customGroups.some((group: any) => !group.archived);
             this.customGroupTabsMode = !!this.project?.customGroupTabsMode;
             const groupTabCountMode = this.project?.groupTabCountMode;
-            this.groupTabCountMode = groupTabCountMode === 'unfinished' || groupTabCountMode === 'all'
+            this.groupTabCountMode = groupTabCountMode === 'doing' || groupTabCountMode === 'all'
                 ? groupTabCountMode
-                : 'doing';
+                : 'unfinished';
             this.activeCustomGroupTabId = typeof this.project?.activeCustomGroupTabId === 'string'
                 ? this.project.activeCustomGroupTabId
                 : null;

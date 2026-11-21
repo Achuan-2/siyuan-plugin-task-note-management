@@ -1065,3 +1065,60 @@ test('看板切换优先级同步 reminder-priority-* 类名，并共享任务�
     const indexScss = fs.readFileSync(path.join(root, 'src/index.scss'), 'utf8');
     assert.match(indexScss, /\.reminder-panel,\s*\.TN-project-kanban-view\s*\{[\s\S]*?\.reminder-item__note\s*\{/);
 });
+
+test('分组页签默认统计未完成任务数量（不含放弃），并保留显式模式配置', async () => {
+    const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
+        'groupTabCountMode', 'loadProject', 'appendCustomGroupTabCount',
+    ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const created = [];
+    const doc = {
+        createElement: tag => {
+            const el = { tag, className: '', textContent: '' };
+            created.push(el);
+            return el;
+        },
+    };
+    const Board = new Function('document', 'i18n', 'showMessage', 'ProjectFolderManager', 'console', compiled + ';return Board;')(
+        doc, key => key, () => {}, { getInstance: () => ({ getFolderById: () => null }) }, { error() {} },
+    );
+
+    const createBoard = project => Object.assign(new Board(), {
+        projectId: 'A',
+        isAggregateView: false,
+        milestoneFiltersLoaded: true,
+        plugin: {
+            loadSettings: async () => ({}),
+            loadProjectData: async () => ({ A: project }),
+        },
+        getProjectCustomGroupsForView: async () => [],
+        getTaskStatus: item => item.kanbanStatus || 'doing',
+        isAbandonedTask: item => item.kanbanStatus === 'abandoned',
+    });
+
+    const freshBoard = createBoard({ id: 'A' });
+    assert.equal(freshBoard.groupTabCountMode, 'unfinished');
+
+    await freshBoard.loadProject();
+    assert.equal(freshBoard.groupTabCountMode, 'unfinished');
+
+    const tasks = [
+        { id: 't1', kanbanStatus: 'doing', completed: false },
+        { id: 't2', kanbanStatus: 'short_term', completed: false },
+        { id: 't2_sub', parentId: 't2', kanbanStatus: 'doing', completed: false },
+        { id: 't3', kanbanStatus: 'completed', completed: true },
+        { id: 't4', kanbanStatus: 'abandoned', completed: false },
+    ];
+    const button = { children: [], appendChild(child) { this.children.push(child); } };
+    freshBoard.appendCustomGroupTabCount(button, tasks);
+    assert.equal(button.children[0].textContent, '2');
+
+    for (const mode of ['doing', 'unfinished', 'all']) {
+        const board = createBoard({ id: 'A', groupTabCountMode: mode });
+        await board.loadProject();
+        assert.equal(board.groupTabCountMode, mode);
+    }
+
+    const unknownBoard = createBoard({ id: 'A', groupTabCountMode: 'unknown' });
+    await unknownBoard.loadProject();
+    assert.equal(unknownBoard.groupTabCountMode, 'unfinished');
+});
