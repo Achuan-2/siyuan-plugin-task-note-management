@@ -149,6 +149,8 @@ export class HabitPanel {
         if (this.reminderUpdatedHandler) {
             window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
         }
+        this.miniCheckInGlyphImages.clear();
+        this.miniCheckInGlyphContext = undefined;
         this.pomodoroManager.cleanupInactiveTimer();
     }
 
@@ -1733,9 +1735,9 @@ export class HabitPanel {
         return start;
     }
 
-    private createMiniCheckInGlyph(symbol: string): { element: SVGElement; extent: number } {
+    private createMiniCheckInGlyph(symbol: string, glyphColor?: string): { element: SVGElement; extent: number } {
         const ns = 'http://www.w3.org/2000/svg';
-        const color = getComputedStyle(this.container).color || '#000';
+        const color = glyphColor || getComputedStyle(this.container).color || '#000';
         const key = `${color}\0${symbol}`;
         this.miniCheckInGlyphImages ||= new Map();
         let image = this.miniCheckInGlyphImages.get(key);
@@ -1811,7 +1813,7 @@ export class HabitPanel {
         return { element, extent: 12 };
     }
 
-    private createMiniCheckInRing(percentage: number, symbols: string | string[]): SVGSVGElement {
+    private createMiniCheckInRing(percentage: number, symbols: string | string[], glyphColor?: string): SVGSVGElement {
         const ns = 'http://www.w3.org/2000/svg';
         const ring = document.createElementNS(ns, 'svg');
         ring.classList.add('habit-mini__ring');
@@ -1845,6 +1847,7 @@ export class HabitPanel {
             item.dataset.symbol = symbol;
             let extent = 6;
             if (['○', '×', '—'].includes(symbol)) {
+                extent = symbol === '—' ? 10 : symbol === '×' ? 7 : 6;
                 const center = document.createElementNS(ns, symbol === '○' ? 'circle' : 'path');
                 center.classList.add('habit-mini__ring-center');
                 if (symbol === '○') {
@@ -1856,7 +1859,7 @@ export class HabitPanel {
                 }
                 item.appendChild(center);
             } else {
-                const glyph = this.createMiniCheckInGlyph(symbol);
+                const glyph = this.createMiniCheckInGlyph(symbol, glyphColor);
                 extent = glyph.extent;
                 item.appendChild(glyph.element);
             }
@@ -1867,6 +1870,8 @@ export class HabitPanel {
                 const y = 14 - rows * cell / 2 + (row + 0.5) * cell;
                 const scale = Math.min(1, cell * 0.88 / extent);
                 item.setAttribute('transform', `translate(${x} ${y}) scale(${scale}) translate(-14 -14)`);
+            } else if (extent > 16) {
+                item.setAttribute('transform', `translate(14 14) scale(${16 / extent}) translate(-14 -14)`);
             }
             icon.appendChild(item);
         });
@@ -1881,6 +1886,7 @@ export class HabitPanel {
         weekDays.className = 'habit-card__week-days';
         const weekStart = mini ? this.getMiniCheckInStartDate(today) : this.getWeekStartDate();
         const weekdayNames = i18n('weekdayNames').split(',');
+        const glyphColor = mini ? (getComputedStyle(this.container).color || '#000') : '';
 
         for (let offset = 0; offset < 7; offset++) {
             const day = new Date(weekStart);
@@ -1897,29 +1903,33 @@ export class HabitPanel {
             const count = Math.max(emojis.length, checkIn?.count || 0);
             const hasRecord = count > 0;
             const progress = mini ? this.getHabitProgressOnDate(habit, date) : null;
+            const hasPomodoroProgress = !!progress && progress.pomodoro.current > 0;
+            const hasActivity = hasRecord || hasPomodoroProgress;
             const ratio = progress ? (this.getHabitGoalType(habit) === 'count'
                 ? getHabitSuccessfulCheckInCount(habit, date) / progress.count.target
                 : progress.current / progress.target) : 0;
             const percentage = completed ? 100 : Math.max(0, Math.min(99, Math.round((Number.isFinite(ratio) ? ratio : 0) * 100)));
-            const showProgress = mini && (hasRecord || ratio > 0)
+            const showProgress = mini && (hasActivity || ratio > 0)
                 && (this.getHabitGoalType(habit) !== 'count' || progress.count.target > 1);
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'habit-card__week-day';
             if (!required) button.classList.add('habit-card__week-day--not-required');
-            if (completed && (!mini || hasRecord)) button.classList.add('habit-card__week-day--done');
+            if (completed && (!mini || hasActivity)) button.classList.add('habit-card__week-day--done');
             if (date === today) button.classList.add('habit-card__week-day--today');
             button.style.setProperty('--habit-color', this.getHabitProgressColor(habit));
 
             if (mini) {
-                const defaultEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '○';
+                const defaultEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
                 const symbols = hasRecord
                     ? Array.from({ length: count }, (_, index) => emojis[index] || defaultEmoji)
-                    : required ? (date < today ? '×' : '○') : '—';
+                    : (completed || hasPomodoroProgress)
+                        ? [habit.autoCheckInEmoji || '🍅']
+                        : required ? (date < today ? '×' : '○') : '—';
                 button.dataset.progress = String(percentage);
-                button.appendChild(this.createMiniCheckInRing(percentage, symbols));
-                if (hasRecord) button.classList.add('habit-mini__day--recorded');
-                if (!completed && hasRecord) button.classList.add('habit-mini__day--partial');
+                button.appendChild(this.createMiniCheckInRing(percentage, symbols, glyphColor));
+                if (hasActivity || completed) button.classList.add('habit-mini__day--recorded');
+                if (!completed && hasActivity) button.classList.add('habit-mini__day--partial');
             } else {
                 const weekday = document.createElement('span');
                 weekday.className = 'habit-card__week-weekday';
@@ -1953,9 +1963,8 @@ export class HabitPanel {
                 button.append(weekday, dayNumber, status);
             }
 
-            const checkInState = mini && !hasRecord ? (required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired'))
-                : completed ? i18n('habitWeekCompleted')
-                : hasRecord ? i18n('habitWeekIncomplete')
+            const checkInState = completed ? i18n('habitWeekCompleted')
+                : hasActivity ? i18n('habitWeekIncomplete')
                     : required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired');
             const progressDescription = mini ? this.getHabitProgressDescription(habit, date) : '';
             const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}${showProgress ? ` · ${percentage}%` : ''}${progressDescription ? ` · ${progressDescription}` : ''}`;
@@ -1972,9 +1981,18 @@ export class HabitPanel {
                 event.stopPropagation();
                 if (mini) {
                     const menu = new Menu('habitDayCheckInMenu');
-                    this.createCheckInSubmenu(this.cloneHabit(habit)!, date).forEach(item => {
-                        if (item.type === 'separator') menu.addSeparator();
-                        else menu.addItem(item);
+                    const submenu = this.createCheckInSubmenu(this.cloneHabit(habit)!, date);
+                    submenu.forEach((item, idx) => {
+                        if (item.type === 'separator') {
+                            if (idx > 0) menu.addSeparator();
+                        } else {
+                            menu.addItem(item);
+                        }
+                    });
+                    menu.addItem({
+                        icon: 'iconCalendar',
+                        label: i18n('habitMiniViewDayRecords'),
+                        click: openDay,
                     });
                     const rect = button.getBoundingClientRect();
                     menu.open({ x: rect.left, y: rect.bottom + 4 });

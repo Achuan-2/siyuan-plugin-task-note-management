@@ -26,6 +26,7 @@ export type TaskPriorityDisplayStyle = 'background' | 'checkboxBorder';
 export interface TaskRenderContext {
     plugin: any;
     viewMode?: PanelViewMode;
+    selectionMode?: boolean;
     today: string;
     collapsedTasks?: Set<string>;
     selectedTaskIds?: Set<string>;
@@ -717,7 +718,7 @@ export class TaskRenderer {
             progressContainer.appendChild(percentLabel);
             infoEl.appendChild(progressContainer);
 
-            const canEditCustomProgress = customPercent !== undefined && !task.completed;
+            const canEditCustomProgress = customPercent !== undefined && !task.completed && !context.selectionMode;
             if (canEditCustomProgress) {
                 progressContainer.classList.add('reminder-progress-container--editable');
                 progressBarWrap.classList.add('reminder-progress-wrap--editable');
@@ -1200,7 +1201,7 @@ export class TaskRenderer {
         if (displayDate) {
             const timeEl = document.createElement('div');
             timeEl.className = 'reminder-item__time';
-            const displayTime = isMini || task.date ? task.time : (task.endTime || task.time);
+            const displayTime = task.date ? task.time : (task.endTime || task.time);
             const timeText = this.formatReminderTime(displayDate, displayTime, today, task.endDate, task.endTime, task, context);
             const hasNoDate = !task.date && !task.endDate;
             if (isMini) {
@@ -1237,7 +1238,6 @@ export class TaskRenderer {
                 timeEl.style.cursor = 'default';
             }
             if (isMini) {
-                timeEl.title = timeText;
                 timeEl.setAttribute('aria-label', `${timeText} · ${timeEl.getAttribute('aria-label')}`);
             }
             timeContainer.appendChild(timeEl);
@@ -1785,7 +1785,7 @@ export class TaskRenderer {
         const dateTime = (date?: string, time?: string) => [date, time].filter(Boolean).join(' ');
         const start = dateTime(task.date, task.time);
         const end = dateTime(task.endDate, task.endTime);
-        add(i18n('taskMiniTime'), start && end ? `${start} ~ ${end}` : start || end);
+        add(i18n('taskMiniTime'), start && end && start !== end ? `${start} ~ ${end}` : start || end);
         if (this.getReminderTimeEntries(task).length) {
             const formattedTime = this.formatReminderTime(task.date || task.endDate || context.today,
                 task.time, context.today, task.endDate, task.endTime, task, context);
@@ -1837,10 +1837,14 @@ export class TaskRenderer {
             + rows.map(([label, value]) => `<div class="task-mini-tooltip__row"><span>${escape(label)}</span><span>${escape(value)}</span></div>`).join('')
             + (note ? `<div class="task-mini-tooltip__note">${escape(note)}</div>` : '') + '</div>';
         const plain = [title, ...rows.map(([label, value]) => `${label}: ${value}`), note ? `${i18n('note')}: ${note}` : ''].filter(Boolean).join('\n');
-        [element, element.querySelector('.reminder-item__title'), element.querySelector('.reminder-item__time')].forEach(target => {
+        element.classList.add('ariaLabel');
+        element.setAttribute('aria-label', title);
+        element.setAttribute('aria-description', plain);
+        element.removeAttribute('title');
+        [element.querySelector('.reminder-item__title'), element.querySelector('.reminder-item__time')].forEach(target => {
             if (!target) return;
             target.classList.add('ariaLabel');
-            target.setAttribute('aria-label', title);
+            if (!target.getAttribute('aria-label')) target.setAttribute('aria-label', title);
             target.setAttribute('aria-description', plain);
             target.removeAttribute('title');
         });

@@ -13,7 +13,7 @@ const content = process.env.QUICK_REMINDER_SOURCE_REF
     : fs.readFileSync(path.join(root, relative), 'utf8');
 const source = ts.createSourceFile(relative, content, ts.ScriptTarget.Latest, true);
 const dialogClass = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'QuickReminderDialog');
-const methods = dialogClass.members.filter(node => ['renderProjectSelector', 'onProjectChange', 'saveReminder'].includes(node.name?.getText(source)))
+const methods = dialogClass.members.filter(node => ['renderProjectSelector', 'onProjectChange', 'applyProjectChange', 'saveReminder'].includes(node.name?.getText(source)))
     .map(node => node.getText(source)).join('\n');
 const code = ts.transpileModule(`class ProjectDialog { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },

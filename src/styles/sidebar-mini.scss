@@ -236,6 +236,10 @@
         font-weight: 600;
     }
 
+    .habit-mini__group-header .reminder-section-header__arrow {
+        justify-self: center;
+    }
+
     .habit-mini__group-header[data-collapsed='true'] .habit-mini__week-labels {
         visibility: hidden;
     }

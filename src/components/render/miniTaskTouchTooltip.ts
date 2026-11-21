@@ -3,7 +3,7 @@ import { i18n } from '../../pluginInstance';
 let closeActiveTooltip: (() => void) | undefined;
 
 /** Show TaskRenderer's escaped detail markup without relying on hover support. */
-export function showMiniTaskTouchTooltip(anchor: HTMLElement, content: string): () => void {
+export function showMiniTaskTouchTooltip(anchor: HTMLElement, content: string, onClose?: () => void): () => void {
     closeActiveTooltip?.();
     const tooltip = document.createElement('div');
     tooltip.className = 'task-mini-touch-tooltip';
@@ -12,17 +12,21 @@ export function showMiniTaskTouchTooltip(anchor: HTMLElement, content: string): 
     tooltip.tabIndex = -1;
     tooltip.innerHTML = content;
     const events = new AbortController();
+    let closed = false;
     const close = () => {
+        if (closed) return;
+        closed = true;
         events.abort();
         tooltip.remove();
         if (closeActiveTooltip === close) closeActiveTooltip = undefined;
+        onClose?.();
     };
     closeActiveTooltip = close;
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'b3-button b3-button--text task-mini-touch-tooltip__close';
     closeButton.setAttribute('aria-label', i18n('close'));
-    closeButton.innerHTML = '<svg><use href="#iconClose"></use></svg>';
+    closeButton.innerHTML = '<svg><use xlink:href="#iconClose"></use></svg>';
     closeButton.addEventListener('click', close);
     tooltip.prepend(closeButton);
     document.body.appendChild(tooltip);
