@@ -63,7 +63,6 @@ export class HabitPanel {
     private selectedGroups: string[] = [];
     private currentSearchQuery: string = '';
     private showCompletedHabitsInTodayPending: boolean = true;
-    private showWeekCheckIns: boolean = true;
     private viewMode: PanelViewMode = 'standard';
     private weekStartDay: number = 1;
     private checkInDaysMode: HabitCheckInDaysMode = 'total';
@@ -165,7 +164,6 @@ export class HabitPanel {
                 this.showCompletedHabitsInTodayPending = settings.habitPanelShowCompletedInTodayPending;
             }
             this.checkInDaysMode = settings.habitPanelCheckInDaysMode === 'streak' ? 'streak' : 'total';
-            this.showWeekCheckIns = settings.habitPanelShowWeekCheckIns !== false;
             this.weekStartDay = Number.isInteger(settings.weekStartDay) && settings.weekStartDay >= 0 && settings.weekStartDay <= 6
                 ? settings.weekStartDay : 1;
         } catch (error) {
@@ -179,7 +177,6 @@ export class HabitPanel {
             settings.habitPanelSelectedGroups = this.selectedGroups;
             settings.habitPanelShowCompletedInTodayPending = this.showCompletedHabitsInTodayPending;
             settings.habitPanelCheckInDaysMode = this.checkInDaysMode;
-            settings.habitPanelShowWeekCheckIns = this.showWeekCheckIns;
             settings.habitPanelViewMode = this.viewMode;
             await this.plugin.saveSettings(settings);
         } catch (error) {
@@ -481,15 +478,6 @@ export class HabitPanel {
                         label: i18n("showTodayPendingCompletedHabits") || "今日待打卡显示已完成习惯",
                         click: () => {
                             this.showCompletedHabitsInTodayPending = !this.showCompletedHabitsInTodayPending;
-                            void this.savePanelSettings();
-                            void this.loadHabits();
-                        }
-                    },
-                    {
-                        icon: this.showWeekCheckIns ? 'iconSelect' : '',
-                        label: this.viewMode === 'mini' ? i18n('habitShowRecentCheckIns') : i18n('habitShowWeekCheckIns'),
-                        click: () => {
-                            this.showWeekCheckIns = !this.showWeekCheckIns;
                             void this.savePanelSettings();
                             void this.loadHabits();
                         }
@@ -1100,28 +1088,27 @@ export class HabitPanel {
         groupHeader.appendChild(collapseIcon);
 
         if (this.viewMode === 'mini') {
-            groupHeader.classList.add('habit-mini-layout', 'habit-mini__group-header');
+            groupHeader.classList.add('habit-mini-layout', 'habit-mini-layout--week', 'habit-mini__group-header');
             const label = document.createElement('span');
             label.className = 'habit-mini__group-title';
             label.append(groupTitle, groupCount);
             groupHeader.replaceChildren(collapseIcon, label);
-            if (this.showWeekCheckIns) {
-                groupHeader.classList.add('habit-mini-layout--week');
-                const weekdays = document.createElement('span');
-                weekdays.className = 'habit-mini__week-labels';
-                weekdays.setAttribute('aria-hidden', 'true');
-                const start = this.getMiniCheckInStartDate();
-                for (let index = 0; index < 7; index++) {
-                    const name = document.createElement('span');
-                    const day = new Date(start);
-                    day.setDate(start.getDate() + index);
-                    name.textContent = String(day.getDate());
-                    name.title = getLocalDateString(day);
-                    if (index === 6) name.className = 'habit-mini__date--today';
-                    weekdays.appendChild(name);
-                }
-                groupHeader.appendChild(weekdays);
+            const weekdays = document.createElement('span');
+            weekdays.className = 'habit-mini__week-labels';
+            weekdays.setAttribute('aria-hidden', 'true');
+            const today = getLogicalDateString();
+            const start = this.getWeekStartDate(today);
+            for (let index = 0; index < 7; index++) {
+                const name = document.createElement('span');
+                const day = new Date(start);
+                day.setDate(start.getDate() + index);
+                const date = getLocalDateString(day);
+                name.textContent = String(day.getDate());
+                name.title = date;
+                if (date === today) name.className = 'habit-mini__date--today';
+                weekdays.appendChild(name);
             }
+            groupHeader.appendChild(weekdays);
         }
 
         const toggleGroup = () => {
@@ -1344,7 +1331,6 @@ export class HabitPanel {
         const displayDate = date || today;
         const isHistoryView = displayDate !== today;
         const isCompletedOnDisplayDate = !isInactive && this.isCompletedOnDate(habit, displayDate);
-        const checkIn = habit.checkIns?.[displayDate];
 
         // 无固定频率仅用于记录，不展示每日目标进度。
         if (!isInactive && habit.frequency.type !== 'none') {
@@ -1437,9 +1423,7 @@ export class HabitPanel {
 
         card.appendChild(infoGrid);
 
-        if (this.showWeekCheckIns) {
-            card.appendChild(this.createWeekCheckIns(habit, today));
-        }
+        card.appendChild(this.createWeekCheckIns(habit, today));
 
         // 番茄钟统计
         const pomodoroStats = this.getHabitPomodoroStats(habit.id);
@@ -1459,62 +1443,6 @@ export class HabitPanel {
                 </div>
             `;
             card.appendChild(pomodoroSection);
-        }
-
-        // 周打卡已包含当天记录，避免在卡片上重复显示。
-        if (!this.showWeekCheckIns && checkIn && ((checkIn.entries && checkIn.entries.length > 0) || (checkIn.status && checkIn.status.length > 0))) {
-            const emojiSection = document.createElement('div');
-            emojiSection.className = 'habit-card__emoji-section';
-            emojiSection.style.cursor = isHistoryView ? 'default' : 'pointer';
-            emojiSection.classList.add('ariaLabel'); emojiSection.setAttribute('aria-label', isHistoryView
-                ? (i18n("historyCheckInEmoji") || '当日打卡')
-                : (i18n("clickToEditCheckIn") || '点击编辑今日打卡'));
-
-            const emojiLabel = document.createElement('div');
-            emojiLabel.className = 'habit-card__emoji-label';
-            emojiLabel.textContent = isHistoryView
-                ? (i18n("historyCheckInEmoji") || '当日打卡')
-                : (i18n("todayCheckInEmoji") || '今日打卡');
-            emojiSection.appendChild(emojiLabel);
-
-            const emojiList = document.createElement('div');
-            emojiList.className = 'habit-card__emoji-list';
-
-            // 显示指定日期的entries，并显示emoji图标（保留顺序）
-            const emojis: string[] = [];
-            if (checkIn.entries && checkIn.entries.length > 0) {
-                checkIn.entries.forEach(entry => emojis.push(entry.emoji));
-            } else if (checkIn.status && checkIn.status.length > 0) {
-                checkIn.status.forEach(s => emojis.push(s));
-            }
-
-            emojis.forEach((emojiStr) => {
-                const emojiEl = document.createElement('span');
-                emojiEl.className = 'habit-card__emoji-item';
-                emojiEl.textContent = emojiStr;
-                emojiEl.classList.add('ariaLabel'); emojiEl.setAttribute('aria-label', emojiStr);
-                emojiList.appendChild(emojiEl);
-            });
-
-            emojiSection.appendChild(emojiList);
-
-            // 只有非历史视图才允许点击编辑
-            if (!isHistoryView) {
-                emojiSection.addEventListener('click', (ev) => {
-                    ev.stopPropagation();
-                    const dialog = new HabitDayDialog(
-                        habit,
-                        today,
-                        async (updatedHabit) => {
-                            await this.saveHabit(updatedHabit);
-                        },
-                        this.plugin
-                    );
-                    dialog.show();
-                });
-            }
-
-            card.appendChild(emojiSection);
         }
 
         // 底部操作区：坚持天数 + 打卡按钮
@@ -1645,8 +1573,7 @@ export class HabitPanel {
 
     private createMiniHabitRow(habit: Habit, date = getLogicalDateString()): HTMLElement {
         const row = document.createElement('div');
-        row.className = 'habit-card habit-mini habit-mini-layout';
-        if (this.showWeekCheckIns) row.classList.add('habit-mini-layout--week');
+        row.className = 'habit-card habit-mini habit-mini-layout habit-mini-layout--week';
         const inactive = this.isHabitEnded(habit) || habit.abandoned === true;
         if (inactive || this.currentTab === 'todayCompleted' || this.currentTab === 'yesterdayCompleted') {
             row.style.opacity = '0.7';
@@ -1697,7 +1624,7 @@ export class HabitPanel {
         }
         row.appendChild(title);
 
-        if (this.showWeekCheckIns) row.appendChild(this.createWeekCheckIns(habit, getLogicalDateString(), true));
+        row.appendChild(this.createWeekCheckIns(habit, getLogicalDateString(), true));
 
         row.addEventListener('contextmenu', event => {
             event.preventDefault();
@@ -1723,15 +1650,9 @@ export class HabitPanel {
             : `${getHabitSuccessfulCheckInCount(habit, date)}/${progress.target} ${i18n('times')}`;
     }
 
-    private getWeekStartDate(): Date {
-        const today = new Date(`${getLogicalDateString()}T12:00:00`);
-        today.setDate(today.getDate() - (today.getDay() - this.weekStartDay + 7) % 7);
-        return today;
-    }
-
-    private getMiniCheckInStartDate(today = getLogicalDateString()): Date {
+    private getWeekStartDate(today = getLogicalDateString()): Date {
         const start = new Date(`${today}T12:00:00`);
-        start.setDate(start.getDate() - 6);
+        start.setDate(start.getDate() - (start.getDay() - this.weekStartDay + 7) % 7);
         return start;
     }
 
@@ -1884,7 +1805,7 @@ export class HabitPanel {
         week.className = 'habit-card__week';
         const weekDays = document.createElement('div');
         weekDays.className = 'habit-card__week-days';
-        const weekStart = mini ? this.getMiniCheckInStartDate(today) : this.getWeekStartDate();
+        const weekStart = this.getWeekStartDate(today);
         const weekdayNames = i18n('weekdayNames').split(',');
         const glyphColor = mini ? (getComputedStyle(this.container).color || '#000') : '';
 
@@ -1902,7 +1823,7 @@ export class HabitPanel {
                 : checkIn?.status?.filter(Boolean) || [];
             const count = Math.max(emojis.length, checkIn?.count || 0);
             const hasRecord = count > 0;
-            const progress = mini ? this.getHabitProgressOnDate(habit, date) : null;
+            const progress = this.getHabitProgressOnDate(habit, date);
             const hasPomodoroProgress = !!progress && progress.pomodoro.current > 0;
             const hasActivity = hasRecord || hasPomodoroProgress;
             const ratio = progress ? (this.getHabitGoalType(habit) === 'count'
@@ -1931,9 +1852,6 @@ export class HabitPanel {
                 if (hasActivity || completed) button.classList.add('habit-mini__day--recorded');
                 if (!completed && hasActivity) button.classList.add('habit-mini__day--partial');
             } else {
-                const weekday = document.createElement('span');
-                weekday.className = 'habit-card__week-weekday';
-                weekday.textContent = weekdayNames[day.getDay()] || String(day.getDay());
                 const dayNumber = document.createElement('span');
                 dayNumber.className = 'habit-card__week-date';
                 dayNumber.textContent = String(day.getDate());
@@ -1958,9 +1876,15 @@ export class HabitPanel {
                         status.appendChild(remainder);
                     }
                 } else {
-                    status.textContent = completed ? '✓' : '·';
+                    status.textContent = completed
+                        ? '✓'
+                        : hasPomodoroProgress
+                            ? (habit.autoCheckInEmoji || '🍅')
+                            : required
+                                ? (date < today ? '×' : '·')
+                                : '—';
                 }
-                button.append(weekday, dayNumber, status);
+                button.append(dayNumber, status);
             }
 
             const checkInState = completed ? i18n('habitWeekCompleted')
@@ -1968,7 +1892,7 @@ export class HabitPanel {
                     : required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired');
             const progressDescription = mini ? this.getHabitProgressDescription(habit, date) : '';
             const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}${showProgress ? ` · ${percentage}%` : ''}${progressDescription ? ` · ${progressDescription}` : ''}`;
-            const label = mini ? `${description}\n${i18n('habitMiniDayActionHint')}` : description;
+            const label = `${description}\n${i18n('habitMiniDayActionHint')}`;
             button.title = label;
             button.setAttribute('aria-label', label);
             const openDay = () => {
@@ -1979,34 +1903,36 @@ export class HabitPanel {
             };
             button.addEventListener('click', (event) => {
                 event.stopPropagation();
-                if (mini) {
-                    const menu = new Menu('habitDayCheckInMenu');
-                    const submenu = this.createCheckInSubmenu(this.cloneHabit(habit)!, date);
-                    submenu.forEach((item, idx) => {
-                        if (item.type === 'separator') {
-                            if (idx > 0) menu.addSeparator();
-                        } else {
-                            menu.addItem(item);
+                const menu = new Menu('habitDayCheckInMenu');
+                const submenu = this.createCheckInSubmenu(this.cloneHabit(habit)!, date);
+                const viewDayRecordsItem = {
+                    icon: 'iconCalendar',
+                    label: i18n('habitMiniViewDayRecords'),
+                    click: openDay,
+                };
+                let insertedViewDayRecords = false;
+                submenu.forEach((item, idx) => {
+                    if (item.type === 'separator') {
+                        if (idx > 0) menu.addSeparator();
+                        if (!insertedViewDayRecords) {
+                            menu.addItem(viewDayRecordsItem);
+                            insertedViewDayRecords = true;
                         }
-                    });
-                    menu.addItem({
-                        icon: 'iconCalendar',
-                        label: i18n('habitMiniViewDayRecords'),
-                        click: openDay,
-                    });
-                    const rect = button.getBoundingClientRect();
-                    menu.open({ x: rect.left, y: rect.bottom + 4 });
-                } else {
-                    openDay();
-                }
-            });
-            if (mini) {
-                button.addEventListener('contextmenu', event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    openDay();
+                    } else {
+                        menu.addItem(item);
+                    }
                 });
-            }
+                if (!insertedViewDayRecords) {
+                    menu.addItem(viewDayRecordsItem);
+                }
+                const rect = button.getBoundingClientRect();
+                menu.open({ x: rect.left, y: rect.bottom + 4 });
+            });
+            button.addEventListener('contextmenu', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                openDay();
+            });
             weekDays.appendChild(button);
         }
 

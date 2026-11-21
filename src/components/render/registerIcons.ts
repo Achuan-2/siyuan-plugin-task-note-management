@@ -242,6 +242,16 @@ export function registerCustomIcons(plugin: Plugin) {
                 <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0l-1 1-1-1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>
             </g>
         </symbol>
+        <symbol id="iconTNChevronLeft" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6"/>
+            </g>
+        </symbol>
+        <symbol id="iconTNChevronRight" viewBox="0 0 24 24">
+            <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m9 18 6-6-6-6"/>
+            </g>
+        </symbol>
     `);
 }
 

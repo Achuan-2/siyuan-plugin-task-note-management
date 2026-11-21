@@ -1,5 +1,5 @@
 ﻿import { Dialog } from "siyuan";
-import { shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitCheckInDayComplete, type Habit } from "../../utils/habitUtils";
+import { shouldCheckInOnDate as shouldCheckInOnDateUtil, isHabitCheckInDayComplete, getHabitDayVisualState, type Habit } from "../../utils/habitUtils";
 import { HabitDayDialog } from "../dialog/HabitDayDialog";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import {
@@ -12,7 +12,7 @@ import { ScatterChart, CustomChart } from 'echarts/charts';
 import { TooltipComponent, GridComponent, TitleComponent, LegendComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { i18n } from "../../pluginInstance";
-import { getLocaleTag } from "../../utils/dateUtils";
+import { getLocaleTag, getLogicalDateString } from "../../utils/dateUtils";
 
 // 注册 ECharts 组件
 use([
@@ -573,7 +573,8 @@ export class HabitStatsDialog {
 
         const prevBtn = document.createElement('button');
         prevBtn.className = 'b3-button';
-        prevBtn.textContent = '◀';
+        prevBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        prevBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg>';
         prevBtn.addEventListener('click', () => {
             this.currentMonthDate.setMonth(this.currentMonthDate.getMonth() - 1);
             this.renderMonthlyView(container);
@@ -589,7 +590,8 @@ export class HabitStatsDialog {
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'b3-button';
-        nextBtn.textContent = '▶';
+        nextBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        nextBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg>';
         nextBtn.addEventListener('click', () => {
             this.currentMonthDate.setMonth(this.currentMonthDate.getMonth() + 1);
             this.renderMonthlyView(container);
@@ -647,25 +649,36 @@ export class HabitStatsDialog {
 
         const habitColor = this.getHabitColor();
         const habitColorSoft = this.applyAlphaToColor(habitColor, 0.75);
+        const todayStr = getLogicalDateString();
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
             const dateStr = this.formatLocalDate(date);
-            const checkIn = this.habit.checkIns?.[dateStr];
-            const isComplete = this.isCheckInComplete(dateStr);
-            const isToday = dateStr === this.formatLocalDate(new Date());
-            const required = this.shouldCheckInOnDate(this.habit, dateStr);
-
-            // 根据打卡状态设置背景色：达标才显示颜色
-            let backgroundColor = 'var(--b3-theme-background)';
-            if (isComplete) {
-                backgroundColor = `color-mix(in srgb, ${habitColorSoft} 28%, white 72%)`;
-            }
+            const dayState = getHabitDayVisualState(this.habit, dateStr, todayStr, {
+                getPomodoroFocusMinutes: (_, logicalDate) => this.getHabitPomodoroFocusMinutes(this.habit, logicalDate)
+            });
+            const isComplete = dayState.done;
+            const isPartial = dayState.isPartial;
+            const isToday = dateStr === todayStr;
+            const required = dayState.required;
 
             const dayCell = document.createElement('div');
             // 非打卡日期添加透明度
             let opacity = 1;
             if (!required) {
-                opacity = isComplete ? 0.62 : 0.36;
+                opacity = isComplete ? 0.65 : isPartial ? 0.78 : 0.48;
+            }
+
+            let cellBorderStyle = `border: 1px solid ${isToday ? 'var(--b3-theme-primary)' : 'var(--b3-theme-surface-lighter)'};`;
+            let cellBgStyle = `background: ${isComplete ? `color-mix(in srgb, ${habitColorSoft} 28%, white 72%)` : 'var(--b3-theme-background)'};`;
+            let cellShadowStyle = '';
+
+            if (isPartial) {
+                const partialBg = `color-mix(in srgb, ${habitColor} 10%, var(--b3-theme-background))`;
+                cellBorderStyle = 'border: 2px solid transparent;';
+                cellBgStyle = `background: linear-gradient(${partialBg}, ${partialBg}) padding-box, conic-gradient(from 0deg, ${habitColor} ${dayState.percentage}%, var(--b3-border-color) 0) border-box;`;
+                if (isToday) {
+                    cellShadowStyle = 'box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 45%, transparent 55%);';
+                }
             }
 
             dayCell.style.cssText = `
@@ -673,10 +686,13 @@ export class HabitStatsDialog {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                border-radius: 4px;
+                border-radius: 6px;
                 font-size: 12px;
-                background: ${backgroundColor};
-                border: 1px solid ${isToday ? 'var(--b3-theme-primary)' : 'var(--b3-theme-surface-lighter)'};
+                box-sizing: border-box;
+                cursor: pointer;
+                ${cellBgStyle}
+                ${cellBorderStyle}
+                ${cellShadowStyle}
                 opacity: ${opacity};
             `;
 
@@ -686,80 +702,50 @@ export class HabitStatsDialog {
 
             const dateSpan = document.createElement('div');
             dateSpan.textContent = String(day);
-            dateSpan.style.cssText = 'font-size:12px; color: var(--b3-theme-on-surface-light); width:100%; text-align:center; flex-shrink:0; z-index:1; background:inherit; border-radius:2px; padding:0 2px;';
+            dateSpan.style.cssText = `font-size:12px; color: ${isToday ? 'var(--b3-theme-primary)' : 'var(--b3-theme-on-surface-light)'}; ${isToday ? 'font-weight:700;' : ''} width:100%; text-align:center; flex-shrink:0; z-index:1; background:inherit; border-radius:2px; padding:0 2px;`;
             contentWrap.appendChild(dateSpan);
 
-            // 如果有备注，在下方中间显示一个点
+            // 如果有备注，在右上角显示一个点
             if (this.hasNote(dateStr)) {
                 const noteDot = document.createElement('div');
                 noteDot.style.cssText = 'position:absolute; top:2px; right:2px; width:6px; height:6px; border-radius:50%; background:var(--b3-theme-primary);';
                 contentWrap.appendChild(noteDot);
             }
 
-            if (checkIn) {
-                // 优先使用 entries（包含时间与备注），否则回退到旧的 status 数组
-                const entries = checkIn.entries && checkIn.entries.length > 0 ? checkIn.entries : undefined;
-                const statuses = entries ? entries.map(e => e.emoji).filter(Boolean) : (checkIn.status || []).filter(Boolean);
-                const count = statuses.length;
+            const entryDetails = this.getCheckInDetails(dateStr);
+            const stateLabel = isComplete
+                ? i18n("habitWeekCompleted")
+                : isPartial
+                    ? `${i18n("habitWeekIncomplete")}${dayState.percentage > 0 ? ` · ${dayState.percentage}%` : ''}`
+                    : required
+                        ? i18n("habitWeekMissing")
+                        : i18n("habitWeekNotRequired");
+            const ariaLines = [dateStr, stateLabel];
+            if (entryDetails.length > 0) {
+                ariaLines.push(...entryDetails);
+            } else if (dayState.displayEmojis.length > 0) {
+                ariaLines.push(dayState.displayEmojis.join(' '));
+            }
+            dayCell.classList.add('ariaLabel');
+            dayCell.setAttribute('aria-label', ariaLines.join('\n'));
 
-                // emoji 字体大小通过 CSS 容器查询自动适应（.habit-emoji-item 类）
-
+            if (dayState.displayEmojis.length > 0) {
                 const emojiContainer = document.createElement('div');
-                emojiContainer.style.cssText = `display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-content:center; width:100%; flex:1; min-height:0; overflow:hidden;`;
-
-                if (entries) {
-                    // 每条 entry 都可能包含备注 note 与 timestamp
-                    const emojiClass = this.getEmojiFontClass(count);
-                    entries.forEach(entry => {
-                        const span = document.createElement('span');
-                        span.textContent = entry.emoji || '';
-                        span.className = emojiClass;
-                        span.style.cssText = 'line-height:1;';
-                        emojiContainer.appendChild(span);
-                    });
-
-                    contentWrap.appendChild(emojiContainer);
-                    const checkInCount = checkIn.count || 0;
-                    const target = this.habit.target || 1;
-                    const statusText = isComplete ? i18n("habitComplete") : `${checkInCount}/${target}`;
-                    // 将每条 entry 的时间、emoji与备注合并到 aria-label 中，便于鼠标悬停查看
-                    const entryDetails = entries.map(e => {
-                        const timeText = e.timestamp ? e.timestamp.slice(11, 16) : ''; // HH:MM 格式
-                        const noteText = e.note?.trim();
-                        if (timeText && noteText) {
-                            return `${e.emoji || '📝'} ${timeText} ${noteText}`;
-                        } else if (timeText) {
-                            return `${e.emoji || '📝'} ${timeText}`;
-                        } else if (noteText) {
-                            return `${e.emoji || '📝'} ${noteText}`;
-                        }
-                        return e.emoji || '📝';
-                    }).join('\n');
-                    dayCell.classList.add('ariaLabel'); dayCell.setAttribute('aria-label', `${dateStr}\n${entryDetails}`);
-                } else if (statuses.length > 0) {
-                    const emojiClass = this.getEmojiFontClass(count);
-                    statuses.forEach(s => {
-                        const span = document.createElement('span');
-                        span.textContent = s;
-                        span.className = emojiClass;
-                        span.style.cssText = 'line-height:1;';
-                        emojiContainer.appendChild(span);
-                    });
-
-                    contentWrap.appendChild(emojiContainer);
-                    const checkInCount = checkIn.count || 0;
-                    const target = this.habit.target || 1;
-                    const statusText = isComplete ? i18n("habitComplete") : `${checkInCount}/${target}`;
-                    dayCell.classList.add('ariaLabel'); dayCell.setAttribute('aria-label', `${dateStr}\n${statuses.join('\n')}`);
-                } else {
-                    const emptyPlaceholder = document.createElement('div');
-                    emptyPlaceholder.style.cssText = 'width:12px; height:12px; border-radius:50%; background:var(--b3-theme-surface); margin-top:4px;';
-                    contentWrap.appendChild(emptyPlaceholder);
-                }
-            } else {
-                const emptyPlaceholder = document.createElement('div');
-                emptyPlaceholder.style.cssText = 'width:12px; height:12px; border-radius:50%; background:var(--b3-theme-surface); margin-top:4px;';
-                contentWrap.appendChild(emptyPlaceholder);
+                emojiContainer.style.cssText = 'display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-content:center; width:100%; flex:1; min-height:0; overflow:hidden;';
+                const emojiClass = this.getEmojiFontClass(dayState.displayEmojis.length);
+                dayState.displayEmojis.forEach(emoji => {
+                    const span = document.createElement('span');
+                    span.textContent = emoji;
+                    span.className = emojiClass;
+                    span.style.cssText = 'line-height:1;';
+                    emojiContainer.appendChild(span);
+                });
+                contentWrap.appendChild(emojiContainer);
+            } else if (dayState.fallbackSymbol) {
+                const symbolEl = document.createElement('div');
+                symbolEl.textContent = dayState.fallbackSymbol;
+                symbolEl.style.cssText = `display:flex; align-items:center; justify-content:center; flex:1; width:100%; font-size:${dayState.fallbackSymbol === '×' ? 'clamp(14px, 2.8cqw, 22px)' : 'clamp(13px, 2.5cqw, 20px)'}; color:var(--b3-theme-on-surface-light); line-height:1; user-select:none;`;
+                contentWrap.appendChild(symbolEl);
             }
 
             dayCell.appendChild(contentWrap);
@@ -795,7 +781,8 @@ export class HabitStatsDialog {
 
         const prevBtn = document.createElement('button');
         prevBtn.className = 'b3-button';
-        prevBtn.textContent = '◀';
+        prevBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        prevBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg>';
         prevBtn.addEventListener('click', () => {
             this.yearViewOffset--;
             this.rerenderYearlyView(container);
@@ -811,7 +798,8 @@ export class HabitStatsDialog {
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'b3-button';
-        nextBtn.textContent = '▶';
+        nextBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        nextBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg>';
         nextBtn.addEventListener('click', () => {
             this.yearViewOffset++;
             this.rerenderYearlyView(container);
@@ -1206,7 +1194,8 @@ export class HabitStatsDialog {
 
         const prevBtn = document.createElement('button');
         prevBtn.className = 'b3-button b3-button--outline';
-        prevBtn.textContent = '◀';
+        prevBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        prevBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg>';
         prevBtn.disabled = this.logPage <= 1;
         prevBtn.addEventListener('click', () => {
             if (this.logPage > 1) {
@@ -1221,7 +1210,8 @@ export class HabitStatsDialog {
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'b3-button b3-button--outline';
-        nextBtn.textContent = '▶';
+        nextBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        nextBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg>';
         nextBtn.disabled = this.logPage >= totalPages;
         nextBtn.addEventListener('click', () => {
             if (this.logPage < totalPages) {
@@ -1273,7 +1263,8 @@ export class HabitStatsDialog {
 
         const prevBtn = document.createElement('button');
         prevBtn.className = 'b3-button';
-        prevBtn.textContent = '◀';
+        prevBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        prevBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg>';
         prevBtn.addEventListener('click', () => {
             this.timeViewOffset--;
             this.renderTimeStats(container);
@@ -1289,7 +1280,8 @@ export class HabitStatsDialog {
 
         const nextBtn = document.createElement('button');
         nextBtn.className = 'b3-button';
-        nextBtn.textContent = '▶';
+        nextBtn.style.cssText = 'display:inline-flex; align-items:center; justify-content:center;';
+        nextBtn.innerHTML = '<svg style="width:16px;height:16px;display:block;" aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg>';
         nextBtn.addEventListener('click', () => {
             this.timeViewOffset++;
             this.renderTimeStats(container);

@@ -439,3 +439,76 @@ export function getTodayHabitBuckets(
 
     return { dueHabits, pendingHabits, completedHabits };
 }
+
+export interface HabitDayVisualState {
+    required: boolean;
+    done: boolean;
+    hasRecord: boolean;
+    hasPomodoroProgress: boolean;
+    hasActivity: boolean;
+    isPartial: boolean;
+    percentage: number;
+    displayEmojis: string[];
+    fallbackSymbol: string;
+}
+
+export function getHabitDayVisualState(
+    habit: Habit,
+    date: string,
+    today: string,
+    options?: {
+        getPomodoroFocusMinutes?: (habitId: string, logicalDate: string) => number;
+    }
+): HabitDayVisualState {
+    const required = isHabitActiveOnDate(habit, date) && shouldCheckInOnDate(habit, date);
+    const done = isHabitCheckInDayComplete(habit, date, options);
+    const checkIn = habit?.checkIns?.[date];
+    let emojis: string[] = [];
+    if (checkIn?.entries && checkIn.entries.length > 0) {
+        emojis = checkIn.entries.map(entry => entry.emoji).filter(Boolean);
+    } else if (checkIn?.status && checkIn.status.length > 0) {
+        emojis = checkIn.status.filter(Boolean);
+    } else if (typeof checkIn?.count === "number" && checkIn.count > 0) {
+        const fallback = habit.autoCheckInEmoji || "🍅";
+        emojis = Array.from({ length: Math.min(checkIn.count, 8) }, () => fallback);
+    }
+    const count = Math.max(emojis.length, checkIn?.count || 0);
+    const hasRecord = count > 0;
+    const progress = getHabitProgressOnDate(habit, date, options);
+    const hasPomodoroProgress = progress.pomodoro.current > 0;
+    const hasActivity = hasRecord || hasPomodoroProgress;
+    const goalType = getHabitGoalType(habit);
+    const ratio = goalType === "count"
+        ? getHabitSuccessfulCheckInCount(habit, date) / progress.count.target
+        : progress.current / progress.target;
+    const percentage = done
+        ? 100
+        : Math.max(0, Math.min(99, Math.round((Number.isFinite(ratio) ? ratio : 0) * 100)));
+    const isPartial = !done && hasActivity;
+    const displayEmojis = emojis.length > 0
+        ? emojis
+        : (done || hasPomodoroProgress)
+            ? [habit.autoCheckInEmoji || "🍅"]
+            : [];
+    const fallbackSymbol = displayEmojis.length > 0
+        ? ""
+        : done
+            ? "✓"
+            : !required
+                ? "—"
+                : date < today
+                    ? "×"
+                    : "";
+
+    return {
+        required,
+        done,
+        hasRecord,
+        hasPomodoroProgress,
+        hasActivity,
+        isPartial,
+        percentage,
+        displayEmojis,
+        fallbackSymbol
+    };
+}

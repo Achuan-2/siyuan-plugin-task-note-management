@@ -2117,8 +2117,6 @@
     "habitCheckInDaysDisplay": "打卡天数显示",
     "habitShowTotalCheckInDays": "已打卡天数",
     "habitShowStreakDays": "连续天数",
-    "habitShowWeekCheckIns": "侧栏显示一周打卡",
-    "habitShowRecentCheckIns": "显示最近七天打卡",
     "habitWeekCompleted": "已完成",
     "habitWeekIncomplete": "未达标",
     "habitWeekMissing": "未打卡",

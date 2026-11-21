@@ -20,8 +20,11 @@ import {
 import {
     getHabitGoalType as getHabitGoalTypeUtil,
     getHabitCompletedDaysCount,
+    getHabitDayVisualState,
+    type HabitDayVisualState,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     getHabitStreakDays,
+    isHabitActiveOnDate,
     isHabitCheckInDayComplete,
     formatHabitReminderTimeDisplay,
     shouldCheckInOnDate as shouldCheckInOnDateUtil,
@@ -182,7 +185,7 @@ function getDateKey(date: Date): string {
 }
 
 function getTodayDateKey(): string {
-    return getDateKey(new Date());
+    return getLogicalDateString();
 }
 
 function formatFullDateLabel(day: Date): string {
@@ -447,7 +450,30 @@ function nextLogPage(totalPages: number) {
 }
 
 function shouldCheckInOnDate(habit: Habit, dateStr: string): boolean {
-    return shouldCheckInOnDateUtil(habit, dateStr);
+    return isHabitActiveOnDate(habit, dateStr) && shouldCheckInOnDateUtil(habit, dateStr);
+}
+
+function getDayVisualState(habit: Habit, dateStr: string, _revision: number): HabitDayVisualState {
+    return getHabitDayVisualState(habit, dateStr, getTodayDateKey(), {
+        getPomodoroFocusMinutes: (habitId, logicalDate) =>
+            habitId === habit.id ? getHabitPomodoroFocusMinutes(habit, logicalDate) : 0
+    });
+}
+
+function getDayCellAriaLabel(habit: Habit, day: Date, dateStr: string, dayState: HabitDayVisualState): string {
+    const checkInDetails = getCheckInDetails(habit, dateStr);
+    const stateLabel = dayState.done
+        ? i18n("habitWeekCompleted")
+        : dayState.isPartial
+            ? `${i18n("habitWeekIncomplete")}${dayState.percentage > 0 ? ` · ${dayState.percentage}%` : ""}`
+            : dayState.required
+                ? i18n("habitWeekMissing")
+                : i18n("habitWeekNotRequired");
+    const lines = [formatFullDateLabel(day), stateLabel];
+    if (checkInDetails.length > 0) {
+        lines.push(...checkInDetails);
+    }
+    return lines.join("\n");
 }
 
 function hasRequiredDateInRange(habit: Habit, dates: Date[]): boolean {
@@ -623,13 +649,16 @@ function applyAlphaToColor(color: string, alpha: number): string {
     return color;
 }
 
-function getHabitColor(habit: Habit): string {
-    const alpha = 0.75;
+function getHabitSolidColor(habit: Habit): string {
     const defaultColor = '#69bf77';
     if (habit.color && /^#[0-9a-fA-F]{6}$/.test(habit.color)) {
-        return applyAlphaToColor(habit.color, alpha);
+        return habit.color;
     }
-    return applyAlphaToColor(defaultColor, alpha);
+    return defaultColor;
+}
+
+function getHabitColor(habit: Habit): string {
+    return applyAlphaToColor(getHabitSolidColor(habit), 0.75);
 }
 
 function getWeekRangeText(): string {
@@ -1052,11 +1081,11 @@ $: if (logPage < 1) logPage = 1;
     {:else if activeTab === "week"}
         <div class="week-panel">
             <div class="panel-toolbar">
-                <button class="nav-btn" on:click={prevWeek}>◀</button>
+                <button class="nav-btn" on:click={prevWeek}><svg aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg></button>
                 <div class="date-range">{weekRangeText}</div>
                 <div class="toolbar-right">
                     <button class="today-btn" on:click={resetWeek}>{i18n('thisWeek')}</button>
-                    <button class="nav-btn" on:click={nextWeek}>▶</button>
+                    <button class="nav-btn" on:click={nextWeek}><svg aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg></button>
                 </div>
             </div>
 
@@ -1073,22 +1102,21 @@ $: if (logPage < 1) logPage = 1;
                                     {#each currentWeekDates as day}
                                     {@const dateStr = getDateKey(day)}
                                     {@const isToday = dateStr === getTodayDateKey()}
-                                    {@const required = shouldCheckInOnDate(habit, dateStr)}
-                                    {@const done = isCheckInComplete(habit, dateStr)}
-                                    {@const emojis = getCheckInEmojis(habit, dateStr)}
-                                    {@const checkInDetails = getCheckInDetails(habit, dateStr)}
+                                    {@const dayState = getDayVisualState(habit, dateStr, pomodoroStatsRevision)}
                                     <div
-                                        class="week-cell {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday && required ? 'today' : ''} ariaLabel"
-                                        style={`--habit-color: ${getHabitColor(habit)};`}
-                                        aria-label={`${formatFullDateLabel(day)}\n${checkInDetails.length > 0 ? checkInDetails.join('\n') : i18n(done ? 'habitCheckedInState' : 'habitNotCheckedInState')}`}
+                                        class="week-cell {dayState.done ? 'done' : ''} {dayState.isPartial ? 'partial' : ''} {!dayState.required ? 'not-required' : ''} {isToday && dayState.required ? 'today' : ''} ariaLabel"
+                                        style={`--habit-color: ${getHabitColor(habit)}; --habit-solid-color: ${getHabitSolidColor(habit)}; --habit-progress: ${dayState.percentage};`}
+                                        aria-label={getDayCellAriaLabel(habit, day, dateStr, dayState)}
                                         on:click={() => openHabitDayEditor(habit, dateStr)}
                                     >
-                                            {#if emojis.length > 0}
-                                                <div class="week-cell-emojis {getEmojiCountClass(emojis.length)} {emojis.length >= 6 ? 'wrap-bottom' : ''}">
-                                                    {#each emojis as emoji}
+                                            {#if dayState.displayEmojis.length > 0}
+                                                <div class="week-cell-emojis {getEmojiCountClass(dayState.displayEmojis.length)} {dayState.displayEmojis.length >= 6 ? 'wrap-bottom' : ''}">
+                                                    {#each dayState.displayEmojis as emoji}
                                                         <span class="week-cell-emoji-item">{emoji}</span>
                                                     {/each}
                                                 </div>
+                                            {:else if dayState.fallbackSymbol}
+                                                <span class="week-cell-status" class:missed={dayState.fallbackSymbol === '×'}>{dayState.fallbackSymbol}</span>
                                             {/if}
                                         </div>
                                     {/each}
@@ -1102,11 +1130,11 @@ $: if (logPage < 1) logPage = 1;
     {:else if activeTab === "month"}
         <div class="month-panel" bind:this={monthPanelEl}>
             <div class="panel-toolbar">
-                <button class="nav-btn" on:click={prevMonth}>◀</button>
+                <button class="nav-btn" on:click={prevMonth}><svg aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg></button>
                 <div class="date-range">{monthTitle}</div>
                 <div class="toolbar-right">
                     <button class="today-btn" on:click={resetMonth}>{i18n('thisMonth')}</button>
-                    <button class="nav-btn" on:click={nextMonth}>▶</button>
+                    <button class="nav-btn" on:click={nextMonth}><svg aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg></button>
                 </div>
             </div>
 
@@ -1131,24 +1159,23 @@ $: if (logPage < 1) logPage = 1;
                                         {:else}
                                             {@const dateStr = getDateKey(day)}
                                             {@const isToday = dateStr === getTodayDateKey()}
-                                            {@const required = shouldCheckInOnDate(habit, dateStr)}
-                                            {@const done = isCheckInComplete(habit, dateStr)}
-                                            {@const dayEmojis = getCheckInEmojis(habit, dateStr)}
-                                            {@const dayCheckInDetails = getCheckInDetails(habit, dateStr)}
+                                            {@const dayState = getDayVisualState(habit, dateStr, pomodoroStatsRevision)}
                                             <div
-                                                class="month-day {done ? 'done' : ''} {!required ? 'not-required' : ''} {isToday && required ? 'today' : ''} ariaLabel"
-                                                style={`--habit-color: ${getHabitColor(habit)};`}
-                                                aria-label={`${formatFullDateLabel(day)}\n${dayCheckInDetails.length > 0 ? dayCheckInDetails.join('\n') : i18n(done ? 'habitCheckedInState' : 'habitNotCheckedInState')}`}
+                                                class="month-day {dayState.done ? 'done' : ''} {dayState.isPartial ? 'partial' : ''} {!dayState.required ? 'not-required' : ''} {isToday && dayState.required ? 'today' : ''} ariaLabel"
+                                                style={`--habit-color: ${getHabitColor(habit)}; --habit-solid-color: ${getHabitSolidColor(habit)}; --habit-progress: ${dayState.percentage};`}
+                                                aria-label={getDayCellAriaLabel(habit, day, dateStr, dayState)}
                                                 on:click={() => openHabitDayEditor(habit, dateStr)}
                                             >
                                                 <div class="month-day-content">
                                                     <div class="month-day-date">{day.getDate()}</div>
-                                                    {#if dayEmojis.length > 0}
-                                                        <div class="month-day-emojis {getEmojiCountClass(dayEmojis.length)} {dayEmojis.length >= 6 ? 'wrap-bottom' : ''}">
-                                                            {#each dayEmojis as emoji}
+                                                    {#if dayState.displayEmojis.length > 0}
+                                                        <div class="month-day-emojis {getEmojiCountClass(dayState.displayEmojis.length)} {dayState.displayEmojis.length >= 6 ? 'wrap-bottom' : ''}">
+                                                            {#each dayState.displayEmojis as emoji}
                                                                 <span>{emoji}</span>
                                                             {/each}
                                                         </div>
+                                                    {:else if dayState.fallbackSymbol}
+                                                        <div class="month-day-status" class:missed={dayState.fallbackSymbol === '×'}>{dayState.fallbackSymbol}</div>
                                                     {/if}
                                                 </div>
                                             </div>
@@ -1164,11 +1191,11 @@ $: if (logPage < 1) logPage = 1;
     {:else if activeTab === "year"}
         <div class="year-panel">
             <div class="panel-toolbar">
-                <button class="nav-btn" on:click={prevYear}>◀</button>
+                <button class="nav-btn" on:click={prevYear}><svg aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg></button>
                 <div class="date-range">{yearTitle}</div>
                 <div class="toolbar-right">
                     <button class="today-btn" on:click={resetYear}>{i18n('icsDateFilterThisYear')}</button>
-                    <button class="nav-btn" on:click={nextYear}>▶</button>
+                    <button class="nav-btn" on:click={nextYear}><svg aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg></button>
                 </div>
             </div>
 
@@ -1281,9 +1308,9 @@ $: if (logPage < 1) logPage = 1;
             </div>
 
             <div class="logs-pagination">
-                <button class="nav-btn" on:click={prevLogPage} disabled={logPage <= 1}>◀</button>
+                <button class="nav-btn" on:click={prevLogPage} disabled={logPage <= 1}><svg aria-hidden="true"><use xlink:href="#iconTNChevronLeft"></use></svg></button>
                 <div class="log-page-info">{i18n('pageOfPages', { page: String(logPage), pages: String(totalLogPages) })}</div>
-                <button class="nav-btn" on:click={() => nextLogPage(totalLogPages)} disabled={logPage >= totalLogPages}>▶</button>
+                <button class="nav-btn" on:click={() => nextLogPage(totalLogPages)} disabled={logPage >= totalLogPages}><svg aria-hidden="true"><use xlink:href="#iconTNChevronRight"></use></svg></button>
             </div>
         </div>
     {/if}
@@ -1563,10 +1590,21 @@ $: if (logPage < 1) logPage = 1;
     .nav-btn {
         border: 1px solid var(--b3-border-color);
         background: var(--b3-theme-surface);
+        color: var(--b3-theme-on-surface);
         border-radius: 8px;
         width: 34px;
         height: 30px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
+    }
+
+    .nav-btn svg {
+        width: 16px;
+        height: 16px;
+        display: block;
     }
 
     .date-range {
@@ -1607,7 +1645,6 @@ $: if (logPage < 1) logPage = 1;
 
     .week-row {
         border: 1px solid var(--b3-border-color);
-        background: var(--b3-theme-surface);
         border-radius: 12px;
         padding: 10px 12px;
         display: grid;
@@ -1648,17 +1685,47 @@ $: if (logPage < 1) logPage = 1;
     .week-cell.done {
         background: color-mix(in srgb, var(--habit-color) 70%, white 30%);
     }
-    .week-cell.today {
+    .week-cell.partial {
+        border: 2px solid transparent;
+        background:
+            linear-gradient(
+                color-mix(in srgb, var(--habit-solid-color) 12%, var(--b3-theme-surface-lighter)),
+                color-mix(in srgb, var(--habit-solid-color) 12%, var(--b3-theme-surface-lighter))
+            ) padding-box,
+            conic-gradient(
+                from 0deg,
+                var(--habit-solid-color) calc(var(--habit-progress, 0) * 1%),
+                var(--b3-border-color) 0
+            ) border-box;
+    }
+    .week-cell.today:not(.partial) {
         border-color: var(--b3-theme-primary) !important;
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 35%, transparent 65%);
+    }
+    .week-cell.today {
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 45%, transparent 55%);
     }
 
     .week-cell.not-required {
-        opacity: 0.32;
+        opacity: 0.45;
+    }
+
+    .week-cell.not-required.partial {
+        opacity: 0.78;
     }
 
     .week-cell.not-required.done {
-        opacity: 0.6;
+        opacity: 0.65;
+    }
+
+    .week-cell-status {
+        font-size: 13px;
+        line-height: 1;
+        color: var(--b3-theme-on-surface-light);
+        user-select: none;
+    }
+
+    .week-cell-status.missed {
+        font-size: 14px;
     }
 
     .week-cell-emojis {
@@ -1770,17 +1837,56 @@ $: if (logPage < 1) logPage = 1;
         background: color-mix(in srgb, var(--habit-color) 65%, white 35%);
         font-weight: 600;
     }
-    .month-day.today {
+    .month-day.partial {
+        border: 2px solid transparent;
+        background:
+            linear-gradient(
+                color-mix(in srgb, var(--habit-solid-color) 10%, var(--b3-theme-background)),
+                color-mix(in srgb, var(--habit-solid-color) 10%, var(--b3-theme-background))
+            ) padding-box,
+            conic-gradient(
+                from 0deg,
+                var(--habit-solid-color) calc(var(--habit-progress, 0) * 1%),
+                var(--b3-border-color) 0
+            ) border-box;
+    }
+    .month-day.today:not(.partial) {
         border-color: var(--b3-theme-primary) !important;
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 35%, transparent 65%);
+    }
+    .month-day.today {
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--b3-theme-primary) 45%, transparent 55%);
+    }
+    .month-day.today .month-day-date {
+        color: var(--b3-theme-primary);
+        font-weight: 700;
     }
 
     .month-day.not-required {
-        opacity: 0.36;
+        opacity: 0.45;
+    }
+
+    .month-day.not-required.partial {
+        opacity: 0.78;
     }
 
     .month-day.not-required.done {
-        opacity: 0.62;
+        opacity: 0.65;
+    }
+
+    .month-day-status {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        width: 100%;
+        font-size: clamp(11px, 3.2cqw, 16px);
+        line-height: 1;
+        color: var(--b3-theme-on-surface-light);
+        user-select: none;
+    }
+
+    .month-day-status.missed {
+        font-size: clamp(12px, 3.6cqw, 18px);
     }
 
     .month-day.empty {

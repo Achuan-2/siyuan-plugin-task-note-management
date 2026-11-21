@@ -1235,9 +1235,10 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 2px;
     min-width: 0;
-    min-height: 48px;
-    padding: 2px 0;
+    min-height: 36px;
+    padding: 3px 0;
     border: 1px solid transparent;
     border-radius: 6px;
     background: var(--b3-theme-surface-lighter);
