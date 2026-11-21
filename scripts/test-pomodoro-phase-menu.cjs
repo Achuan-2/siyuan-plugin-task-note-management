@@ -14,9 +14,9 @@ const names = ['showNativeSwitchMenuPopup', 'openPomodoroSettings', 'callMethod'
     'setBrowserWindowFullscreen', 'setupBrowserWindowFullscreen', 'exitFullscreen', 'getMiniWindowStyle',
     'getCurrentState', 'updateBrowserWindowContent', 'formatTime',
     'toggleBrowserWindowMiniMode', 'toggleBrowserWindowDock',
-    'toggleRandomRest', 'ensureRandomRestAudioInitialized', 'startRandomRestTimer',
+    'toggleRandomRest', 'applyRandomRestSettings', 'ensureRandomRestAudioInitialized', 'startRandomRestTimer',
     'stopRandomRestTimer', 'calculateNextRandomRestTime', 'checkRandomRestTrigger',
-    'updateSwitchMenuContent', 'updateRandomRestToggleButton'];
+    'updateSwitchMenuContent', 'updateRandomRestToggleButton', 'updateSettings', 'shouldUseGlobalPomodoroWindow'];
 const methods = timerClass.members.filter(node => names.includes(node.name?.getText(ast)))
     .map(node => node.getText(ast)).join('\n');
 const hostCode = ts.transpileModule(`class PomodoroTimer { ${methods} }`, {
@@ -338,6 +338,127 @@ test('迷你菜单和 DOM 切换菜单同步更新随机微休息按钮文案', 
     assert.equal(view.timer.randomRestEnabled, true);
     assert.equal(view.timer.randomRestToggleBtn.text, '🎲 disableRandomRest');
     assert.equal(view.open().items[4].submenu[1].label, 'disableRandomRest');
+});
+
+test('插件设置开启或关闭随机微休息时不影响当前正在计时的番茄钟与自定义时长', () => {
+    const startTime = Date.now() - 180000;
+    const mainTimerHandle = { main: true };
+    const view = fixture({
+        randomRestEnabled: true,
+        isRunning: true,
+        isPaused: false,
+        isWorkPhase: true,
+        startTime,
+        timeLeft: 720,
+        totalTime: 900
+    });
+    view.timer.timer = mainTimerHandle;
+    view.timer.settings = {
+        ...view.timer.settings,
+        workDuration: 15,
+        randomRestEnabled: true,
+        randomRestMinInterval: 3,
+        randomRestMaxInterval: 5,
+        randomRestBreakDuration: 10,
+        randomRestSounds: 'start.mp3',
+        randomRestEndSound: 'end.mp3',
+        randomRestVolume: 0.8,
+        randomRestEndVolume: 0.9
+    };
+    view.timer.pauseTimer = () => { assert.fail('设置开关随机微休息不得暂停主计时器'); };
+    view.timer.resumeTimer = () => { assert.fail('设置开关随机微休息不得重启主计时器'); };
+    view.timer.stopAllAudio = () => { assert.fail('设置开关随机微休息不得停止背景音频'); };
+    view.timer.startRandomRestTimer();
+    assert.equal(view.activeIntervals.size, 1);
+
+    // 在插件设置中关闭随机微休息（全局默认时长为 25 分钟，但当前任务是 15 分钟）
+    view.timer.applyRandomRestSettings({
+        workDuration: 25,
+        randomRestEnabled: false,
+        randomRestMinInterval: 3,
+        randomRestMaxInterval: 5,
+        randomRestBreakDuration: 10,
+        randomRestSounds: 'start.mp3',
+        randomRestEndSound: 'end.mp3',
+        randomRestVolume: 0.8,
+        randomRestEndVolume: 0.9
+    }, { syncEnabled: true });
+
+    assert.equal(view.timer.randomRestEnabled, false);
+    assert.equal(view.activeIntervals.size, 0);
+    assert.equal(view.timer.isRunning, true);
+    assert.equal(view.timer.isPaused, false);
+    assert.equal(view.timer.startTime, startTime);
+    assert.equal(view.timer.timeLeft, 720);
+    assert.equal(view.timer.totalTime, 900);
+    assert.equal(view.timer.settings.workDuration, 15);
+    assert.equal(view.timer.timer, mainTimerHandle);
+    assert.equal(view.actions.includes('loadURL'), false);
+
+    // 在插件设置中重新开启随机微休息，重复同步保持幂等且不重置下次触发时间
+    view.timer.applyRandomRestSettings({
+        workDuration: 25,
+        randomRestEnabled: true,
+        randomRestMinInterval: 3,
+        randomRestMaxInterval: 5,
+        randomRestBreakDuration: 10,
+        randomRestSounds: 'start.mp3',
+        randomRestEndSound: 'end.mp3',
+        randomRestVolume: 0.8,
+        randomRestEndVolume: 0.9
+    }, { syncEnabled: true });
+    const scheduledTrigger = view.timer.randomRestNextTriggerTime;
+    assert.equal(view.timer.randomRestEnabled, true);
+    assert.equal(view.activeIntervals.size, 1);
+    assert.ok(scheduledTrigger > Date.now());
+
+    view.timer.applyRandomRestSettings({
+        workDuration: 25,
+        randomRestEnabled: true,
+        randomRestMinInterval: 3,
+        randomRestMaxInterval: 5,
+        randomRestBreakDuration: 10,
+        randomRestSounds: 'start.mp3',
+        randomRestEndSound: 'end.mp3',
+        randomRestVolume: 0.8,
+        randomRestEndVolume: 0.9
+    }, { syncEnabled: true });
+    assert.equal(view.timer.randomRestNextTriggerTime, scheduledTrigger);
+    assert.equal(view.timer.settings.workDuration, 15);
+    assert.equal(view.timer.timeLeft, 720);
+});
+
+test('修改其他随机微休息参数时不会覆盖当前任务在更多菜单中手动关闭的状态', () => {
+    const view = fixture({ randomRestEnabled: false, isRunning: true, isPaused: false, isWorkPhase: true });
+    view.timer.applyRandomRestSettings({
+        randomRestEnabled: true,
+        randomRestMinInterval: 4,
+        randomRestMaxInterval: 6,
+        randomRestBreakDuration: 15
+    }, { syncEnabled: false });
+
+    assert.equal(view.timer.randomRestEnabled, false);
+    assert.equal(view.timer.settings.randomRestBreakDuration, 15);
+    assert.equal(view.activeIntervals.size, 0);
+});
+
+test('updateSettings 在窗口布局未变化时只同步显示，不重载独立窗口', async () => {
+    const view = fixture({ isRunning: true, miniStyle: 'ring' });
+    let displaySynced = 0;
+    view.timer.supportsGlobalPomodoroWindow = () => true;
+    view.timer.updateBrowserWindowDisplay = () => { displaySynced++; };
+    view.timer.settings = {
+        ...view.timer.settings,
+        pomodoroDockPosition: 'right',
+        pomodoroMiniWindowStyle: 'ring',
+        globalWindowEnabled: true
+    };
+    await view.timer.updateSettings({
+        ...view.timer.settings,
+        dailyFocusGoal: 3
+    });
+    assert.equal(displaySynced, 1);
+    assert.equal(view.actions.includes('loadURL'), false);
 });
 
 test('退出全屏恢复圆环比例，横条和极简保持自由比例且不改窗口大小', () => {

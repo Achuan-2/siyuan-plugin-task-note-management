@@ -2509,17 +2509,25 @@
         }
 
         // 特殊逻辑：番茄钟设置变更
-        if (
+        if (key.startsWith('randomRest')) {
+            (async () => {
+                try {
+                    const pomodoroSettings = await plugin.getPomodoroSettings(settings);
+                    PomodoroManager.getInstance().applyRandomRestSettings(pomodoroSettings, {
+                        syncEnabled: key === 'randomRestEnabled',
+                    });
+                } catch (error) {
+                    console.error("Failed to apply random microbreak settings:", error);
+                }
+            })();
+        } else if (
             key.startsWith('pomodoro') ||
             key === 'workVolume' ||
             key === 'breakVolume' ||
             key === 'longBreakVolume' ||
             key === 'workEndVolume' ||
             key === 'breakEndVolume' ||
-            key === 'randomRestVolume' ||
-            key === 'randomRestEndVolume' ||
-            key === 'dailyFocusGoal' ||
-            key.startsWith('randomRest')
+            key === 'dailyFocusGoal'
         ) {
             (async () => {
                 try {

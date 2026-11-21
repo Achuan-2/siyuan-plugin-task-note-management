@@ -1743,74 +1743,115 @@ export default class ReminderPlugin extends Plugin {
                     const pomodoroSettings = await this.getPomodoroSettings();
                     const prev = this.lastPomodoroSettings || {};
                     const next = pomodoroSettings || {};
-                    const relevantFields = [
+                    const randomRestFields = [
+                        'randomRestEnabled', 'randomRestMinInterval', 'randomRestMaxInterval', 'randomRestBreakDuration',
+                        'randomRestSounds', 'randomRestEndSound', 'randomRestSystemNotification', 'randomRestPopupWindow',
+                        'randomRestVolume', 'randomRestEndVolume'
+                    ];
+                    const corePomodoroFields = [
                         'workDuration', 'breakDuration', 'longBreakDuration', 'longBreakInterval', 'autoMode',
                         'workVolume', 'breakVolume', 'longBreakVolume',
-                        'randomRestEnabled', 'randomRestMinInterval', 'randomRestMaxInterval', 'randomRestBreakDuration',
-                        'randomRestSounds', 'randomRestEndSound', 'dailyFocusGoal', 'pomodoroMiniWindowStyle',
+                        'dailyFocusGoal', 'pomodoroMiniWindowStyle',
                         'pomodoroCompletionNotePopup', 'pomodoroEndSoundLoop'
-                    ]; let relevantChanged = false;
-                    for (const f of relevantFields) {
-                        const pv = prev[f];
-                        const nv = next[f];
-                        if (String(pv) !== String(nv)) { relevantChanged = true; break; }
-                    }
+                    ];
+                    const randomRestEnabledChanged = String(prev.randomRestEnabled) !== String(next.randomRestEnabled);
+                    const randomRestChanged = randomRestFields.some(f => String(prev[f]) !== String(next[f]));
+                    const coreChanged = corePomodoroFields.some(f => String(prev[f]) !== String(next[f]));
+                    this.lastPomodoroSettings = pomodoroSettings;
 
                     const currentPomodoro = PomodoroManager.getInstance().getCurrentPomodoroTimer();
 
-
-
-                    if (!relevantChanged) {
-                        // 仅更新时间缓存，不做实例更新或广播
-                        this.lastPomodoroSettings = pomodoroSettings;
+                    if (!randomRestChanged && !coreChanged) {
                         return;
                     }
 
-                    // 有实例且相关设置发生改变，进行更新
-                    let updatedCount = 0;
-                    if (currentPomodoro && typeof currentPomodoro.getCurrentState === 'function' && typeof currentPomodoro.updateState === 'function') {
-                        // 先检查窗口是否仍然存在，避免操作已销毁的 BrowserWindow
-                        if (typeof currentPomodoro.isWindowActive === 'function' && !currentPomodoro.isWindowActive()) {
-                            // 窗口已失效，清理引用，不再尝试更新
-                            PomodoroManager.getInstance().cleanupInactiveTimer();
-                        } else {
-                            try {
-                                const state = currentPomodoro.getCurrentState();
-                                // 强制更新，即使正在运行
-                                const reminder = { id: state.reminderId, title: state.reminderTitle };
-                                await currentPomodoro.updateState(reminder, pomodoroSettings, state.isCountUp, state, true, true);
-                                updatedCount++;
-                            } catch (e) {
-                                console.warn("Failed to update standalone pomodoro window settings:", e);
-                                // 如果是 BrowserWindow 已销毁导致的错误，清理引用
-                                if (e?.message?.includes('destroyed') || e?.message?.includes('Object has been destroyed')) {
-                                    PomodoroManager.getInstance().cleanupInactiveTimer();
+                    // 仅随机微休息设置变更时，轻量同步随机微休息配置，不中断、不重置正在计时的番茄钟
+                    if (randomRestChanged && !coreChanged) {
+                        let updatedCount = 0;
+                        if (currentPomodoro && typeof currentPomodoro.applyRandomRestSettings === 'function') {
+                            if (typeof currentPomodoro.isWindowActive === 'function' && !currentPomodoro.isWindowActive()) {
+                                PomodoroManager.getInstance().cleanupInactiveTimer();
+                            } else {
+                                try {
+                                    currentPomodoro.applyRandomRestSettings(pomodoroSettings, {
+                                        syncEnabled: randomRestEnabledChanged
+                                    });
+                                    updatedCount++;
+                                } catch (e) {
+                                    console.warn("Failed to apply random microbreak settings to standalone pomodoro window:", e);
+                                    if (e?.message?.includes('destroyed') || e?.message?.includes('Object has been destroyed')) {
+                                        PomodoroManager.getInstance().cleanupInactiveTimer();
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    for (const [, view] of this.tabViews) {
-                        if (view && typeof view.updateState === 'function' && typeof view.getCurrentState === 'function') {
-                            try {
-                                // 同样检查 Tab 中的番茄钟窗口是否有效
-                                if (typeof view.isWindowActive === 'function' && !view.isWindowActive()) {
-                                    continue;
+                        for (const [, view] of this.tabViews) {
+                            if (view && typeof view.applyRandomRestSettings === 'function') {
+                                try {
+                                    if (typeof view.isWindowActive === 'function' && !view.isWindowActive()) {
+                                        continue;
+                                    }
+                                    view.applyRandomRestSettings(pomodoroSettings, {
+                                        syncEnabled: randomRestEnabledChanged
+                                    });
+                                    updatedCount++;
+                                } catch (e) {
+                                    console.warn("Failed to apply random microbreak settings to tab pomodoro:", e);
                                 }
-                                const state = view.getCurrentState();
-                                // 强制更新，即使正在运行
-                                const reminder = { id: state.reminderId, title: state.reminderTitle };
-                                await view.updateState(reminder, pomodoroSettings, state.isCountUp, state, true, true);
-                                updatedCount++;
-                            } catch (e) {
-                                console.warn("Failed to update tab pomodoro settings:", e);
                             }
                         }
-                    }
 
-                    // 仅在至少有一个实例实际被更新时提示用户（跳过运行中计时器时不提示）
-                    if (updatedCount > 0) {
-                        try { showMessage(i18n('pomodoroSettingsApplied') || '番茄钟设置已应用到打开的计时器', 1500); } catch (e) { }
+                        if (updatedCount > 0) {
+                            try { showMessage(i18n('pomodoroSettingsApplied') || '番茄钟设置已应用到打开的计时器', 1500); } catch (e) { }
+                        }
+                    } else {
+                        // 有实例且核心番茄钟设置发生改变，进行更新
+                        let updatedCount = 0;
+                        if (currentPomodoro && typeof currentPomodoro.getCurrentState === 'function' && typeof currentPomodoro.updateState === 'function') {
+                            // 先检查窗口是否仍然存在，避免操作已销毁的 BrowserWindow
+                            if (typeof currentPomodoro.isWindowActive === 'function' && !currentPomodoro.isWindowActive()) {
+                                // 窗口已失效，清理引用，不再尝试更新
+                                PomodoroManager.getInstance().cleanupInactiveTimer();
+                            } else {
+                                try {
+                                    const state = currentPomodoro.getCurrentState();
+                                    // 强制更新，即使正在运行
+                                    const reminder = { id: state.reminderId, title: state.reminderTitle };
+                                    await currentPomodoro.updateState(reminder, pomodoroSettings, state.isCountUp, state, true, true);
+                                    updatedCount++;
+                                } catch (e) {
+                                    console.warn("Failed to update standalone pomodoro window settings:", e);
+                                    // 如果是 BrowserWindow 已销毁导致的错误，清理引用
+                                    if (e?.message?.includes('destroyed') || e?.message?.includes('Object has been destroyed')) {
+                                        PomodoroManager.getInstance().cleanupInactiveTimer();
+                                    }
+                                }
+                            }
+                        }
+
+                        for (const [, view] of this.tabViews) {
+                            if (view && typeof view.updateState === 'function' && typeof view.getCurrentState === 'function') {
+                                try {
+                                    // 同样检查 Tab 中的番茄钟窗口是否有效
+                                    if (typeof view.isWindowActive === 'function' && !view.isWindowActive()) {
+                                        continue;
+                                    }
+                                    const state = view.getCurrentState();
+                                    // 强制更新，即使正在运行
+                                    const reminder = { id: state.reminderId, title: state.reminderTitle };
+                                    await view.updateState(reminder, pomodoroSettings, state.isCountUp, state, true, true);
+                                    updatedCount++;
+                                } catch (e) {
+                                    console.warn("Failed to update tab pomodoro settings:", e);
+                                }
+                            }
+                        }
+
+                        // 仅在至少有一个实例实际被更新时提示用户（跳过运行中计时器时不提示）
+                        if (updatedCount > 0) {
+                            try { showMessage(i18n('pomodoroSettingsApplied') || '番茄钟设置已应用到打开的计时器', 1500); } catch (e) { }
+                        }
                     }
                 } catch (err2) {
                     console.warn("Error updating pomodoro timer settings:", err2);

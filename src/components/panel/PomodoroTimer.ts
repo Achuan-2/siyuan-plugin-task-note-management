@@ -1316,6 +1316,86 @@ export class PomodoroTimer {
         showMessage(i18n(this.randomRestEnabled ? 'randomRestTurnedOn' : 'randomRestTurnedOff'), 1500);
     }
 
+    /**
+     * 应用来自插件设置的随机微休息配置，不中断、不重置当前正在计时的番茄钟与背景音
+     */
+    public applyRandomRestSettings(settings: any, options?: { syncEnabled?: boolean }) {
+        if (!settings) return;
+
+        const prevEnabled = this.randomRestEnabled;
+        const prevMinInterval = this.settings?.randomRestMinInterval;
+        const prevMaxInterval = this.settings?.randomRestMaxInterval;
+        const prevSounds = this.settings?.randomRestSounds || '';
+        const prevEndSound = this.settings?.randomRestEndSound || '';
+
+        const syncEnabled = options?.syncEnabled !== false;
+        const nextEnabled = syncEnabled ? (settings.randomRestEnabled === true) : this.randomRestEnabled;
+        const nextSounds = settings.randomRestSounds || '';
+        const nextEndSound = settings.randomRestEndSound || '';
+
+        this.settings = {
+            ...this.settings,
+            randomRestEnabled: settings.randomRestEnabled === true,
+            randomRestMinInterval: settings.randomRestMinInterval,
+            randomRestMaxInterval: settings.randomRestMaxInterval,
+            randomRestBreakDuration: settings.randomRestBreakDuration,
+            randomRestSystemNotification: settings.randomRestSystemNotification,
+            randomRestPopupWindow: settings.randomRestPopupWindow,
+            randomRestSounds: nextSounds,
+            randomRestEndSound: nextEndSound,
+            randomRestVolume: settings.randomRestVolume,
+            randomRestEndVolume: settings.randomRestEndVolume,
+        };
+
+        this.randomRestEnabled = nextEnabled;
+        this.randomRestSystemNotificationEnabled = settings.randomRestSystemNotification !== false;
+        this.randomRestVolume = Math.max(0, Math.min(1, settings.randomRestVolume ?? 1));
+        this.randomRestEndVolume = Math.max(0, Math.min(1, settings.randomRestEndVolume ?? 1));
+
+        if (nextSounds !== prevSounds) {
+            this.randomRestSounds = [];
+        } else {
+            (this.randomRestSounds || []).forEach(audio => {
+                if (audio) audio.volume = this.randomRestVolume;
+            });
+        }
+        if (nextEndSound !== prevEndSound) {
+            this.randomRestEndSound = null;
+        } else if (this.randomRestEndSound) {
+            this.randomRestEndSound.volume = this.randomRestEndVolume;
+        }
+
+        const intervalChanged =
+            String(prevMinInterval) !== String(settings.randomRestMinInterval) ||
+            String(prevMaxInterval) !== String(settings.randomRestMaxInterval);
+
+        if (this.randomRestEnabled) {
+            this.ensureRandomRestAudioInitialized();
+            if (this.isRunning && !this.isPaused && this.isWorkPhase) {
+                if (!prevEnabled || intervalChanged || !this.randomRestCheckTimer) {
+                    this.startRandomRestTimer();
+                }
+            }
+        } else {
+            this.stopRandomRestTimer();
+            this.randomRestNextTriggerTime = 0;
+            this.randomRestWindowCloseTime = 0;
+        }
+
+        if (
+            this.isRunning &&
+            !this.isPaused &&
+            this.isWorkPhase &&
+            this.plugin?.isInMobileApp &&
+            (prevEnabled !== nextEnabled || intervalChanged)
+        ) {
+            void this.scheduleAllMobileNotifications();
+        }
+
+        this.updateSwitchMenuContent();
+        this.updateDisplay();
+    }
+
 
 
     private closeRandomRestWindow() {
@@ -12408,6 +12488,7 @@ document.body.classList.remove('mini-mode');
     public async updateSettings(settings: any) {
         const oldUseGlobalWindow = this.shouldUseGlobalPomodoroWindow(this.settings);
         const oldDockPosition = this.settings?.pomodoroDockPosition;
+        const oldMiniWindowStyle = this.settings?.pomodoroMiniWindowStyle;
         this.settings = settings;
 
         // 更新 DOM 模式下吸附按钮的 emoji（无论是否处于吸附模式）
@@ -12455,9 +12536,15 @@ document.body.classList.remove('mini-mode');
 
         const pomodoroWindow = PomodoroTimer.browserWindowInstance;
         if (pomodoroWindow && !pomodoroWindow.isDestroyed()) {
-            // Update window content to reflect new settings (like dock position)
-            // updateBrowserWindowContent 内部会根据 this.isDocked 状态设置鼠标穿透
-            await this.updateBrowserWindowContent(pomodoroWindow);
+            const needsWindowContentReload =
+                oldDockPosition !== settings?.pomodoroDockPosition ||
+                oldMiniWindowStyle !== settings?.pomodoroMiniWindowStyle;
+            if (needsWindowContentReload) {
+                // 仅窗口吸附方向或迷你样式变化时才重载独立窗口，避免普通设置变更中断计时和背景音
+                await this.updateBrowserWindowContent(pomodoroWindow);
+            } else {
+                this.updateBrowserWindowDisplay(pomodoroWindow);
+            }
         } else if (this.isDocked && !this.isTabMode) {
             // DOM 窗口吸附模式：如果吸附位置改变，重新应用吸附样式
             if (oldDockPosition !== settings.pomodoroDockPosition) {

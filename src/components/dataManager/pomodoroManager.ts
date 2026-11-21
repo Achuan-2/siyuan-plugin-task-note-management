@@ -168,4 +168,17 @@ export class PomodoroManager {
             }
         }
     }
+
+    /**
+     * 仅同步随机微休息设置，不影响正在计时的番茄钟
+     */
+    public applyRandomRestSettings(settings: any, options?: { syncEnabled?: boolean }): void {
+        if (this.currentPomodoroTimer && this.currentPomodoroTimer.isWindowActive()) {
+            try {
+                this.currentPomodoroTimer.applyRandomRestSettings(settings, options);
+            } catch (error) {
+                console.error("Failed to apply random microbreak settings:", error);
+            }
+        }
+    }
 }
