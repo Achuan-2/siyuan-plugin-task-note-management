@@ -4431,6 +4431,7 @@ export class ProjectKanbanView {
             { key: 'endDate', label: () => i18n('sortByEndDate') || '按结束日期排序', icon: '🗓️' },
             { key: 'created', label: () => i18n('sortByCreated'), icon: '📅' },
             { key: 'title', label: () => i18n('sortByTitle') || i18n('sortingTitle'), icon: '📝' },
+            { key: 'manual', label: () => i18n('sortByManual'), icon: '↕️' },
         ];
     }
 
@@ -4622,6 +4623,9 @@ export class ProjectKanbanView {
             case 'title':
                 // 多选排序中，title 只比较标题本身
                 result = this.compareByTitleForCriteria(a, b);
+                break;
+            case 'manual':
+                result = this.getTaskSortValue(a) - this.getTaskSortValue(b);
                 break;
             default:
                 result = 0;

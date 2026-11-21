@@ -52,6 +52,7 @@
     "sortByStartDate": "按开始日期排序",
     "sortByEndDate": "按结束日期排序",
     "sortByPriority": "按优先级排序",
+    "sortByManual": "手动排序",
     "sortByTitle": "按标题排序",
     "sortByCreated": "按创建时间排序",
     "sortByCategory": "按分类排序",

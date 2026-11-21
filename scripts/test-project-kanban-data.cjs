@@ -40,6 +40,61 @@ const code = ts.transpileModule(`${persistence}\n${repeatHelpers}\nclass Board {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
+function sortFixture() {
+    const sortMethods = extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
+        'showSortMenu', 'getKanbanSortAvailableMethods', 'getActiveSortCriteria', 'normalizeKanbanSortCriteria',
+        'loadKanbanSortConfig', 'saveKanbanSortConfig', 'syncLegacySortStateFromCriteria', 'sortTasks',
+        'sortByCriteria', 'compareByCriterion', 'compareByPriorityValue', 'compareByCreatedAt', 'getTaskSortValue',
+    ]);
+    const compiled = ts.transpileModule(`class Board { ${sortMethods} }`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    let menu;
+    const Board = new Function('SortMenuDialog', 'i18n', compiled + ';return Board;')(class {
+        constructor(options) { menu = options; }
+        show() {}
+    }, key => key);
+    let stored = { project: { sortRule: 'priority', sortOrder: 'desc' } };
+    const board = Object.assign(new Board(), {
+        projectId: 'project',
+        plugin: {
+            loadProjectData: async () => clone(stored),
+            saveProjectData: async value => { stored = clone(value); },
+        },
+        updateSortButtonTitle() {},
+        renderKanban() {},
+        tasks: [
+            { id: 'high', priority: 'high', sort: 10 },
+            { id: 'unset', priority: 'low' },
+            { id: 'repeat', priority: 'low', isRepeatInstance: true, originalId: 'series', sort: -10 },
+        ],
+        reminderData: { series: { sort: 30 } },
+    });
+    return { board, openMenu: () => { board.showSortMenu(); return menu; } };
+}
+
+test('看板单选手动排序按 sort 升降序排列，重复实例使用原任务的 sort', async () => {
+    const { board, openMenu } = sortFixture();
+    await board.loadKanbanSortConfig();
+    const menu = openMenu();
+    assert.equal(menu.availableMethods.find(method => method.key === 'manual').label(), 'sortByManual');
+    await menu.onChange([{ method: 'manual', order: 'asc' }]);
+    assert.deepEqual(board.tasks.map(task => task.id), ['unset', 'high', 'repeat']);
+    await menu.onChange([{ method: 'manual', order: 'desc' }]);
+    assert.deepEqual(board.tasks.map(task => task.id), ['repeat', 'high', 'unset']);
+});
+
+test('看板多选手动排序保留条件优先级及方向，重新加载配置后仍可用', async () => {
+    const { board, openMenu } = sortFixture();
+    await board.loadKanbanSortConfig();
+    const criteria = [{ method: 'priority', order: 'desc' }, { method: 'manual', order: 'desc' }];
+    await openMenu().onChange(criteria);
+    assert.deepEqual(board.tasks.map(task => task.id), ['high', 'repeat', 'unset']);
+    board.currentSortCriteria = [];
+    await board.loadKanbanSortConfig();
+    assert.deepEqual(openMenu().currentCriteria, criteria);
+});
+
 test('撤回使用严格读取，订阅读取失败不会回退旧缓存后写入', async () => {
     const compiled = ts.transpileModule(persistence, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },

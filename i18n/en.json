@@ -52,6 +52,7 @@
     "sortByStartDate": "Sort by Start Date",
     "sortByEndDate": "Sort by End Date",
     "sortByPriority": "Sort by Priority",
+    "sortByManual": "Manual Sort",
     "sortByTitle": "Sort by Title",
     "sortByCreated": "Sort by Created Time",
     "sortByCategory": "Sort by Category",

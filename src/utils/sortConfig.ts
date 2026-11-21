@@ -125,6 +125,7 @@ export async function saveSortConfig(plugin: Plugin, criteria: SortCriterion[]):
  * 获取排序方法的显示名称
  */
 export function getSortMethodName(method: string): string {
+    if (method === 'manual') return i18n('sortByManual');
     const methodDef = AVAILABLE_SORT_METHODS.find(m => m.key === method);
     return methodDef ? methodDef.label() : method;
 }
