@@ -293,6 +293,9 @@ function milestoneFilterFixture(initial, folder) {
     const state = { data: clone(initial), folder: folder && clone(folder), writes: 0, errors: [] };
     const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
         'loadProject', 'restoreMilestoneFilters', 'saveMilestoneFilters', 'applyMilestoneFilterChange', 'getSingleFilteredMilestoneId',
+        'milestoneMap', 'milestoneFilterGroups', 'archivedMilestonesByStatus', 'buildMilestoneMap', 'getMilestoneFilterSections',
+        'getAggregateGroupId', 'getAggregateSafeId', 'isStatusVisibleForGroup', 'getVisibleStatusesForGroup',
+        'normalizeGroupVisibleStatusIds', 'hasUngroupedMilestoneFilter', 'shouldDisplayUngroupedColumn',
     ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
     const Board = new Function('ProjectFolderManager', 'i18n', 'showMessage', 'console', compiled + ';return Board;')(
         { getInstance: () => ({ getFolderById: () => state.folder }) }, key => key,
@@ -317,6 +320,54 @@ function milestoneFilterFixture(initial, folder) {
     });
     return { state, plugin, board, cached };
 }
+
+test('状态列列出没有任务的默认及分组里程碑，已归档项仍按历史任务显示', async () => {
+    const f = milestoneFilterFixture({
+        A: {
+            milestones: [{ id: 'default' }, { id: 'history', archived: true }, { id: 'unused-history', archived: true }],
+            customGroups: [
+                { id: 'group', name: '分组', visibleStatusIds: ['doing'], milestones: [{ id: 'group-milestone' }] },
+                { id: 'old-group', name: '已归档分组', archived: true, milestones: [{ id: 'old-group-milestone' }] },
+            ],
+        },
+    });
+    const board = f.board();
+    board.kanbanMode = 'status';
+    board.kanbanStatuses = [{ id: 'doing' }, { id: 'completed' }];
+    await board.buildMilestoneMap();
+    const optionsFor = status => board.getMilestoneFilterSections(status).flatMap(section => section.milestones.map(m => m.id));
+    assert.deepEqual(optionsFor('doing'), ['default', 'group-milestone']);
+    assert.deepEqual(optionsFor('completed'), ['default']);
+    board.archivedMilestonesByStatus.set('completed', new Set(['history']));
+    assert.deepEqual(optionsFor('completed'), ['default', 'history']);
+});
+
+test('聚合看板的分组和任务列表显示各自配置的空里程碑', async () => {
+    const f = milestoneFilterFixture({
+        A: { milestones: [{ id: 'default-A' }], customGroups: [{ id: 'group', name: '分组' }] },
+        B: { milestones: [{ id: 'default-B' }, { id: 'archived-B', archived: true }] },
+    });
+    const board = f.board('folder', true);
+    await board.buildMilestoneMap();
+    for (const mode of ['custom', 'list']) {
+        board.kanbanMode = mode;
+        const optionsFor = groupId => board.getMilestoneFilterSections(groupId).flatMap(section => section.milestones.map(m => m.id));
+        assert.deepEqual(optionsFor(board.getAggregateGroupId('A')), ['default-A']);
+        assert.deepEqual(optionsFor(board.getAggregateGroupId('B')), ['default-B']);
+        assert.deepEqual(optionsFor(board.getAggregateGroupId('A', 'group')), []);
+    }
+});
+
+test('默认里程碑可以从空的未分组列筛选，已激活的筛选仍能从该列清除', async () => {
+    const board = milestoneFilterFixture({ A: { milestones: [{ id: 'default' }] } }).board();
+    await board.buildMilestoneMap();
+    board.shouldDisplayGroupBySettings = () => true;
+    assert.equal(board.shouldDisplayUngroupedColumn([], '2026-11-21'), true);
+    board.shouldDisplayGroupBySettings = () => false;
+    assert.equal(board.shouldDisplayUngroupedColumn([], '2026-11-21'), false);
+    board.selectedFilterMilestones.set('ungrouped', new Set(['default']));
+    assert.equal(board.shouldDisplayUngroupedColumn([], '2026-11-21'), true);
+});
 
 test('关闭重开项目看板恢复各列和分组的里程碑选择及多选模式，新建任务仍跟随单个里程碑', async () => {
     const f = milestoneFilterFixture({ A: { title: 'A' }, B: { title: 'B' } });

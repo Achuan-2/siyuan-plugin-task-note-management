@@ -17,7 +17,7 @@ import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, addBlockProj
 import { i18n } from "../../pluginInstance";
 import { getLocalDateString, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { CategoryManager } from "../dataManager/categoryManager";
-import { ProjectManager, type GroupTabCountMode, type CustomGroupStatusDisplayMode, type KanbanMilestoneFilterState } from "../dataManager/projectManager";
+import { ProjectManager, type GroupTabCountMode, type CustomGroupStatusDisplayMode, type KanbanMilestoneFilterState, type Milestone, type ProjectGroup } from "../dataManager/projectManager";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
@@ -211,7 +211,6 @@ export class ProjectKanbanView {
     private milestoneFiltersLoaded = false;
     // 串行保存，避免快速切换后较早的写入覆盖最新选择；关闭视图也不取消保存。
     private milestoneFilterSaveQueue: Promise<void> = Promise.resolve();
-    private milestoneFilterButton: HTMLButtonElement;
     private isFilterActive: boolean = false;
     private selectedDateFilters: Set<string> = new Set();
     private filterButton: HTMLButtonElement;
@@ -221,14 +220,9 @@ export class ProjectKanbanView {
     public milestoneMap: Map<string, any> = new Map();
     // 里里程碑分组折叠状态
     public collapsedMilestoneGroups: Set<string> = new Set();
-    // 记录在经过搜索/标签/日期等过滤后，哪些状态/分组还有带里程碑的任务（用于显示筛选按钮）
-    private _statusHasMilestoneTasks: Set<string> = new Set();
-    // 记录在经过搜索/标签/日期等过滤后，当前视图中所有任务涉及到的所有里程碑 ID
-    private _availableMilestonesInView: Set<string> = new Set();
-    // 记录在经过搜索/标签/日期等过滤后，每个状态列下有哪些分组（用于里程碑筛选菜单的分组显示）
-    private _statusGroupsInView: Map<string, Set<string>> = new Map();
-    // 记录在经过搜索/标签/日期等过滤后，每个状态列下有哪些里程碑被实际使用（用于里程碑筛选菜单）
-    private _statusMilestonesInView: Map<string, Set<string>> = new Map();
+    private readonly milestoneFilterGroups = new Map<string, Pick<ProjectGroup, 'id' | 'name' | 'milestones' | 'visibleStatusIds'>>();
+    // 状态看板只显示当前状态中仍有匹配任务的已归档里程碑。
+    private readonly archivedMilestonesByStatus = new Map<string, Set<string>>();
 
     public lute: any;
     private showCompletedSubtasks: boolean = true; // 是否显示已完成的子任务
@@ -470,7 +464,8 @@ export class ProjectKanbanView {
                 return !realGroupId || !context.activeGroupIds.has(realGroupId);
             });
 
-            if (hasUngroupedTasks) {
+            const ungroupedId = this.getAggregateGroupId(projectId, null);
+            if (hasUngroupedTasks || (this.kanbanMode !== 'status' && this.hasUngroupedMilestoneFilter(ungroupedId))) {
                 groups.push(this.createAggregateGroup(projectId, null));
             }
         });
@@ -1196,26 +1191,33 @@ export class ProjectKanbanView {
 
     private async buildMilestoneMap() {
         this.milestoneMap.clear();
+        this.milestoneFilterGroups.clear();
         try {
-            const projectManager = this.projectManager;
             const projectData = await this.plugin.loadProjectData() || {};
             const projectIds = this.isAggregateView ? this.aggregateProjectIds : [this.projectId];
 
             for (const projectId of projectIds) {
-                const projectGroups = await projectManager.getProjectCustomGroups(projectId);
                 const project = projectData[projectId];
-
-                // 1. 默认里程碑
-                (project?.milestones || []).forEach((ms: any) => {
-                    this.milestoneMap.set(ms.id, { name: ms.name, icon: ms.icon, blockId: ms.blockId, startTime: ms.startTime, endTime: ms.endTime, archived: ms.archived });
-                });
-
-                // 2. 分组里程碑
-                projectGroups.forEach((group: any) => {
-                    (group.milestones || []).forEach((ms: any) => {
+                if (!project) continue;
+                const projectGroups: ProjectGroup[] = project.customGroups || [];
+                const projectName = project.title || project.name || projectId;
+                const defaultGroup = {
+                    id: 'ungrouped',
+                    name: i18n('defaultMilestones') || '默认里程碑',
+                    milestones: project.milestones as Milestone[] | undefined
+                };
+                for (const group of [defaultGroup, ...projectGroups]) {
+                    for (const ms of group.milestones || []) {
                         this.milestoneMap.set(ms.id, { name: ms.name, icon: ms.icon, blockId: ms.blockId, startTime: ms.startTime, endTime: ms.endTime, archived: ms.archived });
+                    }
+                    if ('archived' in group && group.archived) continue;
+                    const id = this.isAggregateView ? this.getAggregateGroupId(projectId, group.id) : group.id;
+                    this.milestoneFilterGroups.set(id, {
+                        ...group,
+                        id,
+                        name: this.isAggregateView ? `${projectName}/${group.name}` : group.name
                     });
-                });
+                }
             }
         } catch (error) {
             console.error("Build milestone map failed", error);
@@ -1920,11 +1922,7 @@ export class ProjectKanbanView {
         if (!rightContainer) return;
 
         const hasActiveMilestoneFilter = this.selectedFilterMilestones.has(groupId);
-        // 检查当前状态列/分组是否实际有里程碑任务（基于当前过滤后的任务）
-        const statusMilestones = this._statusMilestonesInView.get(groupId);
-        const hasMilestonesInThisGroup = (statusMilestones && statusMilestones.size > 0) || !!hasActiveMilestoneFilter;
-
-        if (hasMilestonesInThisGroup) {
+        if (hasActiveMilestoneFilter || this.getMilestoneFilterSections(groupId).length > 0) {
             let milestoneFilterBtn = rightContainer.querySelector('.milestone-filter-btn') as HTMLButtonElement;
             if (!milestoneFilterBtn) {
                 milestoneFilterBtn = document.createElement('button');
@@ -1958,102 +1956,48 @@ export class ProjectKanbanView {
                 milestoneFilterBtn.classList.add('b3-button--outline');
             }
         } else {
-            // 如果没有里程碑任务且没有激活过滤器，移除按钮
             const btn = rightContainer.querySelector('.milestone-filter-btn');
             if (btn) btn.remove();
         }
     }
 
-    private async showMilestoneFilterMenu(event: MouseEvent, targetGroupId: string) {
+    private getMilestoneFilterSections(targetGroupId: string): { name: string; milestones: Milestone[] }[] {
+        if (this.kanbanMode !== 'status') {
+            const group = this.milestoneFilterGroups.get(targetGroupId);
+            const milestones = group?.milestones?.filter(milestone => !milestone.archived) || [];
+            return group && milestones.length > 0 ? [{ name: group.name, milestones }] : [];
+        }
+
+        const archivedIds = this.archivedMilestonesByStatus.get(targetGroupId);
+        const sections: { name: string; milestones: Milestone[] }[] = [];
+        for (const group of this.milestoneFilterGroups.values()) {
+            if (!this.isStatusVisibleForGroup(group, targetGroupId)) continue;
+            const milestones = group.milestones?.filter(milestone => !milestone.archived || archivedIds?.has(milestone.id)) || [];
+            if (milestones.length > 0) sections.push({ name: group.name, milestones });
+        }
+        return sections;
+    }
+
+    private hasUngroupedMilestoneFilter(groupId = 'ungrouped'): boolean {
+        return this.selectedFilterMilestones.has(groupId)
+            || !!this.milestoneFilterGroups.get(groupId)?.milestones?.some(milestone => !milestone.archived);
+    }
+
+    private shouldDisplayUngroupedColumn(tasks: any[], today: string): boolean {
+        return this.selectedFilterMilestones.has('ungrouped')
+            || ((tasks.length > 0 || this.hasUngroupedMilestoneFilter()) && this.shouldDisplayGroupBySettings(tasks, today));
+    }
+
+    private showMilestoneFilterMenu(event: MouseEvent, targetGroupId: string) {
         try {
-            const projectGroups = await this.getProjectCustomGroupsForView();
-            const projectData = await this.plugin.loadProjectData() || {};
-            const projectIds = this.isAggregateView ? this.aggregateProjectIds : [this.projectId];
-
-            // 确定要显示的里程碑集合 (包含所有里程碑，包括已归档的，以便筛选历史任务)
-            const defaultMilestones = projectIds.flatMap(projectId => projectData[projectId]?.milestones || []);
-            let milestonesToShow: { title: string, milestones: any[], groupId: string }[] = [];
-
-            // [新增] 使用在 loadTasks 中预先统计好的带里程碑的任务 ID 和所属分组
-            // 这些统计已经考虑了搜索、标签、日期等过滤，但排除了里程碑过滤本身
-            const usedMilestoneIds = this._availableMilestonesInView;
-            const allowedGroups = this._statusGroupsInView.get(targetGroupId) || new Set<string>();
-
-            // 检查 targetGroupId 是否为自定义分组 ID
-            const targetGroup = projectGroups.find((g: any) => g.id === targetGroupId);
-            const isCustomGroup = !!targetGroup;
-            const isUngrouped = targetGroupId === 'ungrouped';
-
-            if (isCustomGroup) {
-                // 如果是特定自定义分组，只显示该分组的任务所使用的里程碑（排除已归档）
-                const ms = (targetGroup.milestones || []).filter((m: any) => usedMilestoneIds.has(m.id) && !m.archived);
-                if (ms.length > 0) {
-                    milestonesToShow.push({
-                        title: targetGroup.name,
-                        milestones: ms,
-                        groupId: targetGroupId
-                    });
-                }
-            } else if (isUngrouped && this.kanbanMode !== 'status') {
-                // 如果是 ungrouped 且不是 Status 视图，只显示被使用的默认里程碑（排除已归档）
-                const ms = defaultMilestones.filter((m: any) => usedMilestoneIds.has(m.id) && !m.archived);
-                if (ms.length > 0) {
-                    milestonesToShow.push({
-                        title: i18n('defaultMilestones') || '默认里程碑',
-                        milestones: ms,
-                        groupId: 'ungrouped'
-                    });
-                }
-            } else {
-                // Status 视图逻辑：只显示当前状态列中任务实际使用的里程碑
-                // 获取当前 status 列中实际使用的里程碑 ID
-                const statusMilestoneIds = this._statusMilestonesInView.get(targetGroupId) || new Set<string>();
-                // 项目状态分组模式下，或者“已完成”列，允许显示已归档里程碑
-                const allowArchived = targetGroupId === 'completed' || this.kanbanMode === 'status';
-
-                // 默认里程碑 - 只显示当前 status 列中实际使用的（除非是已完成列或状态看板模式，否则排除已归档）
-                if (defaultMilestones.length > 0 && allowedGroups.has('ungrouped')) {
-                    const ms = defaultMilestones.filter(m => statusMilestoneIds.has(m.id) && (!m.archived || allowArchived));
-                    if (ms.length > 0) {
-                        milestonesToShow.push({
-                            title: i18n('defaultMilestones') || '默认里程碑',
-                            milestones: ms,
-                            groupId: targetGroupId
-                        });
-                    }
-                }
-
-                // 分组里程碑 - 只显示当前 status 列中实际使用的（除非是已完成列或状态看板模式，否则排除已归档）
-                projectGroups
-                    .filter((g: any) => !g.archived)
-                    .forEach((g: any) => {
-                        if (!allowedGroups.has(g.id)) return;
-                        const ms = (g.milestones || []).filter((m: any) => statusMilestoneIds.has(m.id) && (!m.archived || allowArchived));
-                        if (ms.length > 0) {
-                            milestonesToShow.push({
-                                title: g.name,
-                                milestones: ms,
-                                groupId: targetGroupId
-                            });
-                        }
-                    });
-            }
-
-            // 添加 "无里程碑" 选项
-            milestonesToShow.unshift({
-                title: i18n('noMilestone') || '无里程碑',
-                milestones: [{
-                    id: '__no_milestone__',
-                    name: i18n('noMilestone') || '无里程碑'
-                }],
-                groupId: targetGroupId // 在 Status 视图下，targetGroupId 是 Status ID；Custom 视图下是 Group ID
-            });
-
-            // 从“全部任务”切换到多选时，将当前可见选项展开为显式选择。
-            const allAvailableMilestoneIds = new Set<string>();
-            milestonesToShow.forEach(group => {
-                group.milestones.forEach(m => allAvailableMilestoneIds.add(m.id));
-            });
+            const sections = this.getMilestoneFilterSections(targetGroupId);
+            const canManageTargetGroup = this.kanbanMode !== 'status' && targetGroupId !== 'ungrouped'
+                && this.milestoneFilterGroups.has(targetGroupId);
+            const noMilestoneId = '__no_milestone__';
+            const allAvailableMilestoneIds = new Set([
+                noMilestoneId,
+                ...sections.flatMap(section => section.milestones.map(milestone => milestone.id))
+            ]);
 
             // 创建弹窗容器
             const menu = document.createElement('div');
@@ -2109,8 +2053,7 @@ export class ProjectKanbanView {
             manageBtn.addEventListener('click', () => {
                 // 关闭筛选菜单
                 closePopup();
-                // 如果 targetGroup 存在，则只管理该分组；否则管理全部（Status 视图下显示全部）
-                this.showManageMilestonesDialog(targetGroup ? targetGroupId : undefined);
+                this.showManageMilestonesDialog(canManageTargetGroup ? targetGroupId : undefined);
             });
             btnsContainer.appendChild(manageBtn);
 
@@ -2168,9 +2111,9 @@ export class ProjectKanbanView {
                 optionsContainer.replaceChildren();
                 clearBtn.style.display = multiSelectCheckbox.checked ? '' : 'none';
                 if (!multiSelectCheckbox.checked) appendOption(i18n('allTasks'), '📋');
-                milestonesToShow.forEach(section => {
-                    // 状态视图按分组显示里程碑，“无里程碑”不显示分组标题。
-                    if (this.kanbanMode === 'status' && section.milestones.length > 0 && section.title !== (i18n('noMilestone') || '无里程碑')) {
+                appendOption(i18n('noMilestone') || '无里程碑', '🚫', noMilestoneId);
+                sections.forEach((section, index) => {
+                    if (this.kanbanMode === 'status') {
                         const groupTitle = document.createElement('div');
                         groupTitle.style.cssText = `
                             padding: 8px 8px 4px 8px;
@@ -2184,19 +2127,17 @@ export class ProjectKanbanView {
                             margin-top: 4px;
                         `;
 
-                        const firstVisibleGroup = milestonesToShow.find(s => s.milestones.length > 0 && s.title !== (i18n('noMilestone') || '无里程碑'));
-                        if (section === firstVisibleGroup) {
+                        if (index === 0) {
                             groupTitle.style.borderTop = 'none';
                             groupTitle.style.marginTop = '0';
                         }
 
-                        groupTitle.textContent = section.title;
+                        groupTitle.textContent = section.name;
                         optionsContainer.appendChild(groupTitle);
                     }
 
-                    section.milestones.forEach(ms => {
-                        const emoji = ms.id === '__no_milestone__' ? '🚫' : (ms.icon || '🚩');
-                        appendOption(ms.name, emoji, ms.id, ms.archived);
+                    section.milestones.forEach(milestone => {
+                        appendOption(milestone.name, milestone.icon || '🚩', milestone.id, milestone.archived);
                     });
                 });
             };
@@ -2405,6 +2346,7 @@ export class ProjectKanbanView {
         rightContainer.className = 'custom-header-right';
         rightContainer.style.cssText = 'display:flex; align-items:center; gap:8px; flex-shrink: 0;';
         rightContainer.appendChild(countEl);
+        this.updateMilestoneFilterButton(rightContainer, status);
 
         if (status !== 'completed' && this.canCreateTask) {
             const addTaskBtn = document.createElement('button');
@@ -3872,59 +3814,25 @@ export class ProjectKanbanView {
                 this.tasks = this.tasks.filter(t => matchingIds.has(t.id));
             }
 
-            // [NEW] 在应用里程碑过滤之前，统计每个状态/分组下是否“存在”带里程碑的任务
-            // 这决定了对应的筛选按钮是否需要显示（即使当前已经被里程碑过滤器过滤掉了部分任务，按钮也应保留以便取消过滤）
-            this._statusHasMilestoneTasks.clear();
-            this._availableMilestonesInView.clear();
-            this._statusGroupsInView.clear();
-            this._statusMilestonesInView.clear();
-            // 创建任务映射以便查找父任务
-            const taskMapForStats = new Map(this.tasks.map(t => [t.id, t]));
+            // 归档里程碑仍可用于筛选历史任务，按应用里程碑筛选前的任务统计。
+            this.archivedMilestonesByStatus.clear();
+            if (this.kanbanMode === 'status') {
+                const taskMap = new Map(this.tasks.map(task => [task.id, task]));
+                for (const task of this.tasks) {
+                    const milestoneId = task.milestoneId || taskMap.get(task.parentId)?.milestoneId;
+                    if (!milestoneId || !this.milestoneMap.get(milestoneId)?.archived) continue;
 
-            this.tasks.forEach(t => {
-                const status = t.status || this.getTaskStatus(t);
-                const customGroup = t.customGroupId || 'ungrouped';
-
-                // 统计每个状态列下有哪些分组存在（用于筛选菜单显示）
-                if (!this._statusGroupsInView.has(status)) {
-                    this._statusGroupsInView.set(status, new Set());
-                }
-                this._statusGroupsInView.get(status)!.add(customGroup);
-
-                // 获取任务的有效里程碑（考虑继承父任务的情况）
-                let effectiveMilestoneId = t.milestoneId;
-                if (!effectiveMilestoneId && t.parentId) {
-                    // 如果子任务没有里程碑，尝试继承父任务的里程碑
-                    const parentTask = taskMapForStats.get(t.parentId);
-                    if (parentTask) {
-                        effectiveMilestoneId = parentTask.milestoneId;
+                    const status = task.status || this.getTaskStatus(task);
+                    let milestoneIds = this.archivedMilestonesByStatus.get(status);
+                    if (!milestoneIds) {
+                        milestoneIds = new Set();
+                        this.archivedMilestonesByStatus.set(status, milestoneIds);
                     }
+                    milestoneIds.add(milestoneId);
                 }
+            }
 
-                if (effectiveMilestoneId) {
-                    // 检查是否为已归档里程碑
-                    const msInfo = this.milestoneMap.get(effectiveMilestoneId);
-                    // 已完成任务或任务状态看板模式下，允许显示已归档里程碑
-                    const allowArchived = status === 'completed' || this.kanbanMode === 'status';
-                    if (msInfo && (!msInfo.archived || allowArchived)) {
-                        this._statusHasMilestoneTasks.add(status);
-                        this._statusHasMilestoneTasks.add(customGroup);
-                        this._availableMilestonesInView.add(effectiveMilestoneId);
-                        // 统计每个状态列下使用的里程碑
-                        if (!this._statusMilestonesInView.has(status)) {
-                            this._statusMilestonesInView.set(status, new Set());
-                        }
-                        this._statusMilestonesInView.get(status)!.add(effectiveMilestoneId);
-                        // 同时统计自定义分组下的里程碑（用于自定义分组视图）
-                        if (!this._statusMilestonesInView.has(customGroup)) {
-                            this._statusMilestonesInView.set(customGroup, new Set());
-                        }
-                        this._statusMilestonesInView.get(customGroup)!.add(effectiveMilestoneId);
-                    }
-                }
-            });
-
-            // 里程碑过滤逻辑 (移动至此处，以便在统计"任务是否有里程碑"后进行应用)
+            // 里程碑筛选
             if (this.selectedFilterMilestones.size > 0) {
                 const matchesMilestone = (t: any) => {
                     let filterKey: string | null = null;
@@ -5119,7 +5027,7 @@ export class ProjectKanbanView {
             });
 
 
-        if (activeGroups.length === 0) {
+        if (activeGroups.length === 0 && !this.hasUngroupedMilestoneFilter()) {
             // 如果没有自定义分组，显示提示
             this.renderEmptyCustomGroupKanban();
             return;
@@ -5195,7 +5103,7 @@ export class ProjectKanbanView {
                 // 分组隐藏了 doing 状态时，不参与“隐藏无进行中分组”判断
                 skipDoingCheck: !this.isStatusVisibleForGroup(group, 'doing')
             });
-            if (!shouldDisplayGroup) {
+            if (!shouldDisplayGroup && !this.selectedFilterMilestones.has(group.id)) {
                 const columnId = `custom-group-${group.id}`;
                 const column = kanbanContainer.querySelector(`.kanban-column-${columnId}`);
                 if (column) column.remove();
@@ -5216,31 +5124,17 @@ export class ProjectKanbanView {
         // 处理未分组任务：仅在存在未分组任务时显示未分组列
         const validGroupIds = new Set(activeGroups.map((g: any) => g.id));
         const ungroupedStatusTasks: { [status: string]: any[] } = {};
-        let hasUngrouped = false;
         this.kanbanStatuses.forEach(status => {
             ungroupedStatusTasks[status.id] = statusTasks[status.id].filter(task => !task.customGroupId || !validGroupIds.has(task.customGroupId));
-            if (ungroupedStatusTasks[status.id].length > 0) {
-                hasUngrouped = true;
-            }
         });
 
-        if (hasUngrouped) {
-            const ungroupedTasks = Object.values(ungroupedStatusTasks).flat();
-            hasUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
-        }
-
-        if (hasUngrouped) {
-            // 获取项目的所有未归档默认里程碑
-            const projectData = await this.plugin.loadProjectData() || {};
-            const project = projectData[this.projectId];
-            const defaultMilestones = (project?.milestones || []).filter((m: any) => !m.archived);
-
+        const ungroupedTasks = Object.values(ungroupedStatusTasks).flat();
+        if (this.shouldDisplayUngroupedColumn(ungroupedTasks, todayStr)) {
             const ungroupedGroup = {
                 id: 'ungrouped',
                 name: i18n("ungrouped"),
                 color: '#95a5a6',
-                icon: '📋',
-                milestones: defaultMilestones
+                icon: '📋'
             };
             this.renderCustomGroupColumnWithStatuses(ungroupedGroup, ungroupedStatusTasks);
 
@@ -5746,7 +5640,8 @@ export class ProjectKanbanView {
 
             const column = this.container.querySelector(`.kanban-column-${status.id}`) as HTMLElement;
             if (column) {
-                const shouldHide = this.hideEmptyStatusBars && visibleTasksForColumn.length === 0;
+                const shouldHide = this.hideEmptyStatusBars && visibleTasksForColumn.length === 0
+                    && !this.selectedFilterMilestones.has(status.id);
                 column.style.display = shouldHide ? 'none' : 'flex';
             }
         }
@@ -5950,7 +5845,7 @@ export class ProjectKanbanView {
             });
 
             const groupTasks = Object.values(groupStatusTasks).flat();
-            if (!this.shouldDisplayGroupBySettings(groupTasks, todayStr, {
+            if (!this.selectedFilterMilestones.has(group.id) && !this.shouldDisplayGroupBySettings(groupTasks, todayStr, {
                 skipDoingCheck: !this.isStatusVisibleForGroup(group, 'doing')
             })) {
                 return;
@@ -5966,34 +5861,21 @@ export class ProjectKanbanView {
         // 未分组
         const validGroupIds = new Set(activeGroups.map((g: any) => g.id));
         const ungroupedStatusTasks: { [status: string]: any[] } = {};
-        let hasUngrouped = false;
         this.kanbanStatuses.forEach(status => {
             ungroupedStatusTasks[status.id] = (statusTasks[status.id] || []).filter(task => !task.customGroupId || !validGroupIds.has(task.customGroupId));
-            if (ungroupedStatusTasks[status.id].length > 0) {
-                hasUngrouped = true;
-            }
         });
 
-        if (hasUngrouped) {
-            const ungroupedTasks = Object.values(ungroupedStatusTasks).flat();
-            hasUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
-        }
-
-        if (hasUngrouped) {
-            const projectData = await this.plugin.loadProjectData() || {};
-            const project = projectData[this.projectId];
-            const defaultMilestones = (project?.milestones || []).filter((m: any) => !m.archived);
-
+        const ungroupedTasks = Object.values(ungroupedStatusTasks).flat();
+        if (this.shouldDisplayUngroupedColumn(ungroupedTasks, todayStr)) {
             tabEntries.push({
                 group: {
                     id: 'ungrouped',
                     name: i18n("ungrouped"),
                     color: '#95a5a6',
-                    icon: '📋',
-                    milestones: defaultMilestones
+                    icon: '📋'
                 },
                 statusTasks: ungroupedStatusTasks,
-                tasks: Object.values(ungroupedStatusTasks).flat()
+                tasks: ungroupedTasks
             });
         }
 
@@ -6114,7 +5996,7 @@ export class ProjectKanbanView {
             if (status.id === 'completed') {
                 tasksForTab = this.sortDoneTasks(tasksForTab);
             }
-            if (this.hideEmptyStatusBars && tasksForTab.length === 0) continue;
+            if (this.hideEmptyStatusBars && tasksForTab.length === 0 && !this.selectedFilterMilestones.has(status.id)) continue;
             tabEntries.push({ status, tasks: tasksForTab });
         }
 
@@ -6800,7 +6682,7 @@ export class ProjectKanbanView {
 
         displayGroups = displayGroups.filter((g: any) => {
             const groupTasks = listVisibleTasks.filter(task => task.customGroupId === g.id);
-            return this.shouldDisplayGroupBySettings(groupTasks, todayStr);
+            return this.selectedFilterMilestones.has(g.id) || this.shouldDisplayGroupBySettings(groupTasks, todayStr);
         });
 
         const tabEntries: Array<{ group: any; tasks: any[] }> = [];
@@ -6811,11 +6693,7 @@ export class ProjectKanbanView {
             });
         });
 
-        let showUngrouped = ungroupedTasks.length > 0;
-        if (showUngrouped) {
-            showUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
-        }
-        if (showUngrouped) {
+        if (this.shouldDisplayUngroupedColumn(ungroupedTasks, todayStr)) {
             tabEntries.push({
                 group: { id: 'ungrouped', name: i18n('ungrouped') || '未分组', color: '#95a5a6', icon: '📋' },
                 tasks: ungroupedTasks
@@ -6919,7 +6797,7 @@ export class ProjectKanbanView {
 
         displayGroups = displayGroups.filter((g: any) => {
             const groupTasks = listVisibleTasks.filter(task => task.customGroupId === g.id);
-            return this.shouldDisplayGroupBySettings(groupTasks, todayStr);
+            return this.selectedFilterMilestones.has(g.id) || this.shouldDisplayGroupBySettings(groupTasks, todayStr);
         });
 
         // Use a set to track rendered group IDs to remove obsolete columns
@@ -6933,12 +6811,7 @@ export class ProjectKanbanView {
             renderedGroupIds.add(`custom-group-${group.id}`);
         }
 
-        let showUngrouped = ungroupedTasks.length > 0;
-        if (showUngrouped) {
-            showUngrouped = this.shouldDisplayGroupBySettings(ungroupedTasks, todayStr);
-        }
-
-        if (showUngrouped) {
+        if (this.shouldDisplayUngroupedColumn(ungroupedTasks, todayStr)) {
             const ungroupedGroup = { id: 'ungrouped', name: i18n('ungrouped') || '未分组', color: '#95a5a6', icon: '📋' };
             await this.renderListModeGroupColumn(container, ungroupedGroup, ungroupedTasks);
             if (this.disposed) return;
@@ -7522,28 +7395,6 @@ export class ProjectKanbanView {
                 headerRight.style.cssText = 'display:flex; align-items:center; gap:8px;';
                 headerRight.appendChild(count);
 
-                // 里程碑筛选按钮
-                const hasActiveMilestoneFilter = this.selectedFilterMilestones.has(status);
-                const hasMilestonesInThisStatus = this._statusHasMilestoneTasks.has(status) || hasActiveMilestoneFilter;
-
-                if (hasMilestonesInThisStatus) {
-                    const milestoneFilterBtn = document.createElement('button');
-                    milestoneFilterBtn.className = 'b3-button b3-button--outline milestone-filter-btn';
-                    milestoneFilterBtn.classList.add('ariaLabel'); milestoneFilterBtn.setAttribute('aria-label', i18n('filterMilestone'));
-                    milestoneFilterBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconTNMilestone"></use></svg>';
-                    milestoneFilterBtn.dataset.groupId = status;
-                    milestoneFilterBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        this.showMilestoneFilterMenu(e, status);
-                    });
-                    // 只在部分选择时添加 b3-button--primary
-                    if (hasActiveMilestoneFilter) {
-                        milestoneFilterBtn.classList.add('b3-button--primary');
-                        milestoneFilterBtn.classList.remove('b3-button--outline');
-                    }
-                    headerRight.appendChild(milestoneFilterBtn);
-                }
-
                 // 不在已完成列显示新建按钮
                 if (status !== 'completed' && this.canCreateTask) {
                     const addGroupTaskBtn = document.createElement('button');
@@ -7560,6 +7411,7 @@ export class ProjectKanbanView {
                 }
                 header.appendChild(headerRight);
             }
+            this.updateMilestoneFilterButton(headerRight, status);
         }
 
         content.innerHTML = '';
