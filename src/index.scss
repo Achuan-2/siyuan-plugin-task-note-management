@@ -2708,7 +2708,8 @@
 
         > .reminder-item {
             margin-bottom: 0;
-            border-width: 0 0 1px;
+            // TaskRenderer 会内联设置卡片边框，列表行只保留下方的分隔线。
+            border-width: 0 0 1px !important;
             border-radius: 0;
             padding-block: 8px;
 
