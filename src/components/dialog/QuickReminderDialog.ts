@@ -2249,12 +2249,16 @@ export class QuickReminderDialog {
         subtasksPanel.dataset.mounted = 'loading';
         try {
             const subtasksDialog = this.createSubtasksDialogForTab();
+            this.subtasksDialog = subtasksDialog;
             await subtasksDialog.mount(subtasksPanel);
-            if (this.dialog === dialog) this.subtasksDialog = subtasksDialog;
         } catch (error) {
             delete subtasksPanel.dataset.mounted;
             console.error('Failed to initialize subtasks tab:', error);
-            if (this.dialog === dialog) showMessage(i18n('loadingFailed'), 3000, 'error');
+            if (this.dialog === dialog) {
+                this.subtasksDialog?.dispose();
+                this.subtasksDialog = undefined;
+                showMessage(i18n('loadingFailed'), 3000, 'error');
+            }
             return;
         }
         subtasksPanel.dataset.mounted = 'true';
@@ -3416,6 +3420,7 @@ export class QuickReminderDialog {
             destroyCallback: () => {
                 this.taskSelectionPanel?.destroy();
                 this.taskSelectionPanel = undefined;
+                this.subtasksDialog?.dispose();
                 this.subtasksDialog = undefined;
                 if (this.editor) {
                     this.editor.destroy();

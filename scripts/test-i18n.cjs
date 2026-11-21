@@ -157,21 +157,32 @@ test('子任务删除确认框使用本地化标题，正文显示实际任务�
         { id: 'task_2026-11-21', isInstanceEdit: true, isModifyAllInstances: true, messageKey: 'deleteSubtaskTemplateConfirm' },
     ];
     const task = { id: 'task', title: 'Example task' };
+    const { parseReminderInstanceId } = loadDeclarations('src/components/dataManager/repeatUtils.ts', ['parseReminderInstanceId'], {});
+    const { collectTaskDeletionIds } = loadDeclarations('src/utils/taskTreeDeletion.ts', ['collectTaskDeletionIds'], { parseReminderInstanceId });
     for (const [language, expectedTitle] of [['zh_CN', '确认删除'], ['en', 'Confirm delete']]) {
         const { i18n } = loadI18n(language);
         let confirmation;
-        const { Fixture } = loadDeclarations('src/components/dialog/SubtasksDialog.ts', ['deleteSubtask'], {
-            i18n, confirm: (title, message) => { confirmation = { title, message }; },
+        const { Fixture } = loadDeclarations('src/components/dialog/SubtasksDialog.ts', [
+            'confirmSubtaskDeletion', 'getSingleSubtaskDeletionMessage',
+        ], {
+            i18n, parseReminderInstanceId, collectTaskDeletionIds,
+            confirm: (title, message) => { confirmation = { title, message }; },
         }, true);
         for (const { id, messageKey, ...mode } of cases) {
             confirmation = undefined;
             const dialog = Object.assign(new Fixture(), mode, {
                 subtasks: [task], plugin: { loadReminderData: async () => ({ task }) },
             });
-            await dialog.deleteSubtask(id);
+            await dialog.confirmSubtaskDeletion([id]);
             assert.deepEqual(confirmation, { title: expectedTitle, message: i18n(messageKey, { title: task.title }) });
             assert.ok(confirmation.message.includes(task.title));
         }
+        const dialog = new Fixture();
+        await dialog.confirmSubtaskDeletion(['first', 'second']);
+        assert.deepEqual(confirmation, {
+            title: i18n('confirmBatchDelete'),
+            message: i18n('confirmBatchDeleteSubtasksMessage', { count: '2' }),
+        });
     }
 });
 

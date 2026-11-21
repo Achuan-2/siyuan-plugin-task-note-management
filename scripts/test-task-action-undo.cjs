@@ -351,7 +351,9 @@ function compileView(f, file, className, methods) {
         getTaskStatusUndoMessage: f.getTaskStatusUndoMessage,
         getLocalDateTimeString: () => '2026-11-08 12:00:00', getLocalDateString: () => '2026-11-08',
         getLogicalDateString: () => '2026-11-08', getLocalDateTime: () => ({ dateStr: '2026-11-08', timeStr: '12:00' }) };
-    const code = ts.transpileModule(`${repeat}\nclass View { ${extract(file, className, methods)} }`, {
+    const taskTree = extract('src/utils/taskTreeDeletion.ts', null, ['collectTaskDeletionIds']);
+    const taskCopy = extract('src/utils/taskUndoPatch.ts', null, ['cloneTaskData']);
+    const code = ts.transpileModule(`${repeat}\n${taskTree}\n${taskCopy}\nclass View { ${extract(file, className, methods)} }`, {
         compilerOptions: { target: ts.ScriptTarget.ES2020 },
     }).outputText;
     const View = new Function(...Object.keys(globals), code + ';return View;')(...Object.values(globals));
@@ -543,18 +545,100 @@ test('文档任务的普通任务和重复实例删除都可撤回', async () =>
     }
 });
 
+function subtaskDeletionView(f) {
+    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
+        'confirmSubtaskDeletion', 'getSingleSubtaskDeletionMessage', 'deleteSubtasks',
+        'clearSubtaskSelection', 'finishPendingChanges', 'selectedSubtaskIds',
+    ]);
+    return Object.assign(view, {
+        subtasks: Object.values(f.state.data), loadSubtasks: async () => {}, renderSubtasks() {},
+        finishInlineTitles() {}, getRootElement: () => ({ querySelectorAll: () => [] }),
+    });
+}
+
 test('子任务弹窗删除已保存任务及 ghost 实例后都可撤回', async () => {
     for (const instance of [false, true]) {
         const before = { task: { id: 'task', title: 'task', projectId: 'A' }, child: { id: 'child', parentId: 'task' } };
         const f = fixture(before);
-        const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', ['deleteSubtask']);
-        Object.assign(view, { isTempMode: false, isInstanceEdit: instance, isModifyAllInstances: false, loadSubtasks: async () => {}, renderSubtasks() {} });
-        await view.deleteSubtask(instance ? 'task_2026-11-08' : 'task');
+        const view = subtaskDeletionView(f);
+        view.isInstanceEdit = instance;
+        await view.confirmSubtaskDeletion([instance ? 'task_2026-11-08' : 'task']);
         await f.state.confirmations.at(-1);
         assert.equal(instance ? f.state.data.task.repeat.excludeDates[0] : f.state.data.task, instance ? '2026-11-08' : undefined);
         await f.document.body.children[0].children[1].fire('click');
         assert.deepEqual(f.state.data, before);
     }
+});
+
+test('已保存子任务批量删除同时处理子树、落盘实例和当前日期隐藏，一次保存并撤回', async () => {
+    const date = '2026-11-21';
+    const materialized = `actual_${date}`;
+    const ghost = `template_${date}`;
+    const before = {
+        actual: { id: 'actual', parentId: 'root', title: 'Series template to keep' },
+        [materialized]: { id: materialized, originalId: 'actual', parentId: `root_${date}`, blockId: 'instance-block' },
+        child: { id: 'child', parentId: materialized, docId: 'child-doc' },
+        grandchild: { id: 'grandchild', parentId: 'child' },
+        template: { id: 'template', parentId: 'root', repeat: { instances: { [date]: { note: 'keep' } } } },
+        unrelated: { id: 'unrelated' },
+    };
+    const f = fixture(before);
+    const view = subtaskDeletionView(f);
+    view.isInstanceEdit = true;
+    [materialized, 'child', ghost].forEach(id => view.selectedSubtaskIds.add(id));
+    await view.confirmSubtaskDeletion([...view.selectedSubtaskIds]);
+    assert.ok(view.finishPendingChanges() instanceof Promise);
+    assert.equal(await f.state.confirmations.at(-1), true);
+    assert.equal(f.state.writes, 1);
+    assert.deepEqual(Object.keys(f.state.data), ['actual', 'template', 'unrelated']);
+    assert.deepEqual(f.state.data.actual.repeat.excludeDates, [date]);
+    assert.deepEqual(f.state.data.template.repeat, { ...before.template.repeat, excludeDates: [date] });
+    assert.equal(view.selectedSubtaskIds.size, 0);
+    assert.deepEqual(new Set(f.state.blocks), new Set(['instance-block', 'child-doc']));
+    assert.deepEqual(new Set(f.state.notifications), new Set([materialized, 'child', 'grandchild', ghost].map(id => `cancel:${id}`)));
+    await f.document.body.children[0].children[1].fire('click');
+    assert.deepEqual(f.state.data, before);
+});
+
+test('临时子任务批量删除去重清除后代，只更新创建弹窗的草稿', async () => {
+    const initial = {
+        parent: { id: 'parent' }, child: { id: 'child', parentId: 'parent' },
+        grandchild: { id: 'grandchild', parentId: 'child' }, other: { id: 'other' },
+    };
+    const f = fixture(initial);
+    const view = subtaskDeletionView(f);
+    const updates = [];
+    Object.assign(view, { isTempMode: true, onTempSubtasksUpdate: tasks => updates.push(tasks) });
+    await view.confirmSubtaskDeletion(['child', 'parent']);
+    assert.equal(await f.state.confirmations.at(-1), true);
+    assert.deepEqual(view.subtasks, [initial.other]);
+    assert.deepEqual(updates, [[initial.other]]);
+    assert.deepEqual(f.state.data, initial);
+    assert.equal(f.state.writes, 0);
+});
+
+test('子任务批量删除写入失败时保留当前选择和原缓存，可重试', async () => {
+    const before = { a: { id: 'a', repeat: {} }, b: { id: 'b' } };
+    const f = fixture(before);
+    f.dependencies.console = { error() {} };
+    // 插件读取会返回同一个缓存对象，失败时也不能提前修改它。
+    f.plugin.loadReminderData = async () => f.state.data;
+    f.state.failWrite = true;
+    const view = subtaskDeletionView(f);
+    const ids = ['a_2026-11-21', 'b'];
+    view.isInstanceEdit = true;
+    ids.forEach(id => view.selectedSubtaskIds.add(id));
+    await view.confirmSubtaskDeletion(ids);
+    assert.equal(await f.state.confirmations.at(-1), false);
+    assert.deepEqual([...view.selectedSubtaskIds], ids);
+    assert.deepEqual(f.state.data, before);
+    assert.deepEqual(f.state.notifications, []);
+    assert.equal(f.state.messages.at(-1)[0], 'batchDeleteFailed');
+
+    f.state.failWrite = false;
+    await view.confirmSubtaskDeletion(ids);
+    assert.equal(await f.state.confirmations.at(-1), true);
+    assert.equal(f.state.writes, 1);
 });
 
 test('子任务右键和更多按钮打开思源菜单，只读时仅保留查看', async () => {
@@ -566,12 +650,13 @@ test('子任务右键和更多按钮打开思源菜单，只读时仅保留查�
         open(position) { this.position = position; }
     };
     f.dependencies.openBlock = id => { actions.push(['block', id]); };
-    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', ['showSubtaskActionMenu']);
+    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
+        'selectedSubtaskIds', 'showSubtaskActionMenu', 'addSingleSubtaskActions',
+    ]);
     Object.assign(view, {
         startInlineSubtask: id => actions.push(['create', id]),
         editSubtask: task => actions.push(['edit', task.id]),
-        deleteSubtask: id => actions.push(['delete', id]),
-        finishPendingChanges: async () => true,
+        confirmSubtaskDeletion: ids => actions.push(['delete', ...ids]),
     });
     const row = { getBoundingClientRect: () => ({ right: 100, bottom: 60 }) };
     view.showSubtaskActionMenu({ id: 'first', blockId: 'block' }, row, { type: 'contextmenu', clientX: 20, clientY: 40 });
@@ -586,6 +671,51 @@ test('子任务右键和更多按钮打开思源菜单，只读时仅保留查�
     assert.deepEqual(menus[1].items.map(item => item.label), ['viewTasks']);
     await menus[1].items[0].click();
     assert.deepEqual(actions.at(-1), ['edit', 'second']);
+});
+
+test('子任务 Ctrl/Cmd 点击标题切换选中，右键按侧栏语义包含点击行', async () => {
+    const f = fixture();
+    const menus = [];
+    f.dependencies.Menu = class {
+        constructor() { this.items = []; menus.push(this); }
+        addItem(item) { this.items.push(item); }
+        open() {}
+    };
+    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
+        'selectedSubtaskIds', 'bindSubtaskSelection', 'showSubtaskActionMenu', 'clearSubtaskSelection',
+    ]);
+    const rows = ['a', 'b', 'c'].map(id => {
+        const row = Object.assign(element('div'), { classList: new Set(), closest: () => row });
+        row.classList.remove = row.classList.delete.bind(row.classList);
+        view.bindSubtaskSelection(row, id);
+        return row;
+    });
+    view.getRootElement = () => ({ querySelectorAll: () => rows });
+    view.confirmSubtaskDeletion = ids => { view.deleted = ids; };
+    const click = (row, options = {}) => {
+        const event = {
+            button: 0, target: { closest: () => null }, preventDefault() { this.prevented = true; },
+            stopPropagation() { this.stopped = true; }, ...options,
+        };
+        row.listeners.mousedown(event);
+        row.listeners.click(event);
+        return event;
+    };
+    assert.equal(click(rows[0]).prevented, undefined);
+    assert.equal(click(rows[0], { ctrlKey: true, target: { closest: () => ({}) } }).prevented, undefined);
+    assert.equal(click(rows[0], { ctrlKey: true }).stopped, true);
+    assert.equal(rows[0].classList.has('reminder-item--selected'), true);
+    click(rows[1], { metaKey: true });
+    click(rows[1], { metaKey: true });
+    assert.equal(rows[1].classList.has('reminder-item--selected'), false);
+    click(rows[1], { ctrlKey: true });
+    view.showSubtaskActionMenu({ id: 'c' }, rows[2], { type: 'contextmenu' });
+    assert.deepEqual(menus[0].items.map(item => item.label), ['delete', 'exitBatchSelect']);
+    menus[0].items[0].click();
+    assert.deepEqual(view.deleted, ['a', 'b', 'c']);
+    menus[0].items[1].click();
+    assert.equal(view.selectedSubtaskIds.size, 0);
+    assert.ok(rows.every(row => !row.classList.has('reminder-item--selected')));
 });
 
 function inlineSubtaskFixture(initial = {}) {
@@ -912,25 +1042,29 @@ test('保存嵌套时读取最新数据并重新检查循环，按目标实例�
     assert.equal(f.state.events.at(-1).type, 'reminderUpdated');
 });
 
-test('文档任务和子任务弹窗响应撤回，关闭后移除刷新监听', async () => {
-    for (const className of ['DocumentReminderDialog', 'SubtasksDialog']) {
+test('文档任务和子任务列表响应撤回，关闭后移除刷新监听', async () => {
+    for (const [className, lifecycleMethod] of [
+        ['DocumentReminderDialog', 'createDialog'], ['SubtasksDialog', 'show'], ['SubtasksDialog', 'mount'],
+    ]) {
         const f = fixture();
         let destroyed;
         f.dependencies.Dialog = class { constructor(options) { destroyed = options.destroyCallback; } };
-        const lifecycleMethod = className === 'DocumentReminderDialog' ? 'createDialog' : 'show';
-        const view = compileView(f, `src/components/dialog/${className}.ts`, className, ['reminderUpdatedHandler', lifecycleMethod]);
+        const methods = ['reminderUpdatedHandler', lifecycleMethod];
+        if (className === 'SubtasksDialog') methods.push('dispose');
+        const view = compileView(f, `src/components/dialog/${className}.ts`, className, methods);
         let loads = 0;
         Object.assign(view, {
             createContent: () => '', ensureRenderDependencies: async () => {},
             loadReminders: async () => { loads++; }, loadSubtasks: async () => { loads++; },
             renderDialogTitle: () => '', renderContent: () => '', renderSubtasks() {}, bindEvents() {}, updateSortDisplay() {},
         });
-        await view[lifecycleMethod]();
+        await view[lifecycleMethod]({});
         const beforeUndo = loads;
         f.dependencies.window.dispatchEvent(new f.dependencies.CustomEvent('reminderUpdated', { detail: { taskUndo: true } }));
         for (let i = 0; i < 5; i++) await Promise.resolve();
         assert.equal(loads, beforeUndo + 1);
-        destroyed();
+        if (lifecycleMethod === 'mount') view.dispose();
+        else destroyed();
         assert.equal(f.listeners.get('reminderUpdated').size, 0);
         f.dependencies.window.dispatchEvent(new f.dependencies.CustomEvent('reminderUpdated', { detail: { taskUndo: true } }));
         assert.equal(loads, beforeUndo + 1);

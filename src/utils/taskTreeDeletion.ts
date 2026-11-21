@@ -7,7 +7,7 @@ import { TaskActionUndo } from './taskActionUndo';
 import type { HolidayData } from './reminderSkipDate';
 
 /** 包括所有层级子任务及落盘的重复实例，损坏的循环关系也只访问一次。 */
-export function collectTaskDeletionIds(data: Record<string, any>, targetId: string): Set<string> {
+export function collectTaskDeletionIds(data: Record<string, any>, targets: string | Iterable<string>): Set<string> {
     const children = new Map<string, Set<string>>();
     for (const [id, task] of Object.entries(data)) {
         if (!task) continue;
@@ -18,7 +18,7 @@ export function collectTaskDeletionIds(data: Record<string, any>, targetId: stri
             children.get(parentId)!.add(id);
         }
     }
-    const ids = new Set([targetId]);
+    const ids = new Set(typeof targets === 'string' ? [targets] : targets);
     for (const id of ids) {
         for (const childId of children.get(id) || []) ids.add(childId);
     }

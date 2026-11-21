@@ -1,6 +1,6 @@
 import { Dialog, Menu, showMessage, confirm } from "siyuan";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
-import { openBlock } from "../../api";
+import { openBlock, updateBindBlockAtrrs } from "../../api";
 import { i18n } from "../../pluginInstance";
 import { QuickReminderDialog } from "./QuickReminderDialog";
 import { PasteTaskDialog } from "./PasteTaskDialog";
@@ -10,8 +10,10 @@ import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import { getLogicalDateString } from "../../utils/dateUtils";
 import { getSortCriterionName, loadSubtaskSortCriteria, saveSubtaskSortCriteria, type SortCriterion } from "../../utils/sortConfig";
-import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState, patchRepeatInstanceState } from "../dataManager/repeatUtils";
+import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState, patchRepeatInstanceState, parseReminderInstanceId } from "../dataManager/repeatUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
+import { collectTaskDeletionIds } from "../../utils/taskTreeDeletion";
+import { cloneTaskData } from "../../utils/taskUndoPatch";
 
 interface InlineSubtaskTitle {
     id: string;
@@ -44,6 +46,7 @@ export class SubtasksDialog {
     private draggingId: string | null = null;
     private subtaskDropTarget?: HTMLElement;
     private pendingSubtaskDrop?: Promise<boolean>;
+    private pendingSubtaskDeletion?: Promise<boolean>;
     private currentSortCriteria: SortCriterion[] = [];
     private isTempMode: boolean = false; // 是否为临时模式（新建任务的子任务）
     private tempSubtasks: any[] = []; // 临时子任务列表
@@ -51,6 +54,7 @@ export class SubtasksDialog {
     private isInstanceEdit: boolean = false; // 是否为编辑单个重复实例模式
     private isModifyAllInstances: boolean = false; // 是否为编辑所有重复实例模式
     private collapsedSubtaskIds: Set<string> = new Set();
+    private selectedSubtaskIds = new Set<string>();
     private tempParentName?: string | (() => string);
     private tempParentTask?: any | (() => any);
     private categoryManager: CategoryManager;
@@ -194,10 +198,12 @@ export class SubtasksDialog {
             await this.loadSubtasks();
         }
 
+        if (this.closed) return;
         container.innerHTML = this.renderContent(false);
         this.renderSubtasks();
         this.bindEvents();
         this.updateSortDisplay();
+        window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
     }
 
     public async show() {
@@ -215,9 +221,8 @@ export class SubtasksDialog {
             content: this.renderContent(true),
             width: "420px",
             destroyCallback: () => {
-                this.closed = true;
-                window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
-                if (this.onUpdate) this.onUpdate();
+                this.dispose();
+                this.onUpdate?.();
             }
         });
         this.closed = false;
@@ -226,6 +231,11 @@ export class SubtasksDialog {
         this.renderSubtasks();
         this.bindEvents();
         this.updateSortDisplay();
+    }
+
+    public dispose() {
+        this.closed = true;
+        window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
     }
 
     private renderDialogTitle(): string {
@@ -671,6 +681,10 @@ export class SubtasksDialog {
             return;
         }
         this.subtaskRenderPending = false;
+        const taskIds = new Set(this.subtasks.map(task => task.id));
+        for (const id of this.selectedSubtaskIds) {
+            if (!taskIds.has(id)) this.selectedSubtaskIds.delete(id);
+        }
         if (this.subtasks.length === 0) {
             listEl.innerHTML = this.readOnly ? `<div class="subtasks-dialog__empty">${i18n("noSubtasks")}</div>` : '';
             return;
@@ -681,6 +695,7 @@ export class SubtasksDialog {
             plugin: this.plugin,
             today: getLogicalDateString(),
             collapsedTasks: this.collapsedSubtaskIds,
+            selectedTaskIds: this.selectedSubtaskIds,
             showProjectBadge: false,
             showCategoryBadge: true,
             showDocumentTitle: true,
@@ -712,7 +727,8 @@ export class SubtasksDialog {
             onMoreClick: (task: any, element: HTMLElement, event: MouseEvent) => {
                 this.showSubtaskActionMenu(task, element, event);
             },
-            onCardDoubleClick: (task: any) => {
+            onCardDoubleClick: (task: any, event: MouseEvent) => {
+                if (event.ctrlKey || event.metaKey) return;
                 void this.editSubtask(task);
             },
             onTitleClick: (task: any) => {
@@ -745,8 +761,9 @@ export class SubtasksDialog {
             if (this.readOnly) {
                 const checkbox = taskEl.querySelector<HTMLInputElement>('.reminder-task-checkbox');
                 if (checkbox) checkbox.disabled = true;
-            } else if (!task.isSubscribed) {
-                this.bindInlineTitle(task, taskEl);
+            } else {
+                this.bindSubtaskSelection(taskEl, task.id);
+                if (!task.isSubscribed) this.bindInlineTitle(task, taskEl);
             }
             return taskEl;
         });
@@ -765,8 +782,65 @@ export class SubtasksDialog {
         });
     }
 
+    private bindSubtaskSelection(row: HTMLElement, id: string) {
+        const isSelectionClick = (event: MouseEvent) => event.button === 0
+            && (event.ctrlKey || event.metaKey)
+            && !(event.target as Element).closest('button, input, select, a, [contenteditable], .reminder-item__progress-wrap');
+
+        // 在标题输入框获得焦点前拦截多选手势，普通点击仍可行内编辑。
+        row.addEventListener('mousedown', event => {
+            if (isSelectionClick(event)) event.preventDefault();
+        }, true);
+        row.addEventListener('click', event => {
+            if (!isSelectionClick(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (this.selectedSubtaskIds.has(id)) {
+                this.selectedSubtaskIds.delete(id);
+                row.classList.remove('reminder-item--selected');
+            } else {
+                this.selectedSubtaskIds.add(id);
+                row.classList.add('reminder-item--selected');
+            }
+        }, true);
+    }
+
     private showSubtaskActionMenu(task: any, element: HTMLElement, event: MouseEvent) {
         const menu = new Menu();
+        if (!this.readOnly && this.selectedSubtaskIds.size > 0) {
+            this.selectedSubtaskIds.add(task.id);
+            element.closest('.reminder-item')?.classList.add('reminder-item--selected');
+            const ids = Array.from(this.selectedSubtaskIds);
+            menu.addItem({
+                icon: 'iconTrashcan',
+                label: i18n('delete'),
+                click: () => { void this.confirmSubtaskDeletion(ids); },
+            });
+            menu.addItem({
+                icon: 'iconClose',
+                label: i18n('exitBatchSelect'),
+                click: () => this.clearSubtaskSelection(),
+            });
+        } else {
+            this.addSingleSubtaskActions(menu, task);
+        }
+
+        if (event.type === 'contextmenu') {
+            menu.open({ x: event.clientX, y: event.clientY });
+        } else {
+            const rect = element.getBoundingClientRect();
+            menu.open({ x: rect.right, y: rect.bottom + 4, isLeft: true });
+        }
+    }
+
+    private clearSubtaskSelection() {
+        this.selectedSubtaskIds.clear();
+        this.getRootElement().querySelectorAll('#subtasksList > .reminder-item--selected').forEach(row => {
+            row.classList.remove('reminder-item--selected');
+        });
+    }
+
+    private addSingleSubtaskActions(menu: Menu, task: any) {
         if (!this.readOnly) {
             menu.addItem({
                 icon: 'iconAdd',
@@ -791,17 +865,8 @@ export class SubtasksDialog {
             menu.addItem({
                 icon: 'iconTrashcan',
                 label: i18n('delete'),
-                click: async () => {
-                    if (await this.finishPendingChanges() !== false) await this.deleteSubtask(task.id);
-                },
+                click: () => this.confirmSubtaskDeletion([task.id]),
             });
-        }
-
-        if (event.type === 'contextmenu') {
-            menu.open({ x: event.clientX, y: event.clientY });
-        } else {
-            const rect = element.getBoundingClientRect();
-            menu.open({ x: rect.right, y: rect.bottom + 4, isLeft: true });
         }
     }
 
@@ -964,7 +1029,7 @@ export class SubtasksDialog {
     }
 
     public finishPendingChanges(): Promise<boolean> | undefined {
-        return this.pendingSubtaskDrop ?? this.finishInlineTitles();
+        return this.pendingSubtaskDeletion ?? this.pendingSubtaskDrop ?? this.finishInlineTitles();
     }
 
     private finishInlineTitles(): Promise<boolean> | undefined {
@@ -1283,151 +1348,130 @@ export class SubtasksDialog {
         }
     }
 
-    private async deleteSubtask(id: string) {
-        const confirmTitle = i18n("confirmDeleteTitle") || "确认删除";
+    private async confirmSubtaskDeletion(ids: string[]) {
+        if (this.readOnly || this.closed || this.pendingSubtaskDeletion) return;
+        const isBatch = ids.length > 1;
+        const failureMessage = i18n(isBatch ? 'batchDeleteFailed' : 'deleteFailed');
+        try {
+            const confirmTitle = i18n(isBatch ? 'confirmBatchDelete' : 'confirmDeleteTitle');
+            const message = isBatch
+                ? i18n('confirmBatchDeleteSubtasksMessage', { count: String(ids.length) })
+                : await this.getSingleSubtaskDeletionMessage(ids[0]);
+            if (!message || this.closed || this.pendingSubtaskDeletion) return;
 
-        // 临时模式：仅从本地列表删除
-        if (this.isTempMode) {
-            const index = this.subtasks.findIndex(t => t.id === id);
-            if (index !== -1) {
-                const taskTitle = this.subtasks[index].title || i18n("untitledTask");
-                confirm(
-                    confirmTitle,
-                    i18n("deleteTemporarySubtaskConfirm", { title: String(taskTitle) }),
-                    async () => {
-                        this.subtasks.splice(index, 1);
-                        this.renderSubtasks();
-                        if (this.onTempSubtasksUpdate) {
-                            this.onTempSubtasksUpdate([...this.subtasks]);
-                        }
-                    }
-                );
-            }
-            return;
+            confirm(confirmTitle, message, () => {
+                if (this.closed || this.pendingSubtaskDeletion) return;
+                this.pendingSubtaskDeletion = this.deleteSubtasks(ids).catch(error => {
+                    console.error('Failed to delete subtasks:', error);
+                    showMessage(failureMessage, 3000, 'error');
+                    return false;
+                }).finally(() => {
+                    this.pendingSubtaskDeletion = undefined;
+                });
+                return this.pendingSubtaskDeletion;
+            });
+        } catch (error) {
+            console.error('Failed to prepare subtask deletion:', error);
+            showMessage(failureMessage, 3000, 'error');
         }
+    }
 
-        let reminderData = await this.plugin.loadReminderData() || {};
-
-        // 解析 ID
-        let targetId = id;
-        let date: string | undefined;
-        const lastUnderscoreIndex = id.lastIndexOf('_');
-        if (lastUnderscoreIndex !== -1) {
-            const potentialDate = id.substring(lastUnderscoreIndex + 1);
-            if (/^\d{4}-\d{2}-\d{2}$/.test(potentialDate)) {
-                targetId = id.substring(0, lastUnderscoreIndex);
-                date = potentialDate;
-            }
-        }
-
-        const task = reminderData[targetId];
+    private async getSingleSubtaskDeletionMessage(id: string): Promise<string | undefined> {
+        const data = this.isTempMode
+            ? Object.fromEntries(this.subtasks.map(task => [task.id, task]))
+            : await this.plugin.loadReminderData() || {};
+        const instance = data[id] ? null : parseReminderInstanceId(id);
+        const task = data[instance?.originalId ?? id];
         if (!task) return;
 
-        // 保存任务信息用于后续事件触发
-        const taskProjectId = task.projectId;
+        const title = String(task.title || i18n('untitledTask'));
+        if (instance) {
+            return i18n(this.isInstanceEdit && !this.isModifyAllInstances
+                ? 'hideSubtaskInstanceConfirm' : 'deleteSubtaskTemplateConfirm', { title });
+        }
 
-        // 定义执行删除的函数
-        const doDelete = async () => {
-            // 确认时重读最新数据，避免弹窗期间其他任务的修改被旧快照覆盖。
-            reminderData = await this.plugin.loadReminderData() || {};
-            if (!reminderData[targetId]) return;
-            const undo = new TaskActionUndo(this.plugin, reminderData);
-            // Recursive delete
-            const deleteRecursive = async (idToDelete: string) => {
-                const children = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === idToDelete);
-                for (const child of children) {
-                    await deleteRecursive(child.id);
-                }
-                // 取消移动端通知
-                await this.plugin.cancelMobileNotification(idToDelete);
-                delete reminderData[idToDelete];
-            };
+        const message = i18n(this.isTempMode ? 'deleteTemporarySubtaskConfirm' : 'confirmDeleteTask', { title });
+        const childrenCount = collectTaskDeletionIds(data, id).size - 1;
+        return childrenCount > 0 ? `${message}\n${i18n('includesNSubtasks', { count: String(childrenCount) })}` : message;
+    }
 
-            await deleteRecursive(targetId);
-            await undo.save(reminderData);
-            await this.loadSubtasks();
+    private async deleteSubtasks(ids: string[]): Promise<boolean> {
+        if (await this.pendingSubtaskDrop === false || await this.finishInlineTitles() === false || this.closed) return false;
+
+        if (this.isTempMode) {
+            const data = Object.fromEntries(this.subtasks.map(task => [task.id, task]));
+            const removed = collectTaskDeletionIds(data, ids);
+            this.subtasks = this.subtasks.filter(task => !removed.has(task.id));
+            this.clearSubtaskSelection();
             this.renderSubtasks();
-            
-            // 触发更新事件通知其他组件
-            if (taskProjectId) {
-                window.dispatchEvent(new CustomEvent('reminderUpdated', {
-                    detail: {
-                        projectId: taskProjectId
-                    }
-                }));
-            }
-            
-            // 通知父组件更新
-            if (this.onUpdate) {
-                this.onUpdate();
-            }
-            
-            undo.show(i18n("deleteSuccess"));
-        };
-
-        if (date) {
-            // 判断是否为编辑单个实例模式（非编辑所有实例）
-            const isEditingSingleInstance = this.isInstanceEdit && !this.isModifyAllInstances;
-            
-            if (isEditingSingleInstance) {
-                // 编辑单个实例：将此 ghost 子任务在当前日期标记为隐藏
-                // 而不是删除整个模板
-                confirm(
-                    confirmTitle,
-                    i18n("hideSubtaskInstanceConfirm", { title: String(task.title) }),
-                    async () => {
-                        reminderData = await this.plugin.loadReminderData() || {};
-                        const task = reminderData[targetId];
-                        if (!task) return;
-                        const undo = new TaskActionUndo(this.plugin, reminderData);
-                        // 将 ghost 子任务标记为在当前日期隐藏
-                        excludeRepeatInstance(task, date);
-                        await undo.save(reminderData);
-                        await this.loadSubtasks();
-                        this.renderSubtasks();
-                        
-                        // 触发更新事件
-                        if (taskProjectId) {
-                            window.dispatchEvent(new CustomEvent('reminderUpdated', {
-                                detail: { projectId: taskProjectId }
-                            }));
-                        }
-                        if (this.onUpdate) {
-                            this.onUpdate();
-                        }
-                        
-                        undo.show(i18n("hideSuccess"));
-                    }
-                );
-            } else {
-                // 编辑所有实例：删除整个模板任务
-                const ghostConfirmMsg = i18n("deleteSubtaskTemplateConfirm", { title: String(task.title) });
-                confirm(
-                    confirmTitle,
-                    ghostConfirmMsg,
-                    async () => {
-                        await doDelete();
-                    }
-                );
-            }
-            return;
+            this.onTempSubtasksUpdate?.([...this.subtasks]);
+            return true;
         }
 
-        // Count subtasks of this task
-        const childrenCount = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === targetId).length;
-        let confirmMsg = i18n("confirmDeleteTask", { title: task.title }) || `确定要删除任务 "${task.title}" 吗？此操作不可撤销。`;
-        if (childrenCount > 0) {
-            confirmMsg += `\n${i18n("includesNSubtasks", { count: childrenCount.toString() }) || `此任务包含 ${childrenCount} 个子任务，它们也将被一并删除。`}`;
+        // 确认后读取最新数据，先写盘，再更新视图及通知。
+        const current = await this.plugin.loadReminderData() || {};
+        const next = { ...current };
+        const permanentIds = new Set<string>();
+        const notificationIds = new Set<string>();
+        for (const id of ids) {
+            const instance = parseReminderInstanceId(id);
+            const stored = current[id];
+            const template = instance && current[instance.originalId];
+            if (stored) permanentIds.add(id);
+            if (!instance || !template) continue;
+
+            // 已落盘的同日期记录可能覆盖模板生成的子任务，一起排除才能防止旧行重新出现。
+            const inheritsFromTemplate = !stored || (template.parentId
+                && stored.parentId === `${template.parentId}_${instance.instanceDate}`);
+            if (inheritsFromTemplate && this.isInstanceEdit && !this.isModifyAllInstances) {
+                const templateId = instance.originalId;
+                if (next[templateId] === template) next[templateId] = cloneTaskData(template);
+                excludeRepeatInstance(next[templateId], instance.instanceDate);
+                notificationIds.add(id);
+            } else if (!stored) {
+                permanentIds.add(instance.originalId);
+            }
         }
 
-        // Use siyuan confirm
-        confirm(
-            confirmTitle,
-            confirmMsg,
-            async () => {
-                await doDelete();
+        const blockIds = new Set<string>();
+        const removed = collectTaskDeletionIds(current, permanentIds);
+        for (const id of removed) {
+            const task = current[id];
+            for (const record of [task, ...Object.values(task.repeat?.instances || {})] as any[]) {
+                const blockId = record?.blockId || record?.docId;
+                if (blockId) blockIds.add(blockId);
             }
-        );
+            delete next[id];
+            notificationIds.add(id);
+        }
+        if (notificationIds.size === 0) return true;
+
+        const undo = new TaskActionUndo(this.plugin, current);
+        await undo.save(next);
+        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+        const effects = [
+            ...Array.from(notificationIds, id => () => this.plugin.cancelMobileNotification?.(id)),
+            ...Array.from(blockIds, id => () => updateBindBlockAtrrs(id, this.plugin)),
+        ];
+        void Promise.allSettled(effects.map(effect => Promise.resolve().then(effect))).then(results => {
+            for (const result of results) {
+                if (result.status === 'rejected') console.warn('Failed to refresh deleted subtask:', result.reason);
+            }
+        });
+        if (!this.closed) {
+            try {
+                await this.loadSubtasks();
+                if (!this.closed) {
+                    this.clearSubtaskSelection();
+                    this.renderSubtasks();
+                    this.onUpdate?.();
+                }
+            } catch (error) {
+                console.warn('Failed to refresh subtask list after deletion:', error);
+            }
+        }
+        undo.show(i18n(removed.size > 0 ? 'deleteSuccess' : 'hideSuccess'));
+        return true;
     }
 
     private setupSubtaskDragAndDrop(element: HTMLElement, task: any) {

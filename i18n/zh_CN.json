@@ -1966,6 +1966,7 @@
     "batchUpdateFailed": "批量更新失败",
     "confirmBatchDelete": "确认批量删除",
     "confirmBatchDeleteMessage": "确定要删除选中的 ${count} 个任务吗？",
+    "confirmBatchDeleteSubtasksMessage": "确定要删除选中的 ${count} 个子任务吗？下级子任务也会一并移除。",
     "batchMilestoneMixedGroups": "批量设置里程碑仅支持同一分组内的任务",
     "batchDeleteSuccess": "成功删除 ${count} 个任务",
     "batchDeleteFailed": "批量删除失败",
