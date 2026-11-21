@@ -1,3 +1,88 @@
+## v7.3.0 / 20261121
+
+- 🔄 日历订阅与同步
+  - 支持同步滴答清单任务，所选清单自动成为订阅项目的分组。
+  - CalDAV 新增 iCloud 预设，默认启用双向同步，并改善标准 CalDAV 服务兼容性。
+  - 修复保存任务时误触发滴答清单和 CalDAV 全量更新历史任务导致 HTTP 429 限流的问题。
+  - 任务侧栏的更多菜单新增“更新订阅日历”入口。
+- ✏️ 任务编辑
+  - 任务备注改用精简版思源编辑器，较长备注按需独立存储，备注引用的附件可免于被思源的未引用资源清理误删。
+  - 子任务页签移至任务详情旁，支持行内创建和编辑标题、回车连续录入、拖放或 Tab / Shift+Tab 调整层级，以及多选批量删除。
+  - 子任务独立保存排序设置，修复按完成时间升序排列的问题。
+  - 任务编辑弹窗支持选择父任务。
+  - 子任务详情隐藏与父任务相同的分类、标签和里程碑，看板也省略与父任务相同的里程碑。
+  - 修复编辑任务的项目或分组时旧数据覆盖最新任务列表的问题。
+  - 修复智能日期识别将数字农历日期误判为公历的问题。
+- 📋 任务视图与项目看板
+  - 任务与习惯侧栏支持极简视图，任务可查看日期和详情，习惯可查看打卡状态与进度。
+  - 四象限支持独立保存多条件排序，可按项目分组或在象限内统一排序，清空排序后可手动重排。
+  - 任务侧栏支持清空单选排序。
+  - 项目看板的手动排序支持升序和降序。
+  - 项目看板分组页签默认显示未完成任务数。
+  - 项目状态可设为默认隐藏，所属项目可不在全部项目显示。
+  - 看板里程碑筛选保留暂无任务的里程碑。
+  - 看板任务列表滚动接近底部时自动加载，并跳过视口外卡片的绘制，减少长列表的渲染开销。
+  - 任务卡片默认用边框标示优先级。
+  - 修复标题中的长链接撑破看板卡片的问题。
+  - 改善移动端项目管理、项目看板和日历的长按操作，包括拖动、打开菜单和调整日历任务时长。
+- 📅 日历与 ICS
+  - 修复日历打开时未应用已保存的任务状态筛选的问题。
+  - 修复日历中每日番茄专注时长的图标和文字意外换行的问题。
+  - ICS 提醒导出遵循任务完成状态和显示设置。
+  - 可在设置中启用任务管理菜单的 ICS 快捷上传入口。
+- 🍅 番茄钟与习惯
+  - 桌面端可从顶栏开关独立番茄钟窗口，移动端新增应用内悬浮番茄钟入口。点击番茄钟标题可新建任务或选择未完成任务。
+  - 番茄钟的更多菜单支持切换随机微休息，并同步全局设置，切换时保留当前计时。
+  - 改善习惯侧栏和周、月统计视图的打卡显示与操作。
+- ⚡ 性能
+  - 优化插件启动与侧栏首屏加载，缩减内核构建产物体积。
+- 📌 兼容性
+  - 最低支持思源笔记 3.8.11。
+
+---
+
+- 📌 Compatibility
+  - Requires SiYuan Note 3.8.11 or later.
+- 🔄 Calendar subscriptions and sync
+  - Sync multiple Dida365 lists with an API token and turn selected lists into groups in the subscription project. New subscription projects follow the Dida365 task order by default. Existing projects retain their sort settings.
+  - Create tasks in SiYuan and sync them to Dida365 or other writable subscriptions.
+  - Sync SiYuan block bindings between SiYuan and Dida365 tasks, and follow links in task-card titles.
+  - Fix bulk deletion of Dida365 tasks from project boards so deletions sync to Dida365. Tasks that could not be deleted due to errors or rate limits remain in the list.
+  - Add an iCloud preset for CalDAV with two-way sync enabled by default, and improve compatibility with standard CalDAV servers.
+  - Prevent task saves from updating all historical Dida365 and CalDAV tasks and hitting HTTP 429 rate limits.
+  - Add an action to refresh calendar subscriptions from the task sidebar's More menu.
+- ✏️ Task editing
+  - Use a lightweight SiYuan editor for task notes and store longer notes separately as needed. Protect attachments referenced by task notes from SiYuan's unused-asset cleanup.
+  - Move the Subtasks tab beside task details and support inline creation and title editing, consecutive entry with Enter, nesting by drag and drop or Tab / Shift+Tab, and bulk deletion.
+  - Save subtask sort settings independently and fix sorting by ascending completion time.
+  - Select a parent task in the task editor.
+  - Hide a subtask's category, tags and milestone in task details when they match its parent's. Project boards also omit identical milestones.
+  - Fix stale data overwriting the latest task list when changing a task's project or group.
+  - Fix smart date parsing that misread numeric lunar dates as Gregorian dates.
+- 📋 Task views and project boards
+  - Add mini views to the task and habit sidebars, with access to task dates and details and to habit check-in status and progress.
+  - Save multi-criteria sorting independently in the Eisenhower matrix, group by project or sort across each quadrant, and clear sorting to reorder tasks manually.
+  - Allow clearing the single sort criterion in the task sidebar.
+  - Support ascending and descending manual sorting on project boards.
+  - Show unfinished task counts on project board group tabs by default.
+  - Allow project statuses to be hidden by default.
+  - Keep milestones with no tasks in the board's milestone filter.
+  - Load more board tasks as scrolling approaches the bottom and skip painting offscreen cards to reduce rendering work in long lists.
+  - Use borders as the default priority indicator on task cards.
+  - Prevent long links in task titles from stretching board cards.
+  - Improve long-press interactions in project management, project boards and calendars on mobile, including dragging, opening menus and adjusting calendar task durations.
+- 📅 Calendar and ICS
+  - Apply the saved task status filter when opening the calendar.
+  - Keep the daily Pomodoro focus-time icon and text together in the calendar.
+  - Respect task completion and visibility settings when exporting ICS reminders.
+  - Add an opt-in ICS upload shortcut to the task management menu.
+- 🍅 Pomodoro and habits
+  - Toggle the standalone Pomodoro window from the desktop top bar or open the in-app floating timer on mobile. Click the timer title to create a task or pick an unfinished one.
+  - Toggle random micro-breaks from the Pomodoro More menu and update the global setting while the current timer continues.
+  - Improve check-in display and controls in the habit sidebar and weekly and monthly statistics.
+- ⚡ Performance
+  - Improve plugin startup and initial sidebar loading, and reduce the kernel bundle size.
+
 ## v7.2.2 / 20261114
 
 - 🍅 番茄钟
