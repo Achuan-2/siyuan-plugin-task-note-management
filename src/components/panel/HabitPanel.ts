@@ -452,15 +452,6 @@ export class HabitPanel {
         try {
             const menu = new Menu("habitMoreMenu");
 
-            // 分组管理
-            menu.addItem({
-                icon: 'iconTags',
-                label: i18n("groupManageBtn"),
-                click: () => {
-                    this.showGroupManageDialog();
-                }
-            });
-
             // 显示设置
             menu.addItem({
                 icon: 'iconEye',
@@ -507,6 +498,15 @@ export class HabitPanel {
                         ]
                     }
                 ]
+            });
+
+            // 分组管理
+            menu.addItem({
+                icon: 'iconTags',
+                label: i18n("groupManageBtn"),
+                click: () => {
+                    this.showGroupManageDialog();
+                }
             });
 
             // 插件设置
