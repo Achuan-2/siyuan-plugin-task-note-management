@@ -198,6 +198,15 @@ export class PomodoroRecordManager {
         return this.serialize(() => this.updateSessionNoteImpl(...args));
     }
 
+    async updateSessionTask(sessionId: string, eventId: string, eventTitle: string): Promise<boolean> {
+        return this.serialize(async () => {
+            await this.initialize();
+            await this.loadSessionDate(sessionId);
+            const location = this.findSessionLocation(sessionId);
+            return location ? this.updateSessionImpl({ ...location.session, eventId, eventTitle }) : false;
+        });
+    }
+
     async deleteSession(...args: Parameters<PomodoroRecordManager['deleteSessionImpl']>) {
         return this.serialize(() => this.deleteSessionImpl(...args));
     }

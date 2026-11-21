@@ -73,6 +73,8 @@ interface ReminderElementRenderState {
 
 export class ReminderPanel {
     private disposed = false;
+    private selectionOptions?: { onSelectTask: (task: any) => Promise<void> };
+    private selectingTask = false;
     private container: HTMLElement;
     private remindersContainer: HTMLElement;
     private filterSelect: HTMLSelectElement;
@@ -170,9 +172,11 @@ export class ReminderPanel {
     private docTitleCache: Map<string, Map<string, string>> = new Map();
     private lute: any;
 
-    constructor(container: HTMLElement, plugin?: any, closeCallback?: () => void) {
+    constructor(container: HTMLElement, plugin?: any, closeCallback?: () => void,
+        selectionOptions?: { onSelectTask: (task: any) => Promise<void> }) {
         this.container = container;
         this.plugin = plugin;
+        this.selectionOptions = selectionOptions;
         this.isMobileClient = getFrontend().endsWith('mobile') || (this.plugin && this.plugin.isInMobileApp);
         // 唯一 ID，用于标记由本面板发出的全局事件，避免自身响应
         this.panelId = `ReminderPanel_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -645,6 +649,7 @@ export class ReminderPanel {
             this.showMoreMenu(e);
         });
         actionContainer.appendChild(moreBtn);
+        if (this.selectionOptions) actionContainer.replaceChildren(this.sortButton, moreBtn);
 
         // 标题单独一行
         header.appendChild(titleContainer);
@@ -778,7 +783,7 @@ export class ReminderPanel {
         this.container.appendChild(this.remindersContainer);
 
         // 为容器添加拖拽事件，支持拖动到空白区域移除父子关系
-        this.addContainerDragEvents();
+        if (!this.selectionOptions) this.addContainerDragEvents();
 
         // 渲染分类过滤器
         this.updateCategoryFilterButtonText();
@@ -3337,6 +3342,7 @@ export class ReminderPanel {
         }
         const context = {
             plugin: this.plugin,
+            selectionMode: !!this.selectionOptions,
             today: today,
             collapsedTasks: this.collapsedTasks,
             selectedTaskIds: this.selectedReminderIds,
@@ -3611,7 +3617,9 @@ export class ReminderPanel {
 
         // 回调使用独立对象，局部同步时不会把实例等显示字段写入原始存储数据。
         const renderedReminder = { ...reminder };
-        const element = TaskRenderer.render(renderedReminder, context, callbacks, level, allVisibleReminders);
+        const renderCallbacks = this.selectionOptions ? { onCollapseClick: callbacks.onCollapseClick } : callbacks;
+        const element = TaskRenderer.render(renderedReminder, context, renderCallbacks, level, allVisibleReminders);
+        if (this.selectionOptions) this.configureTaskSelection(element, renderedReminder);
         this.reminderElementStates.set(element, {
             reminder: renderedReminder, signature, title: reminder.title || '', note: reminder.note || '',
             onNoteClick: callbacks.onNoteClick,
@@ -3640,10 +3648,43 @@ export class ReminderPanel {
         return element;
     }
 
-    /**
-     * 获取按深度优先（DFS）遍历的可见任务 ID 序列
-     * 逻辑与 renderRemindersIteratively 保持一致，用于确定乐观插入时的 DOM 位置
-     */
+    /** 复用任务卡片显示和折叠，只将点击操作替换为选择任务。 */
+    private configureTaskSelection(element: HTMLElement, task: any): void {
+        element.draggable = false;
+        element.tabIndex = 0;
+        element.setAttribute('role', 'button');
+        element.setAttribute('aria-label', task.title || i18n('untitledTask'));
+        const select = (event: Event) => {
+            if ((event.target as Element)?.closest?.('.collapse-btn')) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            void this.selectTask(task, element);
+        };
+        element.addEventListener('click', select, true);
+        element.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') select(event);
+        }, true);
+        element.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }, true);
+    }
+
+    private async selectTask(task: any, element: HTMLElement): Promise<void> {
+        if (this.disposed || this.selectingTask || !this.selectionOptions) return;
+        this.selectingTask = true;
+        element.setAttribute('aria-busy', 'true');
+        try {
+            await this.selectionOptions.onSelectTask(task);
+        } catch (error) {
+            console.error('Failed to select task:', error);
+            if (!this.disposed) showMessage(i18n('operationFailed'), 3000, 'error');
+        } finally {
+            this.selectingTask = false;
+            element.removeAttribute('aria-busy');
+        }
+    }
+
     private formatPomodoroMinutes(minutes: number): string {
         const hours = Math.floor(minutes / 60);
         const mins = Math.floor(minutes % 60);
@@ -11712,7 +11753,7 @@ export class ReminderPanel {
             });
 
             // 多选模式
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: this.isMultiSelectMode ? 'iconClose' : 'iconCheck',
                 label: this.isMultiSelectMode
                     ? (i18n('exitBatchSelect') || '退出多选')
@@ -11727,7 +11768,7 @@ export class ReminderPanel {
             });
 
             // 添加粘贴新建任务
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: 'iconTNPaste',
                 label: i18n("pasteCreateTask") || "粘贴新建任务",
                 click: () => {
@@ -11745,7 +11786,7 @@ export class ReminderPanel {
             });
 
             // 添加分类管理
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: 'iconTags',
                 label: i18n("manageCategories"),
                 click: () => this.showCategoryManageDialog()

@@ -7687,7 +7687,8 @@ export class PomodoroTimer {
         }
     }
 
-    show(): Promise<void> {
+    show(autoStart: boolean = true): Promise<void> {
+        if (!autoStart) return this.componentsReady;
         // 所有启动入口在窗口和音频准备完成后直接计时；重复调用不重启或恢复暂停的计时。
         if (!this.startOnShowPromise) {
             this.startOnShowPromise = this.componentsReady.then(async () => {
@@ -8257,11 +8258,36 @@ export class PomodoroTimer {
         return !!blockId;
     }
 
+    private async bindTaskToTimer(task: any): Promise<void> {
+        if (this.isWindowClosed || !task?.id) throw new Error('Pomodoro timer is no longer available');
+        const pendingSession = this.activeWorkSessionStartPromise;
+        const sessionId = this.activeWorkSessionId || (pendingSession ? await pendingSession : null);
+        if (this.isWindowClosed) throw new Error('Pomodoro timer was closed while selecting a task');
+        if (sessionId) {
+            const saved = await this.recordManager.updateSessionTask(sessionId, task.id, task.title || i18n('untitledTask'));
+            if (!saved) throw new Error('Failed to bind the current pomodoro session');
+        }
+        if (this.isWindowClosed) return;
+        this.reminder = { ...task };
+        const win = this.container as any;
+        if (win?.webContents && !win.isDestroyed()) {
+            this.updateBrowserWindowDisplay(win);
+        } else {
+            win?.querySelectorAll('.pomodoro-event-title, #miniTaskTitle').forEach((element: HTMLElement) => {
+                element.textContent = task.title || i18n('untitledTask');
+                element.title = element.textContent;
+            });
+        }
+        this.updateStatsDisplay();
+        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+    }
+
     public async openTaskEditDialog() {
         if (this.isOpeningEditDialog) {
             return;
         }
         this.isOpeningEditDialog = true;
+        let hasStoredTask = !!this.reminder.isSubscribed;
 
         try {
             // 尝试激活/恢复思源主窗口
@@ -8299,6 +8325,7 @@ export class PomodoroTimer {
                         if (!found && this.reminder.originalId) {
                             found = reminderData[this.reminder.originalId];
                         }
+                        hasStoredTask = !!found || hasStoredTask;
                         if (found) {
                             // 我们保留 this.reminder 上的 runtime/instance 属性 (如 isRepeatInstance, instanceDate 等)
                             // 并继承 database 中完整的字段值 (如 projectId, customGroupId 等)
@@ -8388,34 +8415,12 @@ export class PomodoroTimer {
                         }
 
                         if (updated) {
-                            if (this.reminder.isRepeatInstance) {
-                                // 保留当前重复实例的 id，合并修改后的原始字段
-                                this.reminder = Object.assign({}, this.reminder, updated, {
+                            const nextReminder = this.reminder.isRepeatInstance
+                                ? Object.assign({}, this.reminder, updated, {
                                     id: this.reminder.id,
                                     originalId: this.reminder.originalId
-                                });
-                            } else {
-                                this.reminder = updated;
-                            }
-
-                            // 更新 UI
-                            const titleEls = document.querySelectorAll('.pomodoro-event-title');
-                            titleEls.forEach((el: HTMLElement) => {
-                                el.textContent = this.reminder.title || i18n('unnamedNote') || '未命名笔记';
-                                el.title = (i18n("openNote") || '打开笔记') + ': ' + (this.reminder.title || i18n('unnamedNote') || '未命名笔记');
-                            });
-
-                            // 同时更新 mini 模式标题显示
-                            const miniTitleEl = document.getElementById('miniTaskTitle');
-                            if (miniTitleEl) {
-                                miniTitleEl.textContent = this.reminder.title || i18n('unnamedNote') || '未命名笔记';
-                                miniTitleEl.setAttribute('title', this.reminder.title || i18n('unnamedNote') || '未命名笔记');
-                            }
-
-                            // 同时更新 BrowserWindow 上的显示
-                            if (this.container && typeof (this.container as any).webContents !== 'undefined') {
-                                this.updateBrowserWindowDisplay(this.container);
-                            }
+                                }) : updated;
+                            await this.bindTaskToTimer(nextReminder);
                         }
                     } catch (err) {
                         console.error("Failed to update pomodoro task title:", err);
@@ -8424,12 +8429,14 @@ export class PomodoroTimer {
                 },
                 undefined,
                 {
-                    mode: 'edit',
-                    reminder: this.reminder,
+                    mode: hasStoredTask ? 'edit' : 'quick',
+                    reminder: hasStoredTask ? this.reminder : undefined,
+                    defaultTitle: hasStoredTask || this.reminder.id === 'pomodoro-standalone' ? undefined : this.reminder.title,
                     plugin: this.plugin
                 }
             );
             await editDialog.show();
+            await editDialog.enableTaskSelection(task => this.bindTaskToTimer(task), !hasStoredTask);
         } finally {
             this.isOpeningEditDialog = false;
         }
@@ -9369,6 +9376,46 @@ document.body.classList.remove('docked-mode');
             console.error("Failed to create pomodoro window:", error);
             throw error;
         }
+    }
+
+    public async showFloatingWindow(): Promise<boolean> {
+        await this.componentsReady;
+        if (this.isTabMode || !this.isWindowActive() || this.isStandaloneWindow()) return false;
+        this.container.hidden = false;
+        if (this.container.style.display === 'none') this.container.style.display = '';
+        if (this.container.style.visibility === 'hidden') this.container.style.visibility = '';
+        if (this.isDocked) this.exitDOMWindowDock();
+        if (this.isMinimized) this.restore();
+        this.ensureDomContainerWithinBounds(8);
+        const siyuan = (window as any).siyuan;
+        if (siyuan) {
+            siyuan.zIndex = Math.max(20, Number(siyuan.zIndex) || 0) + 1;
+            this.container.style.zIndex = String(siyuan.zIndex);
+        }
+        return true;
+    }
+
+    public isStandaloneWindow(): boolean {
+        const win = this.container as any;
+        return !this.isTabMode && !this.isWindowClosed &&
+            typeof win?.isDestroyed === 'function' && !win.isDestroyed();
+    }
+
+    public static async toggleExistingStandaloneWindow(plugin: any): Promise<boolean> {
+        const win = await PomodoroTimer.scanForOrphanedWindow(plugin);
+        if (!win || win.isDestroyed()) return false;
+        // 最小化的窗口在 Electron 中仍可能被认为可见，先处理恢复。
+        if (win.isMinimized()) {
+            win.restore();
+            win.show();
+            win.focus();
+        } else if (win.isVisible()) {
+            win.hide();
+        } else {
+            win.show();
+            win.focus();
+        }
+        return true;
     }
 
     public static async recoverOrphanedWindow(plugin: any, settings: any): Promise<PomodoroTimer | null> {
