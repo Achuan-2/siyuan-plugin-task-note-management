@@ -2909,9 +2909,6 @@ export class QuickReminderDialog {
                                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                                 </button>
                             </div>
-                            <div class="b3-form__desc" style="font-size: 11px; color: var(--b3-theme-on-surface-light);">
-                                ${i18n("parentTaskIdLabel")}<span id="quickParentTaskId" style="font-family: monospace;">-</span>
-                            </div>
                         </div>
                         <div class="b3-form__group">
                             <label class="b3-form__label">${this.renderSettingLabel('note', i18n("taskTitle"))}</label>
@@ -7816,11 +7813,10 @@ export class QuickReminderDialog {
     private async updateParentTaskDisplay() {
         const parentTaskGroup = this.dialog.element.querySelector('#quickParentTaskGroup') as HTMLElement;
         const parentTaskDisplay = this.dialog.element.querySelector('#quickParentTaskDisplay') as HTMLInputElement;
-        const parentTaskIdSpan = this.dialog.element.querySelector('#quickParentTaskId') as HTMLSpanElement;
         const viewParentBtn = this.dialog.element.querySelector('#quickViewParentBtn') as HTMLButtonElement;
         const removeParentBtn = this.dialog.element.querySelector('#quickRemoveParentBtn') as HTMLButtonElement;
 
-        if (!parentTaskGroup || !parentTaskDisplay || !parentTaskIdSpan || !viewParentBtn || !removeParentBtn) {
+        if (!parentTaskGroup || !parentTaskDisplay || !viewParentBtn || !removeParentBtn) {
             return;
         }
 
@@ -7835,7 +7831,6 @@ export class QuickReminderDialog {
 
         // 显示父任务区域
         parentTaskGroup.style.display = '';
-        parentTaskIdSpan.textContent = parentId;
 
         if (parentId === '__TEMP_PARENT__') {
             const displayTitle = this.tempParentName || i18n("newTask") || "新建任务";
