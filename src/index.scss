@@ -2227,7 +2227,8 @@
     }
 }
 
-.reminder-panel {
+.reminder-panel,
+.TN-project-kanban-view {
     .reminder-item__note {
         border: 1px solid var(--b3-border-color);
         color: var(--b3-theme-on-surface);
@@ -2754,16 +2755,25 @@
     }
 
     &__title {
+        display: block;
+        flex: 1;
         min-width: 0;
+        max-height: 120px;
+        box-sizing: border-box;
+        field-sizing: content;
+        resize: none;
         padding: 2px 4px;
         border: 0;
-        border-radius: var(--b3-border-radius);
+        outline: none;
         background: transparent;
+        color: var(--b3-theme-on-surface);
         font: inherit;
         font-weight: 500;
+        line-height: 1.5;
         text-align: start;
-        white-space: pre-wrap;
         overflow-wrap: anywhere;
+        cursor: text;
+        user-select: text;
     }
 
     &__draft {
@@ -2774,17 +2784,6 @@
         border-bottom: 1px solid var(--b3-theme-surface-lighter);
     }
 
-    &__input {
-        flex: 1;
-        min-width: 0;
-        min-height: 28px;
-        max-height: 120px;
-        field-sizing: content;
-        resize: none;
-        padding: 3px 4px;
-        line-height: 1.4;
-        user-select: text;
-    }
 }
 
 /* 快速提醒对话框样式 */

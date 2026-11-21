@@ -8620,15 +8620,7 @@ export class ProjectKanbanView {
                 await this.editTask(task);
             },
             onNoteClick: (task: any, e: MouseEvent) => {
-                if (this.handleMultiSelectTaskClick(task, e)) {
-                    return;
-                }
-
-                if (this.handleQuickMultiSelectClick(task, e)) {
-                    return;
-                }
-
-                this.showTaskNotePreview(task);
+                this.handleTaskNoteClick(task, e);
             },
             onCardClick: (task: any, e: MouseEvent) => {
                 if (this.handleMultiSelectTaskClick(task, e)) {
@@ -11669,6 +11661,143 @@ export class ProjectKanbanView {
         };
     }
 
+    private handleTaskNoteClick(task: any, e: Event): void {
+        const mouseEvent = e as MouseEvent;
+        if (this.handleMultiSelectTaskClick(task, mouseEvent)) {
+            return;
+        }
+
+        if (this.handleQuickMultiSelectClick(task, mouseEvent)) {
+            return;
+        }
+
+        this.showTaskNotePreview(task);
+    }
+
+    /** 原地更新任务卡片的备注节点，避免备注变更触发整板重绘。 */
+    private updateTaskNoteElement(taskEl: HTMLElement, task: any): void {
+        const currentNote = taskEl.querySelector<HTMLElement>('.reminder-item__note');
+        const updatedNote = TaskRenderer.createNoteElement(task, {
+            plugin: this.plugin,
+            today: getLogicalDateString(),
+            lute: this.lute,
+        }, (clickedTask, event) => {
+            this.handleTaskNoteClick(clickedTask, event);
+        });
+        if (currentNote && updatedNote) {
+            currentNote.replaceChildren(...Array.from(updatedNote.childNodes));
+            currentNote.style.cssText = updatedNote.style.cssText;
+        } else if (currentNote) {
+            currentNote.remove();
+        } else if (updatedNote) {
+            const info = taskEl.querySelector('.reminder-item__info');
+            const before = info && Array.from(info.children).find(child => ![
+                'reminder-item__title-container',
+                'reminder-item__time-container',
+                'reminder-item__pomodoro-count',
+                'reminder-item__completed-time',
+                'reminder-item__ignored-time',
+            ].some(className => child.classList.contains(className)));
+            info?.insertBefore(updatedNote, before || null);
+        }
+    }
+
+    /** 原地同步备注保存结果，减少看板整板重绘并避免重复实例读取旧快照。 */
+    private async handleOptimisticNoteSaved(savedTask: any, targetTask?: any): Promise<void> {
+        if (!savedTask || typeof savedTask !== 'object') return;
+
+        const targetId = targetTask?.id || savedTask.id;
+        const parsed = (typeof targetId === 'string' ? parseReminderInstanceId(targetId) : null)
+            || (typeof savedTask.id === 'string' ? parseReminderInstanceId(savedTask.id) : null);
+        const isRepeatInstance = !!savedTask.isRepeatInstance
+            || !!savedTask.isInstance
+            || !!targetTask?.isRepeatInstance
+            || parsed !== null;
+        const originalId = savedTask.originalId || targetTask?.originalId || parsed?.originalId || savedTask.id;
+        const instanceDate = savedTask.instanceDate
+            || (targetTask?.isRepeatInstance && typeof this.getRepeatInstanceOriginalDate === 'function'
+                ? this.getRepeatInstanceOriginalDate(targetTask)
+                : undefined)
+            || parsed?.instanceDate
+            || savedTask.date;
+
+        if ((savedTask.repeat?.enabled || targetTask?.repeat?.enabled) && !isRepeatInstance) {
+            this.reminderData = null;
+            await this.queueLoadTasks();
+            return;
+        }
+
+        if (!isRepeatInstance && !this.isTaskInCurrentView(savedTask)) {
+            const taskIndex = this.tasks.findIndex(t => t.id === savedTask.id);
+            if (taskIndex >= 0) {
+                this.tasks.splice(taskIndex, 1);
+            }
+            if (this.reminderData) {
+                // 转出任务只从当前看板的 tasks 移除，全量数据仍需保留。
+                this.reminderData[savedTask.id] = savedTask;
+            }
+            this.sortTasks();
+            await this.renderKanban();
+            return;
+        }
+
+        await TaskRenderer.preloadNoteImages(savedTask.note || '');
+
+        if (savedTask.createdAt && !savedTask.createdTime) {
+            savedTask.createdTime = savedTask.createdAt;
+        }
+
+        const existingTask = this.tasks.find(t => t.id === targetId)
+            || (savedTask.id && savedTask.id !== targetId ? this.tasks.find(t => t.id === savedTask.id) : undefined);
+
+        const syncNoteField = (item: any) => {
+            if (!item) return;
+            if (savedTask.note) {
+                item.note = savedTask.note;
+            } else {
+                delete item.note;
+            }
+        };
+
+        // 现有事件回调持有任务对象引用，原地同步备注，避免再次打开备注弹窗读取旧值。
+        syncNoteField(existingTask);
+        if (targetTask && targetTask !== existingTask) {
+            syncNoteField(targetTask);
+        }
+
+        if (this.reminderData) {
+            if (isRepeatInstance && originalId && instanceDate) {
+                const originalReminder = this.reminderData[originalId];
+                if (originalReminder) {
+                    patchRepeatInstanceState(originalReminder, instanceDate, { note: savedTask.note });
+                }
+            } else if (savedTask.id) {
+                const existingRaw = this.reminderData[savedTask.id];
+                this.reminderData[savedTask.id] = existingRaw
+                    ? { ...existingRaw, ...savedTask }
+                    : savedTask;
+            }
+        }
+
+        if (this.searchKeyword && this.searchKeyword.trim()) {
+            this.sortTasks();
+            await this.renderKanban();
+            return;
+        }
+
+        const displayTask = existingTask || targetTask || savedTask;
+        const displayTaskId = displayTask?.id || targetId;
+        if (displayTaskId && this.container?.querySelectorAll) {
+            const matchedEls = Array.from(this.container.querySelectorAll<HTMLElement>(`[data-task-id="${displayTaskId}"]`));
+            matchedEls.forEach(taskEl => this.updateTaskNoteElement(taskEl, displayTask));
+        } else if (displayTaskId && this.container?.querySelector) {
+            const taskEl = this.container.querySelector<HTMLElement>(`[data-task-id="${displayTaskId}"]`);
+            if (taskEl) {
+                this.updateTaskNoteElement(taskEl, displayTask);
+            }
+        }
+    }
+
     public async showTaskNotePreview(task: any, onNoteSaved?: (savedTask: any) => void) {
         try {
             let taskToEdit = task;
@@ -11696,43 +11825,7 @@ export class ProjectKanbanView {
 
             const callback = async (savedTask?: any) => {
                 if (savedTask) {
-                    if (savedTask.repeat?.enabled || taskToEdit?.repeat?.enabled) {
-                        this.reminderData = null;
-                        await this.queueLoadTasks();
-                        this.dispatchReminderUpdate(true);
-                        if (onNoteSaved) onNoteSaved(savedTask);
-                        return;
-                    }
-
-                    const taskIndex = this.tasks.findIndex(t => t.id === savedTask.id);
-                    if (savedTask.createdAt && !savedTask.createdTime) {
-                        savedTask.createdTime = savedTask.createdAt;
-                    }
-
-                    if (taskIndex >= 0) {
-                        const oldTask = this.tasks[taskIndex];
-                        if (!this.isTaskInCurrentView(savedTask)) {
-                            this.tasks.splice(taskIndex, 1);
-                        } else {
-                            const savedTaskForView = this.toViewTask(savedTask);
-                            this.tasks[taskIndex] = {
-                                ...savedTaskForView,
-                                status: oldTask.status || this.getTaskStatus(savedTask),
-                                pomodoroCount: oldTask.pomodoroCount || 0,
-                                focusTime: oldTask.focusTime || 0,
-                                totalRepeatingPomodoroCount: oldTask.totalRepeatingPomodoroCount || 0,
-                                totalRepeatingFocusTime: oldTask.totalRepeatingFocusTime || 0
-                            };
-                        }
-                    }
-
-                    if (this.reminderData) {
-                        // 转出任务只从当前看板的 tasks 移除，全量数据仍需保留。
-                        this.reminderData[savedTask.id] = savedTask;
-                    }
-
-                    this.sortTasks();
-                    this.renderKanban();
+                    await this.handleOptimisticNoteSaved(savedTask, task);
                     if (onNoteSaved) onNoteSaved(savedTask);
                 }
                 this.dispatchReminderUpdate(true);
@@ -11745,6 +11838,7 @@ export class ProjectKanbanView {
                     mode: 'note',
                     reminder: isInstanceEdit ? {
                         ...taskToEdit,
+                        id: task.id,
                         isInstance: true,
                         originalId: originalId,
                         instanceDate: originalInstanceDate
@@ -12327,11 +12421,17 @@ export class ProjectKanbanView {
 
         const taskEl = this.container.querySelector(`.kanban-task[data-task-id="${task.id}"]`) as HTMLElement;
         if (taskEl) {
-            // 更新 CSS 类
-            taskEl.classList.remove('kanban-task-priority-high', 'kanban-task-priority-medium', 'kanban-task-priority-low');
-            if (priority !== 'none') {
-                taskEl.classList.add(`kanban-task-priority-${priority}`);
+            // 更新 CSS 类（同步 reminder-priority-* 以保持备注等优先级样式一致）
+            const normalizedPriority = priority || 'none';
+            taskEl.classList.remove(
+                'kanban-task-priority-high', 'kanban-task-priority-medium', 'kanban-task-priority-low',
+                'reminder-priority-high', 'reminder-priority-medium', 'reminder-priority-low', 'reminder-priority-none'
+            );
+            if (normalizedPriority !== 'none') {
+                taskEl.classList.add(`kanban-task-priority-${normalizedPriority}`);
             }
+            taskEl.classList.add(`reminder-priority-${normalizedPriority}`);
+            taskEl.setAttribute('data-priority', normalizedPriority);
 
             // 更新背景和边框
             const checkbox = taskEl.querySelector('.kanban-task-checkbox, .reminder-task-checkbox') as HTMLInputElement;
@@ -14865,12 +14965,22 @@ export class ProjectKanbanView {
             }
         }
 
+        if ('note' in updates) {
+            this.updateTaskNoteElement(taskEl, task);
+        }
+
         if ('priority' in updates) {
-            // 移除旧的优先级类
-            taskEl.className = taskEl.className.replace(/kanban-task-priority-\w+/g, '');
-            if (task.priority && task.priority !== 'none') {
-                taskEl.classList.add(`kanban-task-priority-${task.priority}`);
+            // 移除旧的优先级类（同步 reminder-priority-* 以保持备注等优先级样式一致）
+            const normalizedPriority = task.priority || 'none';
+            taskEl.classList.remove(
+                'kanban-task-priority-high', 'kanban-task-priority-medium', 'kanban-task-priority-low',
+                'reminder-priority-high', 'reminder-priority-medium', 'reminder-priority-low', 'reminder-priority-none'
+            );
+            if (normalizedPriority !== 'none') {
+                taskEl.classList.add(`kanban-task-priority-${normalizedPriority}`);
             }
+            taskEl.classList.add(`reminder-priority-${normalizedPriority}`);
+            taskEl.setAttribute('data-priority', normalizedPriority);
 
             // 更新优先级背景色和边框
             const checkbox = taskEl.querySelector('.kanban-task-checkbox, .reminder-task-checkbox') as HTMLInputElement;

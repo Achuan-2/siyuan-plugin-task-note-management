@@ -24,15 +24,19 @@ function extract(relative, className, names) {
 
 // 执行真实看板方法及全量任务读写函数，仅替换思源、订阅和界面依赖。
 const methods = extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
-    'getReminders', 'editTask', 'showTaskNotePreview', 'setReminderPinned',
-    'batchUpdateTasks', 'findOrCreateUiTask', 'getAllDescendantIds',
+    'getReminders', 'editTask', 'showTaskNotePreview', 'handleOptimisticNoteSaved',
+    'updateTaskNoteElement', 'handleTaskNoteClick', 'setReminderPinned', 'setPriority',
+    'updateTaskElementDOM', 'batchUpdateTasks', 'findOrCreateUiTask', 'getAllDescendantIds',
     'prepareCrossProjectMove', 'getDroppedTaskIds', 'isTaskDrag', 'bindProjectTabDropTarget', 'unbindProjectTabDropTarget',
     'handleDrop', 'buildCustomGroupDropUpdates', 'buildStatusDropUpdates',
     'addDropZoneEvents', 'addCustomGroupDropZoneEvents', 'addStatusSubGroupDropEvents', 'addTaskDragEvents',
     'dispatchReminderUpdate',
 ]);
 const persistence = extract('src/utils/icsSubscription.ts', null, ['getAllReminders', 'saveReminders']);
-const code = ts.transpileModule(`${persistence}\nclass Board { ${methods} }`, {
+const repeatHelpers = extract('src/components/dataManager/repeatUtils.ts', null, [
+    'ensureRepeatInstances', 'parseReminderInstanceId', 'patchRepeatInstanceState',
+]);
+const code = ts.transpileModule(`${persistence}\n${repeatHelpers}\nclass Board { ${methods} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
@@ -470,7 +474,7 @@ test('保存失败后后续选择仍能持久化，配置刷新不会覆盖当�
 });
 
 function fixture(initial) {
-    const state = { data: clone(initial), writes: 0, reads: [], dialog: null, events: [] };
+    const state = { data: clone(initial), writes: 0, reads: [], dialog: null, events: [], preloadedNotes: [] };
     const undoModule = loadTaskActionUndo({
         i18n: key => key,
         saveReminders: (plugin, data) => plugin.saveReminderData(data),
@@ -478,14 +482,33 @@ function fixture(initial) {
     // 本套回归关注数据读写，底部提示由 test-task-action-undo.cjs 单独验证。
     class TaskActionUndo extends undoModule.TaskActionUndo { show() {} }
     class QuickReminderDialog {
-        constructor(_date, _time, callback) { state.dialog = { callback }; }
+        constructor(_date, _time, callback, _slot, options) { state.dialog = { callback, options }; }
         show() {}
     }
-    const Board = new Function('loadSubscriptions', 'QuickReminderDialog', 'i18n', 'showMessage',
-        'getLogicalDateString', 'Constants', 'window', 'CustomEvent', 'TaskActionUndo', 'getTaskStatusUndoMessage', code + ';return Board;')(
-        async () => ({ subscriptions: {} }), QuickReminderDialog, key => key, () => {}, () => '2026-10-31',
+    const TaskRenderer = {
+        async preloadNoteImages(note) { state.preloadedNotes.push(note); },
+        createNoteElement(item, _ctx, onNoteClick) {
+            if (!item.note) return null;
+            const noteEl = {
+                className: 'reminder-item__note',
+                classList: { contains: name => name === 'reminder-item__note' },
+                childNodes: [{ textContent: item.note }],
+                style: { cssText: item.note.includes('<img') ? 'max-height: none; display: block;' : 'max-height: 3em;' },
+                onNoteClick,
+                replaceChildren(...nodes) { this.childNodes = nodes; },
+                remove() { this.removed = true; if (this.parent) this.parent.children = this.parent.children.filter(c => c !== this); },
+            };
+            return noteEl;
+        },
+        getPriorityDisplayStyle() { return 'background'; },
+        applyPriorityDisplayStyle() {},
+    };
+    const Board = new Function('loadSubscriptions', 'QuickReminderDialog', 'TaskRenderer', 'i18n', 'showMessage',
+        'getLogicalDateString', 'getLocalDateString', 'Constants', 'window', 'document', 'CustomEvent', 'TaskActionUndo', 'getTaskStatusUndoMessage', code + ';return Board;')(
+        async () => ({ subscriptions: {} }), QuickReminderDialog, TaskRenderer, key => key, () => {}, () => '2026-10-31', () => '2026-10-31',
         { SIYUAN_DROP_GUTTER: 'siyuan-gutter', SIYUAN_DROP_FILE: 'siyuan-file', SIYUAN_DROP_TAB: 'siyuan-tab' },
         { dispatchEvent: event => state.events.push(event) },
+        { createElement: () => ({ className: '', innerHTML: '', remove() {} }) },
         class CustomEvent { constructor(type, options) { this.type = type; this.detail = options.detail; } },
         TaskActionUndo, undoModule.getTaskStatusUndoMessage,
     );
@@ -899,4 +922,146 @@ test('忽略页签上的文档拖拽和无效任务列表', async () => {
     invalid.dataTransfer.setData('application/vnd.siyuan.kanban-task-move', '{invalid');
     await header.fire('drop', invalid);
     assert.equal(state.writes, 0);
+});
+
+function createCardElement(id, initialClasses = ['reminder-item', 'kanban-task', 'reminder-priority-none']) {
+    const classes = new Set(initialClasses);
+    const attrs = new Map([['data-task-id', id], ['data-priority', 'none']]);
+    const infoChildren = [
+        { className: 'reminder-item__title-container', classList: { contains: name => name === 'reminder-item__title-container' } },
+        { className: 'reminder-item__time-container', classList: { contains: name => name === 'reminder-item__time-container' } },
+        { className: 'reminder-item__pomodoro-count', classList: { contains: name => name === 'reminder-item__pomodoro-count' } },
+        { className: 'reminder-item__project-tags', classList: { contains: name => name === 'reminder-item__project-tags' } },
+    ];
+    const info = {
+        children: infoChildren,
+        insertBefore(node, ref) {
+            node.parent = info;
+            const index = ref ? info.children.indexOf(ref) : -1;
+            if (index >= 0) info.children.splice(index, 0, node);
+            else info.children.push(node);
+            return node;
+        },
+    };
+    return {
+        dataset: { taskId: id },
+        info,
+        style: {},
+        classList: {
+            add: (...names) => names.forEach(name => classes.add(name)),
+            remove: (...names) => names.forEach(name => classes.delete(name)),
+            contains: name => classes.has(name),
+        },
+        setAttribute: (name, value) => attrs.set(name, String(value)),
+        getAttribute: name => attrs.get(name),
+        querySelector(selector) {
+            if (selector === '.reminder-item__note') return info.children.find(c => c.className === 'reminder-item__note') || null;
+            if (selector === '.reminder-item__info') return info;
+            return null;
+        },
+    };
+}
+
+test('showTaskNotePreview：保存备注原地更新卡片 DOM，不触发整板重绘或重载，并同步重复实例状态', async () => {
+    const normal = { ...task('t1', 'A'), note: '' };
+    const repeatTemplate = { ...task('rep1', 'A'), repeat: { enabled: true, type: 'daily', instances: {} } };
+    const repeatInstance = {
+        ...task('rep1_2026-10-31', 'A'),
+        isRepeatInstance: true,
+        originalId: 'rep1',
+        date: '2026-10-31',
+        note: '旧实例备注',
+    };
+    const { state, board } = fixture({ t1: normal, rep1: repeatTemplate });
+    const kanban = board('A');
+    let renders = 0, reloads = 0;
+    kanban.renderKanban = async () => { renders++; };
+    kanban.queueLoadTasks = async () => { reloads++; };
+    kanban.getRepeatInstanceOriginalDate = item => item.date;
+    await kanban.getReminders();
+
+    const card1 = createCardElement('t1');
+    const cardRep = createCardElement('rep1_2026-10-31');
+    kanban.container = {
+        querySelectorAll: selector => {
+            if (selector === '[data-task-id="t1"]') return [card1];
+            if (selector === '[data-task-id="rep1_2026-10-31"]') return [cardRep];
+            return [];
+        },
+        querySelector: selector => {
+            if (selector === '[data-task-id="t1"]' || selector === '.kanban-task[data-task-id="t1"]') return card1;
+            if (selector === '[data-task-id="rep1_2026-10-31"]') return cardRep;
+            return null;
+        },
+    };
+    kanban.tasks = [normal, repeatInstance];
+
+    // 1. 新增备注：插在番茄钟与标签之间，且不触发整板重绘
+    await kanban.showTaskNotePreview(normal);
+    await state.dialog.callback({ ...normal, note: '新增备注' });
+    assert.equal(renders, 0);
+    assert.equal(reloads, 0);
+    assert.equal(normal.note, '新增备注');
+    assert.equal(kanban.reminderData.t1.note, '新增备注');
+    assert.deepEqual(state.preloadedNotes, ['新增备注']);
+    assert.equal(card1.info.children[3].className, 'reminder-item__note');
+    assert.equal(card1.info.children[4].className, 'reminder-item__project-tags');
+
+    // 2. 修改已有备注：复用原 DOM 节点仅更新内容和样式
+    const existingNoteEl = card1.querySelector('.reminder-item__note');
+    await state.dialog.callback({ ...normal, note: '<img src="/data/storage/petal/siyuan-plugin-task-note-management/assets/a.png">' });
+    assert.equal(card1.querySelector('.reminder-item__note'), existingNoteEl);
+    assert.match(existingNoteEl.style.cssText, /max-height: none/);
+    assert.equal(renders, 0);
+
+    // 3. 清空备注：直接移除备注节点
+    await state.dialog.callback({ ...normal, note: '' });
+    assert.equal(card1.querySelector('.reminder-item__note'), null);
+    assert.equal(normal.note, undefined);
+    assert.equal(renders, 0);
+
+    // 4. 重复实例：保留实例 id、原地更新并修补 reminderData.instances，不触发重载
+    await kanban.showTaskNotePreview(repeatInstance);
+    assert.equal(state.dialog.options.reminder.id, 'rep1_2026-10-31');
+    await state.dialog.callback({
+        ...state.dialog.options.reminder,
+        note: '新实例备注',
+        isRepeatInstance: true,
+    });
+    assert.equal(renders, 0);
+    assert.equal(reloads, 0);
+    assert.equal(repeatInstance.note, '新实例备注');
+    assert.equal(kanban.reminderData.rep1.repeat.instances['2026-10-31'].note, '新实例备注');
+    assert.equal(cardRep.querySelector('.reminder-item__note')?.childNodes[0].textContent, '新实例备注');
+
+    // 5. 启用搜索关键字时，备注改动会触发看板重绘以刷新过滤结果
+    kanban.searchKeyword = '关键词';
+    await state.dialog.callback({ ...normal, note: '包含关键词' });
+    assert.equal(renders, 1);
+});
+
+test('看板切换优先级同步 reminder-priority-* 类名，并共享任务侧栏备注样式', async () => {
+    const item = { ...task('p1', 'A'), priority: 'none' };
+    const { board } = fixture({ p1: item });
+    const kanban = board('A');
+    const card = createCardElement('p1');
+    kanban.tasks = [item];
+    kanban.container = {
+        querySelector: selector => (selector.includes('p1') ? card : null),
+    };
+    kanban.clearCompletionMoveTimer = () => {};
+
+    await kanban.setPriority(item, 'high');
+    assert.equal(card.classList.contains('reminder-priority-high'), true);
+    assert.equal(card.classList.contains('reminder-priority-none'), false);
+    assert.equal(card.getAttribute('data-priority'), 'high');
+
+    item.priority = 'low';
+    kanban.updateTaskElementDOM('p1', { priority: 'low' });
+    assert.equal(card.classList.contains('reminder-priority-low'), true);
+    assert.equal(card.classList.contains('reminder-priority-high'), false);
+    assert.equal(card.getAttribute('data-priority'), 'low');
+
+    const indexScss = fs.readFileSync(path.join(root, 'src/index.scss'), 'utf8');
+    assert.match(indexScss, /\.reminder-panel,\s*\.TN-project-kanban-view\s*\{[\s\S]*?\.reminder-item__note\s*\{/);
 });
