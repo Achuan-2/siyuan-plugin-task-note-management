@@ -9,7 +9,7 @@ import { TaskRenderer, type TaskRenderCallbacks, type TaskRenderContext } from "
 import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import { getLogicalDateString } from "../../utils/dateUtils";
-import { getSortCriterionName, loadSortConfig, saveSortConfig, type SortCriterion } from "../../utils/sortConfig";
+import { getSortCriterionName, type SortCriterion } from "../../utils/sortConfig";
 import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState, patchRepeatInstanceState } from "../dataManager/repeatUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
 
@@ -18,6 +18,7 @@ interface InlineSubtaskTitle {
     input: HTMLTextAreaElement;
     row: HTMLElement;
     parentId: string;
+    afterTaskId?: string;
     task?: any;
     wasDraggable: boolean;
     pending?: Promise<boolean>;
@@ -43,7 +44,7 @@ export class SubtasksDialog {
     private draggingId: string | null = null;
     private subtaskDropTarget?: HTMLElement;
     private pendingSubtaskDrop?: Promise<boolean>;
-    private currentSortCriteria: SortCriterion[] = [{ method: 'time', order: 'asc' }];
+    private currentSortCriteria: SortCriterion[] = [];
     private isTempMode: boolean = false; // 是否为临时模式（新建任务的子任务）
     private tempSubtasks: any[] = []; // 临时子任务列表
     private onTempSubtasksUpdate?: (subtasks: any[]) => void; // 临时子任务更新回调
@@ -102,13 +103,6 @@ export class SubtasksDialog {
     }
 
     private async ensureRenderDependencies() {
-        try {
-            const sortConfig = await loadSortConfig(this.plugin);
-            this.currentSortCriteria = this.normalizeSubtaskSortCriteria(sortConfig.criteria);
-        } catch (error) {
-            console.warn("Failed to load subtask sort configuration:", error);
-        }
-
         try {
             await this.categoryManager.initialize();
         } catch (error) {
@@ -349,7 +343,7 @@ export class SubtasksDialog {
 
     private normalizeSubtaskSortCriteria(criteria: any): SortCriterion[] {
         const availableMethods = new Set(['category', 'project', 'priority', 'time', 'startDate', 'endDate', 'completed', 'created', 'title']);
-        const normalized = Array.isArray(criteria)
+        return Array.isArray(criteria)
             ? criteria
                 .filter((criterion: any) => criterion && availableMethods.has(criterion.method))
                 .map((criterion: any) => ({
@@ -358,7 +352,6 @@ export class SubtasksDialog {
                 }))
             : [];
 
-        return normalized.length > 0 ? normalized : [{ method: 'time', order: 'asc' }];
     }
 
     private getActiveSortCriteria(): SortCriterion[] {
@@ -530,7 +523,8 @@ export class SubtasksDialog {
     }
 
     private getReminderSortValue(reminder: any): number {
-        return reminder?.sort || 0;
+        const sort = Number(reminder?.sort);
+        return Number.isFinite(sort) ? sort : 0;
     }
 
     private getHighestPriorityCategoryId(task: any): string {
@@ -827,24 +821,17 @@ export class SubtasksDialog {
         const dialog = new SortMenuDialog({
             plugin: this.plugin,
             currentCriteria: this.getActiveSortCriteria(),
-            onSave: async (criteria) => {
-                await this.applySortCriteria(criteria, false);
-            },
-            onChange: async (criteria) => {
-                await this.applySortCriteria(criteria, false);
-            }
+            allowManualOrder: true,
+            onSave: criteria => this.applySortCriteria(criteria),
+            onChange: criteria => this.applySortCriteria(criteria),
         });
         dialog.show();
     }
 
-    private async applySortCriteria(criteria: SortCriterion[], saveGlobalConfig: boolean = false) {
+    private applySortCriteria(criteria: SortCriterion[]) {
         this.currentSortCriteria = this.normalizeSubtaskSortCriteria(criteria);
         this.renderSubtasks();
         this.updateSortDisplay();
-
-        if (saveGlobalConfig) {
-            await saveSortConfig(this.plugin, this.currentSortCriteria);
-        }
     }
 
     private updateSortDisplay() {
@@ -856,7 +843,8 @@ export class SubtasksDialog {
         const sortBtn = this.getRootElement().querySelector('#sortBtn') as HTMLButtonElement;
         if (sortBtn) {
             sortBtn.classList.add('ariaLabel');
-            sortBtn.setAttribute('aria-label', `${i18n("sortBy") || "排序"}:<br>${this.getActiveSortCriteria().map(c => getSortCriterionName(c)).join('<br>')}`);
+            const sortText = this.getActiveSortCriteria().map(getSortCriterionName).join('<br>') || i18n('manual');
+            sortBtn.setAttribute('aria-label', `${i18n("sortBy") || "排序"}:<br>${sortText}`);
         }
     }
 
@@ -875,14 +863,17 @@ export class SubtasksDialog {
         if (await this.finishPendingChanges() !== false && !this.inlineTitle) this.openSubtaskDraft(parentId);
     }
 
-    private openSubtaskDraft(parentId: string) {
+    private openSubtaskDraft(parentId: string, afterTaskId?: string) {
         const list = this.getRootElement().querySelector<HTMLElement>('#subtasksList');
         if (!list?.isConnected) return;
         if (this.collapsedSubtaskIds.delete(parentId)) this.renderSubtasks();
-        const parentRow = Array.from(list.children).find(row => (row as HTMLElement).dataset.taskId === parentId);
+        const rows = Array.from(list.children) as HTMLElement[];
+        const parentRow = rows.find(row => row.dataset.taskId === parentId);
+        const afterRow = afterTaskId ? rows.find(row => row.dataset.taskId === afterTaskId) : undefined;
         const level = parentRow ? Number(parentRow.getAttribute('data-level')) + 1 : 0;
-        let nextRow = parentRow?.nextElementSibling ?? null;
-        while (nextRow && Number(nextRow.getAttribute('data-level')) >= level) {
+        const firstOutsideLevel = afterRow ? level + 1 : level;
+        let nextRow = (afterRow || parentRow)?.nextElementSibling ?? null;
+        while (nextRow && Number(nextRow.getAttribute('data-level')) >= firstOutsideLevel) {
             nextRow = nextRow.nextElementSibling;
         }
 
@@ -890,13 +881,13 @@ export class SubtasksDialog {
         row.className = 'subtasks-dialog__draft';
         row.style.marginLeft = `${level * 20}px`;
         row.innerHTML = '<div class="reminder-item__left-controls"><input type="checkbox" class="reminder-task-checkbox" disabled aria-hidden="true"></div>';
-        const input = this.createInlineTitle(row, parentId);
+        const input = this.createInlineTitle(row, parentId, undefined, afterRow ? afterTaskId : undefined);
         row.appendChild(input);
         list.insertBefore(row, nextRow);
         input.focus();
     }
 
-    private createInlineTitle(row: HTMLElement, parentId: string, task?: any): HTMLTextAreaElement {
+    private createInlineTitle(row: HTMLElement, parentId: string, task?: any, afterTaskId?: string): HTMLTextAreaElement {
         const input = document.createElement('textarea');
         input.className = 'subtasks-dialog__title';
         input.rows = 1;
@@ -907,7 +898,7 @@ export class SubtasksDialog {
         input.spellcheck = false;
 
         const id = task?.id ?? `reminder_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-        const editor: InlineSubtaskTitle = { id, input, row, parentId, task, wasDraggable: row.draggable };
+        const editor: InlineSubtaskTitle = { id, input, row, parentId, task, afterTaskId, wasDraggable: row.draggable };
         for (const event of ['click', 'dblclick', 'dragstart']) {
             input.addEventListener(event, event => event.stopPropagation());
         }
@@ -1002,7 +993,10 @@ export class SubtasksDialog {
         if (pendingRender || (changed && !editor.task) || titleSort) {
             this.renderSubtasks(!pendingRender, editor.task ? undefined : editor.parentId);
         }
-        if (continueEditing) this.openSubtaskDraft(editor.parentId);
+        if (continueEditing) {
+            const afterTaskId = this.getActiveSortCriteria().length === 0 ? editor.id : undefined;
+            this.openSubtaskDraft(editor.parentId, afterTaskId);
+        }
         if (changed) {
             if (this.isTempMode) this.onTempSubtasksUpdate?.([...this.subtasks]);
             this.onUpdate?.();
@@ -1013,7 +1007,7 @@ export class SubtasksDialog {
     private buildInlineSubtask(id: string, title: string, parentId: string, parent: any, savedTasks: any[] = []) {
         const { instanceDate } = this.parseInstanceParentId(parentId);
         const sort = [...savedTasks, ...this.subtasks]
-            .reduce((max, task) => task?.parentId === parentId ? Math.max(max, Number(task.sort) || 0) : max, 0) + 1000;
+            .reduce((max, task) => task?.parentId === parentId ? Math.max(max, this.getReminderSortValue(task)) : max, 0) + 1000;
         const parentStatus = parent?.kanbanStatus;
         const kanbanStatus = parentStatus && parentStatus !== 'completed' && parentStatus !== 'abandoned' ? parentStatus : 'doing';
         return {
@@ -1033,14 +1027,65 @@ export class SubtasksDialog {
         };
     }
 
-    private async writeInlineTitle({ id, task, parentId }: InlineSubtaskTitle, title: string) {
+    private placeInlineSubtask(newTask: any, afterTaskId?: string, data?: Record<string, any>): Map<string, number> {
+        const sortChanges = new Map<string, number>();
+        if (!afterTaskId || this.getActiveSortCriteria().length !== 0) return sortChanges;
+
+        const parentId = newTask.parentId;
+        const siblings = data
+            ? Object.values(data).filter(task => task?.id && task.parentId === parentId)
+            : this.subtasks.filter(task => this.getRenderedParentId(task) === parentId);
+        if (data) {
+            const { targetParentId, instanceDate } = this.parseInstanceParentId(parentId);
+            for (const task of this.subtasks) {
+                if (!instanceDate || task.parentId !== parentId || data[task.id] || !task.isRepeatInstance) continue;
+                const template = data[task.originalId];
+                const state = template && getRepeatInstanceState(template, instanceDate);
+                if (template?.parentId === targetParentId && !template.repeat?.excludeDates?.includes(instanceDate) && !state?.deleted) {
+                    siblings.push({ ...template, ...state, id: task.id });
+                }
+            }
+        }
+        siblings.sort((a, b) => this.compareSubtasks(a, b));
+        const index = siblings.findIndex(task => task.id === afterTaskId);
+        if (index < 0) return sortChanges;
+
+        const lower = this.getReminderSortValue(siblings[index]);
+        const next = siblings[index + 1];
+        const upper = next ? this.getReminderSortValue(next) : lower + 2000;
+        const midpoint = lower / 2 + upper / 2;
+        if (midpoint > lower && midpoint < upper) {
+            newTask.sort = midpoint;
+        } else {
+            // 旧任务可能没有独立的 sort 值，按当前同级顺序留出插入位置。
+            siblings.splice(index + 1, 0, newTask);
+            siblings.forEach((task, position) => {
+                const sort = (position + 1) * 10;
+                if (task === newTask) newTask.sort = sort;
+                else if (this.getReminderSortValue(task) !== sort) sortChanges.set(task.id, sort);
+            });
+        }
+        return sortChanges;
+    }
+
+    private applyInlineSortChanges(sortChanges: Map<string, number>) {
+        for (const task of this.subtasks) {
+            const sort = sortChanges.get(task.id);
+            if (sort !== undefined) task.sort = sort;
+        }
+    }
+
+    private async writeInlineTitle({ id, task, parentId, afterTaskId }: InlineSubtaskTitle, title: string) {
         if (this.isTempMode) {
             if (task) {
                 task.title = title;
             } else {
                 const parent = parentId === '__TEMP_PARENT__' ? this.getResolvedTempParentTask() : this.subtasks.find(task => task.id === parentId);
                 if (parentId !== '__TEMP_PARENT__' && !parent) throw new Error('The parent task no longer exists');
-                this.subtasks.push({ ...this.buildInlineSubtask(id, title, parentId, parent), isTempSubtask: true });
+                const newTask = { ...this.buildInlineSubtask(id, title, parentId, parent), isTempSubtask: true };
+                const sortChanges = this.placeInlineSubtask(newTask, afterTaskId);
+                this.applyInlineSortChanges(sortChanges);
+                this.subtasks.push(newTask);
             }
             return;
         }
@@ -1048,6 +1093,7 @@ export class SubtasksDialog {
         const data = await this.plugin.loadReminderData(true) || {};
         let savedTask: any;
         let original: any;
+        let sortChanges = new Map<string, number>();
         if (task) {
             const direct = data[task.id];
             original = direct || data[this.getSubtaskStorageId(task)!];
@@ -1069,9 +1115,22 @@ export class SubtasksDialog {
             if (!template) throw new Error('The parent task no longer exists');
             const parent = instanceDate ? { ...template, ...getRepeatInstanceState(template, instanceDate) } : template;
             savedTask = data[id] ? { ...data[id], title } : this.buildInlineSubtask(id, title, parentId, parent, Object.values(data));
+            if (!data[id]) sortChanges = this.placeInlineSubtask(savedTask, afterTaskId, data);
         }
 
-        await this.plugin.saveReminderData({ ...data, [savedTask.id]: savedTask });
+        const nextData = { ...data, [savedTask.id]: savedTask };
+        for (const [siblingId, sort] of sortChanges) {
+            if (nextData[siblingId]) {
+                nextData[siblingId] = { ...nextData[siblingId], sort };
+            } else {
+                const { targetParentId, instanceDate } = this.parseInstanceParentId(siblingId);
+                const template = structuredClone(nextData[targetParentId]);
+                patchRepeatInstanceState(template, instanceDate!, { sort });
+                nextData[targetParentId] = template;
+            }
+        }
+        await this.plugin.saveReminderData(nextData);
+        if (sortChanges.size) this.applyInlineSortChanges(sortChanges);
         if (task) {
             task.title = title;
             const visibleTask = this.subtasks.find(item => item.id === task.id);

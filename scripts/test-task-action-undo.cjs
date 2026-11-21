@@ -593,6 +593,7 @@ function inlineSubtaskFixture(initial = {}) {
     const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
         'createInlineTitle', 'finishPendingChanges', 'finishInlineTitles', 'finishInlineTitle', 'closeInlineTitle', 'saveInlineTitle', 'writeInlineTitle',
         'buildInlineSubtask', 'parseInstanceParentId', 'getSubtaskStorageId', 'getResolvedTempParentTask',
+        'placeInlineSubtask', 'applyInlineSortChanges', 'getReminderSortValue', 'getRenderedParentId', 'compareSubtasks', 'compareByCreatedTime',
     ]);
     Object.assign(view, {
         subtasks: [], dirtyInlineTitles: new Set(), renderSubtasks() {},
@@ -687,6 +688,62 @@ test('已有子任务的输入框在保存前后保持同一节点，连续切�
     inputB.listeners.keydown({ key: 'Escape', stopPropagation() {}, preventDefault() {} });
     assert.equal(inputB.value, 'Second edited');
     assert.equal(b.children[0], inputB);
+});
+
+test('从已有标题回车时，手动顺序传递相邻任务，自动排序仍使用列表末尾的新建行', async () => {
+    for (const automatic of [false, true]) {
+        const f = inlineSubtaskFixture();
+        if (automatic) f.view.getActiveSortCriteria = () => [{ method: 'title', order: 'asc' }];
+        let insertion;
+        f.view.openSubtaskDraft = (...args) => { insertion = args; };
+        const input = f.view.createInlineTitle(element('div'), 'parent', { id: 'task-2', title: '2' });
+        input.focus();
+        input.listeners.keydown({ key: 'Enter', stopPropagation() {}, preventDefault() {} });
+        await f.view.finishPendingChanges();
+        assert.deepEqual(insertion, ['parent', automatic ? undefined : 'task-2']);
+    }
+});
+
+test('相邻新建在临时任务和落盘任务中都保留同级顺序，兼容旧任务缺失 sort', async () => {
+    for (const isTempMode of [true, false]) {
+        const parentId = isTempMode ? '__TEMP_PARENT__' : 'parent';
+        const before = {
+            parent: { id: 'parent' },
+            first: { id: 'first', parentId, createdAt: '2026-11-20T01:00:00Z' },
+            second: { id: 'second', parentId, createdAt: '2026-11-20T02:00:00Z' },
+            third: { id: 'third', parentId, createdAt: '2026-11-20T03:00:00Z' },
+            nested: { id: 'nested', parentId: 'second', sort: 200 },
+        };
+        const f = inlineSubtaskFixture(before);
+        f.view.isTempMode = isTempMode;
+        f.view.subtasks = Object.values(clone(before)).filter(task => task.id !== 'parent');
+        await f.view.writeInlineTitle({ id: 'inserted', parentId, afterTaskId: 'second' }, 'Inserted');
+        await f.view.writeInlineTitle({ id: 'next', parentId, afterTaskId: 'inserted' }, 'Next');
+        const tasks = isTempMode ? f.view.subtasks : Object.values(f.state.data);
+        const siblings = tasks.filter(task => task.parentId === parentId).sort((a, b) => a.sort - b.sort);
+        assert.deepEqual(siblings.map(task => task.id), ['first', 'second', 'inserted', 'next', 'third']);
+        assert.equal(tasks.find(task => task.id === 'nested').sort, 200);
+        assert.equal(f.state.writes, isTempMode ? 0 : 2);
+    }
+});
+
+test('实例视图为相邻新建留出顺序时，只调整当前日期的模板子任务顺序', async () => {
+    const date = '2026-11-21';
+    const parentId = `parent_${date}`;
+    const before = {
+        parent: { id: 'parent' },
+        a: { id: 'a', parentId: 'parent', sort: 0 },
+        b: { id: 'b', parentId: 'parent', sort: 0 },
+    };
+    const f = inlineSubtaskFixture(before);
+    f.view.subtasks = [before.a, before.b].map(task => ({ ...task, id: `${task.id}_${date}`, originalId: task.id, isRepeatInstance: true, parentId }));
+    await f.view.writeInlineTitle({ id: 'adjacent', parentId, afterTaskId: `a_${date}` }, 'Inserted');
+    assert.equal(f.state.data.adjacent.parentId, parentId);
+    assert.equal(f.state.data.a.sort, 0);
+    assert.equal(f.state.data.b.sort, 0);
+    assert.equal(f.state.data.a.repeat.instances[date].sort, 10);
+    assert.equal(f.state.data.adjacent.sort, 20);
+    assert.equal(f.state.data.b.repeat.instances[date].sort, 30);
 });
 
 test('行内新建保留重复实例的父子关系，改名只更新对应实例', async () => {

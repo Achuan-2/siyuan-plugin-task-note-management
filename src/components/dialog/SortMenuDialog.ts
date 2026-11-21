@@ -10,6 +10,7 @@ export interface SortMenuDialogOptions {
     onSave: (criteria: SortCriterion[]) => void;
     onChange?: (criteria: SortCriterion[]) => void; // 实时变更回调
     availableMethods?: Array<{ key: string; label: () => string; icon: string }>;
+    allowManualOrder?: boolean;
     grouping?: {
         value: string;
         options: Array<{ key: string; label: string }>;
@@ -257,6 +258,23 @@ export class SortMenuDialog {
         // 获取已选择的方法
         const selectedMethods = new Set(this.selectedCriteria.map(c => c.method));
 
+        if (this.options.allowManualOrder) {
+            const manual = document.createElement('button');
+            const selected = this.selectedCriteria.length === 0;
+            manual.type = 'button';
+            manual.className = `b3-button ${selected ? 'b3-button--primary' : 'b3-button--outline'}`;
+            manual.style.cssText = 'justify-content: flex-start; padding: 10px 12px;';
+            manual.textContent = i18n('manual');
+            manual.setAttribute('aria-pressed', String(selected));
+            manual.addEventListener('click', () => {
+                if (selected) return;
+                this.selectedCriteria = [];
+                this.updateModeUI();
+                this.notifyChange();
+            });
+            container.appendChild(manual);
+        }
+
         this.availableMethods.forEach(method => {
             const isSelected = selectedMethods.has(method.key);
             
@@ -308,7 +326,7 @@ export class SortMenuDialog {
 
     // 通知外部变更（实时更新）
     private notifyChange() {
-        if (this.selectedCriteria.length > 0) {
+        if (this.selectedCriteria.length > 0 || this.options.allowManualOrder) {
             this.options.onChange?.(this.selectedCriteria);
         }
     }
