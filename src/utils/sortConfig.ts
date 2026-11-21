@@ -80,7 +80,7 @@ export async function loadSortConfig(plugin: Plugin): Promise<SortConfig> {
         }
 
         // 使用新版配置
-        if (settings.sortCriteria && Array.isArray(settings.sortCriteria) && settings.sortCriteria.length > 0) {
+        if (Array.isArray(settings.sortCriteria)) {
             return { criteria: settings.sortCriteria };
         }
 

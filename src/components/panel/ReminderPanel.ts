@@ -846,9 +846,10 @@ export class ReminderPanel {
     }
     private normalizeSortCriteria(criteria: any): SortCriterion[] {
         const availableMethods = new Set(['priority', 'project', 'category', 'time', 'startDate', 'endDate', 'completed', 'created', 'title']);
-        if (!Array.isArray(criteria) || criteria.length === 0) {
+        if (!Array.isArray(criteria)) {
             return [{ method: 'time', order: 'asc' }];
         }
+        if (criteria.length === 0) return [];
 
         const normalized = criteria
             .map((criterion: any): SortCriterion => ({
@@ -868,7 +869,7 @@ export class ReminderPanel {
     }
 
     private getActiveSortCriteria(targetTab: string = this.currentTab): SortCriterion[] {
-        if (this.temporarySortOverrideTab === targetTab && this.temporarySortCriteria && this.temporarySortCriteria.length > 0) {
+        if (this.temporarySortOverrideTab === targetTab && this.temporarySortCriteria !== null) {
             return this.normalizeSortCriteria(this.temporarySortCriteria);
         }
 
@@ -1873,6 +1874,7 @@ export class ReminderPanel {
                             plugin: this.plugin,
                             grouping: this.createReminderGroupingOptions(),
                             currentCriteria: this.getActiveSortCriteria(),
+                            allowEmptyCriteria: true,
                             onSave: async (criteria) => {
                                 try {
                                     this.setTemporarySortOverride(this.currentTab, criteria);
@@ -1908,6 +1910,7 @@ export class ReminderPanel {
                 plugin: this.plugin,
                 grouping: this.createReminderGroupingOptions(),
                 currentCriteria: this.getActiveSortCriteria(),
+                allowEmptyCriteria: true,
                 onSave: async (criteria) => {
                     // 点击关闭时也会触发，确保配置已保存
                     try {
