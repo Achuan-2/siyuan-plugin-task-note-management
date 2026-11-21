@@ -155,6 +155,8 @@
     margin-bottom: 8px;
     transition: all 0.2s ease;
     position: relative;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 76px;
 
     &:hover {
         transform: translateY(-2px);
@@ -165,6 +167,13 @@
         opacity: 0.5;
         cursor: grabbing;
     }
+}
+
+.kanban-scroll-sentinel {
+    height: 1px;
+    width: 100%;
+    flex-shrink: 0;
+    pointer-events: none;
 }
 
 /* 优先级样式美化 - 使用思源主题颜色 */

@@ -144,10 +144,12 @@ export class ProjectKanbanView {
     // 临时保存要在下一次渲染后恢复的父任务折叠状态
     private _preserveCollapsedTasks: Set<string> | null = null;
 
-    // 分页：每页最多显示的顶层任务数量
+    // 增量加载：每批渲染的顶层任务数量
     private pageSize: number = 30;
-    // 存储每列当前页，key 为 status 
+    // 存储各任务列表已加载的批次数，用于刷新后保持滚动深度
     private pageIndexMap: { [status: string]: number } = {};
+    // 触底增量加载的 IntersectionObserver 清理函数
+    private scrollLoadCleanups: Map<HTMLElement, () => void> = new Map();
 
     // 自定义分组子分组折叠状态跟踪，key 为 "groupId-status" 格式
     private collapsedStatusGroups: Set<string> = new Set();
@@ -3989,22 +3991,15 @@ export class ProjectKanbanView {
             }
 
 
-            // 重置分页索引，防止页码超出范围
+            // 校验状态列已加载批次数，不误删分组/列表模式的加载深度缓存
             try {
                 const topLevelTasks = this.tasks.filter(
                     t => !t.parentId || !this.tasks.find(tt => tt.id === t.parentId)
                 );
-                const validStatusIds = new Set(this.kanbanStatuses.map(s => s.id));
-
-                // 清理不存在的状态页码缓存
-                Object.keys(this.pageIndexMap).forEach(statusId => {
-                    if (!validStatusIds.has(statusId)) {
-                        delete this.pageIndexMap[statusId];
-                    }
-                });
 
                 this.kanbanStatuses.forEach(statusConfig => {
                     const statusId = statusConfig.id;
+                    if (this.pageIndexMap[statusId] === undefined) return;
                     const totalTop =
                         statusId === 'completed'
                             ? topLevelTasks.filter(t => t.completed).length
@@ -4012,8 +4007,7 @@ export class ProjectKanbanView {
                                 t => !t.completed && this.getTaskStatus(t) === statusId
                             ).length;
                     const totalPages = Math.max(1, Math.ceil(totalTop / this.pageSize));
-                    const current = this.pageIndexMap[statusId] || 1;
-                    this.pageIndexMap[statusId] = Math.min(Math.max(1, current), totalPages);
+                    this.pageIndexMap[statusId] = Math.min(Math.max(1, this.pageIndexMap[statusId]), totalPages);
                 });
             } catch (err) {
                 // ignore
@@ -4989,12 +4983,14 @@ export class ProjectKanbanView {
         this.mobileTaskDrag?.cancel();
         // 保存滚动位置（如果还没有被上层保存）
         if (!this._savedScrollState) this.captureScrollState();
+        this.clearScrollLoadObservers();
 
         const kanbanContainer = this.container.querySelector('.project-kanban-container') as HTMLElement;
         if (kanbanContainer) {
             // 只有在项目变了或者模式变了的时候才全量清空，避免水平滚动条跳动
             if (this._lastRenderedProjectId !== this.projectId || this._lastRenderMode !== this.kanbanMode) {
                 kanbanContainer.innerHTML = '';
+                this.pageIndexMap = {};
                 this._lastRenderedProjectId = this.projectId;
                 this._lastRenderMode = this.kanbanMode;
             }
@@ -6306,15 +6302,7 @@ export class ProjectKanbanView {
         groupTasksContainer.innerHTML = '';
 
         const pageKey = `status-stable-${status}`;
-        const currentPage = this.pageIndexMap[pageKey] || 1;
-        this.pageIndexMap[pageKey] = currentPage;
-
-        const { pagedTasks, hasMore } = this.paginateTasks(tasks, currentPage);
-        this.renderTasksInColumn(groupTasksContainer, pagedTasks, status);
-
-        if (hasMore) {
-            this.renderLoadMoreButton(groupTasksContainer, pageKey);
-        }
+        this.renderPaginatedTaskList(groupTasksContainer, tasks, pageKey, status);
 
         // 恢复高度
         if (oldHeight > 0) {
@@ -6367,8 +6355,8 @@ export class ProjectKanbanView {
 
         let visibleTasksForCount: any[] = [];
         if (allActiveGroups.length === 0) {
-            // 如果没有自定义分组，直接渲染任务
-            this.renderTasksInColumn(groupTasksContainer, tasks, status);
+            // 如果没有自定义分组，直接按触底增量加载渲染任务
+            this.renderPaginatedTaskList(groupTasksContainer, tasks, `status-stable-${status}`, status);
             visibleTasksForCount = tasks;
         } else {
             // 按自定义分组渲染任务组
@@ -6889,69 +6877,157 @@ export class ProjectKanbanView {
         }
     }
 
-    private paginateTasks(tasks: any[], page: number): { pagedTasks: any[], hasMore: boolean } {
-        if (tasks.length === 0) return { pagedTasks: [], hasMore: false };
-
-        const taskMap = new Map(tasks.map(t => [t.id, t]));
-        // Roots within this subset (tasks passed in are already filtered by status/group)
-        const roots = tasks.filter(t => !t.parentId || !taskMap.has(t.parentId));
-
-        if (roots.length <= page * this.pageSize) {
-            return { pagedTasks: tasks, hasMore: false };
+    private clearScrollLoadObservers(container?: HTMLElement): void {
+        if (container) {
+            const cleanup = this.scrollLoadCleanups.get(container);
+            if (cleanup) {
+                this.scrollLoadCleanups.delete(container);
+                cleanup();
+            }
+            return;
         }
+        const cleanups = Array.from(this.scrollLoadCleanups.values());
+        this.scrollLoadCleanups.clear();
+        cleanups.forEach(cleanup => cleanup());
+    }
 
-        const pagedRoots = roots.slice(0, page * this.pageSize);
-        const result: any[] = [...pagedRoots];
-
-        // Collect descendants
-        const childrenMap = new Map<string, any[]>();
-        for (const t of tasks) {
-            if (t.parentId && taskMap.has(t.parentId)) {
-                const pid = t.parentId;
-                if (!childrenMap.has(pid)) childrenMap.set(pid, []);
-                childrenMap.get(pid)!.push(t);
+    private pruneDisconnectedScrollLoadObservers(): void {
+        for (const [el, cleanup] of Array.from(this.scrollLoadCleanups.entries())) {
+            if (!el.isConnected) {
+                this.scrollLoadCleanups.delete(el);
+                cleanup();
             }
         }
+    }
 
-        const addDescendants = (parent: any) => {
-            const children = childrenMap.get(parent.id);
-            if (children) {
-                for (const child of children) {
-                    result.push(child);
-                    addDescendants(child);
+    private findVerticalScrollContainer(element: HTMLElement): HTMLElement | null {
+        let current: HTMLElement | null = element;
+        while (current) {
+            if (typeof getComputedStyle === 'function') {
+                const overflowY = getComputedStyle(current).overflowY;
+                if (overflowY === 'auto' || overflowY === 'scroll') {
+                    return current;
                 }
+            }
+            if (current.classList?.contains('kanban-column-content')
+                && !current.classList.contains('custom-group-column-content--status-board')) {
+                return current;
+            }
+            if (current.classList?.contains('project-kanban-container') || current === this.container) {
+                break;
+            }
+            current = current.parentElement;
+        }
+        return null;
+    }
+
+    /**
+     * 按批次渲染任务列表，并在滚动接近底部时通过 IntersectionObserver 自动增量追加下一批，
+     * 避免“加载更多”按钮与整板重绘。
+     */
+    private renderPaginatedTaskList(
+        container: HTMLElement,
+        tasks: any[],
+        pageKey: string,
+        columnStatus?: string
+    ): { totalTop: number } {
+        if (this.disposed) return { totalTop: 0 };
+        this.clearScrollLoadObservers(container);
+        this.pruneDisconnectedScrollLoadObservers();
+
+        if (tasks.length === 0) {
+            this.pageIndexMap[pageKey] = 1;
+            return { totalTop: 0 };
+        }
+
+        const hierarchy = new TaskHierarchyIndex(tasks);
+        const roots = tasks.filter(task => !task.parentId || !hierarchy.byId.has(task.parentId));
+        const totalTop = roots.length;
+        const totalPages = Math.max(1, Math.ceil(totalTop / this.pageSize));
+        const loadedPages = Math.min(Math.max(1, this.pageIndexMap[pageKey] || 1), totalPages);
+        this.pageIndexMap[pageKey] = loadedPages;
+
+        let renderedCount = Math.min(totalTop, loadedPages * this.pageSize);
+        const initialFragment = document.createDocumentFragment();
+        this.renderTaskTree(initialFragment, roots.slice(0, renderedCount), hierarchy, columnStatus);
+        container.appendChild(initialFragment);
+
+        if (renderedCount >= totalTop) {
+            return { totalTop };
+        }
+
+        const sentinel = document.createElement('div');
+        sentinel.className = 'kanban-scroll-sentinel';
+        sentinel.setAttribute('aria-hidden', 'true');
+        container.appendChild(sentinel);
+
+        let observer: IntersectionObserver | null = null;
+        let cancelled = false;
+
+        const cleanup = () => {
+            if (cancelled) return;
+            cancelled = true;
+            if (observer) {
+                observer.disconnect();
+                observer = null;
+            }
+            if (sentinel.parentElement) {
+                sentinel.remove();
+            }
+            if (this.scrollLoadCleanups.get(container) === cleanup) {
+                this.scrollLoadCleanups.delete(container);
             }
         };
 
-        for (const root of pagedRoots) {
-            addDescendants(root);
-        }
+        const appendNextBatch = (): boolean => {
+            if (cancelled || this.disposed || !sentinel.isConnected || renderedCount >= totalTop) {
+                cleanup();
+                return false;
+            }
+            const nextEnd = Math.min(totalTop, renderedCount + this.pageSize);
+            const fragment = document.createDocumentFragment();
+            this.renderTaskTree(fragment, roots.slice(renderedCount, nextEnd), hierarchy, columnStatus);
+            container.insertBefore(fragment, sentinel);
+            renderedCount = nextEnd;
+            this.pageIndexMap[pageKey] = Math.ceil(renderedCount / this.pageSize);
+            if (renderedCount >= totalTop) {
+                cleanup();
+                return false;
+            }
+            return true;
+        };
 
-        return { pagedTasks: result, hasMore: true };
-    }
+        this.scrollLoadCleanups.set(container, cleanup);
 
-    private renderLoadMoreButton(container: HTMLElement, pageKey: string) {
-        const btnContainer = document.createElement('div');
-        btnContainer.className = 'kanban-load-more';
-        btnContainer.style.textAlign = 'center';
-        btnContainer.style.padding = '8px';
-        btnContainer.style.borderTop = '1px dashed var(--b3-theme-surface-lighter)';
-
-        const btn = document.createElement('button');
-        btn.className = 'b3-button b3-button--text';
-        btn.textContent = i18n('loadMore');
-        btn.style.fontSize = '12px';
-        btn.style.padding = '4px 8px';
-        btn.style.height = '24px';
-
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.pageIndexMap[pageKey] = (this.pageIndexMap[pageKey] || 1) + 1;
-            this.renderKanban();
+        this.lifecycle.frame(() => {
+            if (cancelled || this.disposed || !sentinel.isConnected) return;
+            if (typeof IntersectionObserver !== 'function') {
+                while (appendNextBatch()) {
+                    // 无 IntersectionObserver 环境回退为直接补齐
+                }
+                return;
+            }
+            const scrollRoot = this.findVerticalScrollContainer(container);
+            observer = new IntersectionObserver((entries) => {
+                if (cancelled || this.disposed || !entries.some(entry => entry.isIntersecting)) return;
+                const hasMore = appendNextBatch();
+                if (hasMore && !cancelled && observer && sentinel.isConnected) {
+                    // 一次追加后若哨兵仍在视口/预加载区内，下一帧重新观察以继续无缝补齐
+                    observer.unobserve(sentinel);
+                    this.lifecycle.frame(() => {
+                        if (!cancelled && !this.disposed && observer && sentinel.isConnected) {
+                            observer.observe(sentinel);
+                        }
+                    });
+                }
+            }, {
+                root: scrollRoot,
+                rootMargin: '300px 0px',
+            });
+            observer.observe(sentinel);
         });
 
-        btnContainer.appendChild(btn);
-        container.appendChild(btnContainer);
+        return { totalTop };
     }
 
     private renderListSections(content: HTMLElement, unfinished: any[], finished: any[], abandoned: any[], groupId: string | null) {
@@ -7041,15 +7117,7 @@ export class ProjectKanbanView {
         unfinishedContainer.innerHTML = '';
 
         const unfinishedKey = `list-unfinished-${groupId || 'single'}`;
-        const unfinishedPage = this.pageIndexMap[unfinishedKey] || 1;
-        this.pageIndexMap[unfinishedKey] = unfinishedPage;
-
-        const { pagedTasks: pagedUnfinished, hasMore: hasMoreUnfinished } = this.paginateTasks(unfinished, unfinishedPage);
-        this.renderTasksInColumn(unfinishedContainer, pagedUnfinished, 'unfinished');
-
-        if (hasMoreUnfinished) {
-            this.renderLoadMoreButton(unfinishedContainer, unfinishedKey);
-        }
+        this.renderPaginatedTaskList(unfinishedContainer, unfinished, unfinishedKey, 'unfinished');
 
         const unfinishedCountLabel = unfinishedSection.querySelector('.list-section-count');
         if (unfinishedCountLabel) unfinishedCountLabel.textContent = unfinished.length.toString();
@@ -7148,15 +7216,7 @@ export class ProjectKanbanView {
         finishedContainer.innerHTML = '';
 
         const finishedKey = `list-finished-${groupId || 'single'}`;
-        const finishedPage = this.pageIndexMap[finishedKey] || 1;
-        this.pageIndexMap[finishedKey] = finishedPage;
-
-        const { pagedTasks: pagedFinished, hasMore: hasMoreFinished } = this.paginateTasks(finished, finishedPage);
-        this.renderTasksInColumn(finishedContainer, pagedFinished, 'completed');
-
-        if (hasMoreFinished) {
-            this.renderLoadMoreButton(finishedContainer, finishedKey);
-        }
+        this.renderPaginatedTaskList(finishedContainer, finished, finishedKey, 'completed');
 
         const finishedCountLabel = finishedSection.querySelector('.list-section-count');
         if (finishedCountLabel) finishedCountLabel.textContent = finished.length.toString();
@@ -7251,15 +7311,7 @@ export class ProjectKanbanView {
         abandonedContainer.innerHTML = '';
 
         const abandonedKey = `list-abandoned-${groupId || 'single'}`;
-        const abandonedPage = this.pageIndexMap[abandonedKey] || 1;
-        this.pageIndexMap[abandonedKey] = abandonedPage;
-
-        const { pagedTasks: pagedAbandoned, hasMore: hasMoreAbandoned } = this.paginateTasks(abandoned, abandonedPage);
-        this.renderTasksInColumn(abandonedContainer, pagedAbandoned, 'abandoned');
-
-        if (hasMoreAbandoned) {
-            this.renderLoadMoreButton(abandonedContainer, abandonedKey);
-        }
+        this.renderPaginatedTaskList(abandonedContainer, abandoned, abandonedKey, 'abandoned');
 
         const abandonedCountLabel = abandonedSection.querySelector('.list-section-count');
         if (abandonedCountLabel) abandonedCountLabel.textContent = abandoned.length.toString();
@@ -7429,64 +7481,18 @@ export class ProjectKanbanView {
 
         // 为了确保父任务下显示所有后代（包括已完成的子任务），扩展传入的任务列表
         const expandedTasks = this.augmentTasksWithDescendants(tasks);
-        const hierarchy = new TaskHierarchyIndex(expandedTasks);
-        const topLevelTasks = expandedTasks.filter(t => !t.parentId || !hierarchy.byId.has(t.parentId));
-
-        // 分页计算
-        const totalTop = topLevelTasks.length;
-        const totalPages = Math.max(1, Math.ceil(totalTop / this.pageSize));
-        const currentPage = Math.min(Math.max(1, this.pageIndexMap[status] || 1), totalPages);
-
-        const startIdx = (currentPage - 1) * this.pageSize;
-        const endIdx = startIdx + this.pageSize;
-        const pagedTopLevel = topLevelTasks.slice(startIdx, endIdx);
-
-        this.renderTaskTree(content, pagedTopLevel, hierarchy, status);
+        const { totalTop } = this.renderPaginatedTaskList(content, expandedTasks, status, status);
 
         // 更新列顶部计数为仅统计顶层任务数量
         if (count) {
             count.textContent = totalTop.toString();
         }
 
-        // 渲染分页控件：仅在顶层任务数量超过 pageSize 时显示分页
+        // 改为触底自动增量加载，隐藏旧的分页栏
         const pagination = column.querySelector('.kanban-column-pagination') as HTMLElement;
         if (pagination) {
-            // 如果不需要分页，则隐藏分页容器
-            if (totalTop <= this.pageSize) {
-                pagination.innerHTML = '';
-                pagination.style.display = 'none';
-            } else {
-                pagination.style.display = 'flex';
-                pagination.innerHTML = '';
-
-                // 上一页按钮
-                const prevBtn = document.createElement('button');
-                prevBtn.className = 'b3-button b3-button--text';
-                prevBtn.textContent = i18n("prevPage");
-                prevBtn.disabled = currentPage <= 1;
-                prevBtn.addEventListener('click', () => {
-                    this.pageIndexMap[status] = Math.max(1, currentPage - 1);
-                    this.queueLoadTasks();
-                });
-                pagination.appendChild(prevBtn);
-
-                // 页码信息
-                const pageInfo = document.createElement('div');
-                pageInfo.style.cssText = 'min-width: 120px; text-align: center; font-size: 13px; color: var(--b3-theme-on-surface);';
-                pageInfo.textContent = i18n("taskListPagination", { page: String(currentPage), pages: String(totalPages), count: String(totalTop) });
-                pagination.appendChild(pageInfo);
-
-                // 下一页按钮
-                const nextBtn = document.createElement('button');
-                nextBtn.className = 'b3-button b3-button--text';
-                nextBtn.textContent = i18n("nextPage");
-                nextBtn.disabled = currentPage >= totalPages;
-                nextBtn.addEventListener('click', () => {
-                    this.pageIndexMap[status] = Math.min(totalPages, currentPage + 1);
-                    this.queueLoadTasks();
-                });
-                pagination.appendChild(nextBtn);
-            }
+            pagination.innerHTML = '';
+            pagination.style.display = 'none';
         }
     }
 
@@ -8086,15 +8092,7 @@ export class ProjectKanbanView {
 
         // 渲染任务
         const pageKey = `custom-mode-${groupKey}`;
-        const currentPage = this.pageIndexMap[pageKey] || 1;
-        this.pageIndexMap[pageKey] = currentPage;
-
-        const { pagedTasks, hasMore } = this.paginateTasks(tasks, currentPage);
-        this.renderTasksInColumn(groupTasksContainer, pagedTasks, status);
-
-        if (hasMore) {
-            this.renderLoadMoreButton(groupTasksContainer, pageKey);
-        }
+        this.renderPaginatedTaskList(groupTasksContainer, tasks, pageKey, status);
 
         groupContainer.appendChild(groupTasksContainer);
 
@@ -8115,8 +8113,8 @@ export class ProjectKanbanView {
         this.renderTaskTree(content, roots, hierarchy, columnStatus);
     }
 
-    /** 普通列、分组和分页列共用同一遍历，卡片共用本批任务索引。 */
-    private renderTaskTree(content: HTMLElement, roots: any[], hierarchy: TaskHierarchyIndex, columnStatus?: string): void {
+    /** 普通列、分组和增量列表共用同一遍历，卡片共用本批任务索引。 */
+    private renderTaskTree(content: HTMLElement | DocumentFragment, roots: any[], hierarchy: TaskHierarchyIndex, columnStatus?: string): void {
         if (this.disposed) return;
         // 共享渲染器原来以 this.tasks 为可见集合，保留该范围及其父子进度语义。
         const cardHierarchy = new TaskHierarchyIndex(this.tasks);
@@ -8328,15 +8326,7 @@ export class ProjectKanbanView {
 
         // 渲染任务（使用扩展后的任务列表）
         const pageKey = `status-mode-${groupKey}`;
-        const currentPage = this.pageIndexMap[pageKey] || 1;
-        this.pageIndexMap[pageKey] = currentPage;
-
-        const { pagedTasks, hasMore } = this.paginateTasks(expandedTasks, currentPage);
-        this.renderTasksInColumn(groupTasksContainer, pagedTasks, status);
-
-        if (hasMore) {
-            this.renderLoadMoreButton(groupTasksContainer, pageKey);
-        }
+        this.renderPaginatedTaskList(groupTasksContainer, expandedTasks, pageKey, status);
 
         groupContainer.appendChild(groupTasksContainer);
 
@@ -15370,7 +15360,7 @@ export class ProjectKanbanView {
 
     private insertTaskElementIntoContainer(container: HTMLElement, task: any, status: string) {
         const taskEl = this.createTaskElement(task, 0);
-        const loadMoreEl = container.querySelector('.kanban-load-more') as HTMLElement | null;
+        const loadMoreEl = container.querySelector('.kanban-scroll-sentinel, .kanban-load-more') as HTMLElement | null;
         const children = Array.from(container.children) as HTMLElement[];
         const existingTaskEls = children.filter(el => el.classList?.contains('kanban-task'));
 
@@ -17438,6 +17428,7 @@ export class ProjectKanbanView {
         this.disposed = true;
         this.mobileTaskDrag?.dispose();
         this.mobileTaskDrag = null;
+        this.clearScrollLoadObservers();
         this.lifecycle.dispose();
         this.unbindProjectTabDropTarget();
         this.stopDragScroll();

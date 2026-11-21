@@ -152,3 +152,180 @@ test('恢复范围截至当前看板，不覆盖宿主外层的滚动变化', ()
     board.rerenderTaskListContainer(list, tasks[1]);
     assert.equal(outside.scrollTop, 99);
 });
+
+test('触底增量加载按批追加任务而不重绘已有卡片，加载完自动移除哨兵并释放观察器', () => {
+    const taskHierarchyCode = ts.transpileModule(
+        fs.readFileSync(path.join(root, 'src/utils/taskHierarchy.ts'), 'utf8'),
+        { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
+    ).outputText;
+    const hierarchyExports = {};
+    new Function('exports', taskHierarchyCode)(hierarchyExports);
+
+    const extracted = [
+        'pageSize', 'pageIndexMap', 'scrollLoadCleanups',
+        'clearScrollLoadObservers', 'pruneDisconnectedScrollLoadObservers',
+        'findVerticalScrollContainer', 'renderPaginatedTaskList',
+    ].map(name => members.find(node => node.name?.getText(source) === name).getText(source)).join('\n');
+    const incrementalCode = ts.transpileModule(`class Board { ${extracted} }`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+
+    class DomNode {
+        constructor(tag = 'div', id = '') {
+            this.tag = tag;
+            this.className = '';
+            this.dataset = id ? { taskId: id } : {};
+            this.attributes = {};
+            this.children = [];
+            this.parentElement = null;
+            this.isConnected = false;
+            this.classList = {
+                contains: name => this.className.split(/\s+/).includes(name),
+            };
+        }
+        setAttribute(k, v) { this.attributes[k] = v; }
+        _syncConnected(connected) {
+            this.isConnected = connected;
+            this.children.forEach(c => c._syncConnected(connected));
+        }
+        appendChild(child) {
+            if (child.tag === '#fragment') {
+                [...child.children].forEach(node => this.appendChild(node));
+                return child;
+            }
+            child.remove();
+            this.children.push(child);
+            child.parentElement = this;
+            child._syncConnected(this.isConnected);
+            return child;
+        }
+        insertBefore(child, anchor) {
+            if (child.tag === '#fragment') {
+                [...child.children].forEach(node => this.insertBefore(node, anchor));
+                return child;
+            }
+            child.remove();
+            const index = anchor ? this.children.indexOf(anchor) : this.children.length;
+            this.children.splice(index < 0 ? this.children.length : index, 0, child);
+            child.parentElement = this;
+            child._syncConnected(this.isConnected);
+            return child;
+        }
+        remove() {
+            if (!this.parentElement) return;
+            const list = this.parentElement.children;
+            const idx = list.indexOf(this);
+            if (idx >= 0) list.splice(idx, 1);
+            this.parentElement = null;
+            this._syncConnected(false);
+        }
+    }
+
+    const observers = [];
+    class FakeIntersectionObserver {
+        constructor(callback, options) {
+            this.callback = callback;
+            this.options = options;
+            this.targets = new Set();
+            this.disconnected = false;
+            observers.push(this);
+        }
+        observe(target) { this.targets.add(target); }
+        unobserve(target) { this.targets.delete(target); }
+        disconnect() { this.disconnected = true; this.targets.clear(); }
+        trigger(isIntersecting) {
+            this.callback([{ isIntersecting }]);
+        }
+    }
+
+    const doc = {
+        createElement: tag => new DomNode(tag),
+        createDocumentFragment: () => new DomNode('#fragment'),
+    };
+    const Board = new Function('document', 'IntersectionObserver', 'TaskHierarchyIndex', 'getComputedStyle', incrementalCode + ';return Board;')(
+        doc, FakeIntersectionObserver, hierarchyExports.TaskHierarchyIndex,
+        el => ({ overflowY: el.className.includes('kanban-column-content') ? 'auto' : 'visible' }),
+    );
+
+    const frames = [];
+    const renderedBatches = [];
+    let fullRenderCalls = 0;
+    const rootEl = new DomNode('div');
+    rootEl.isConnected = true;
+    const scrollColumn = new DomNode('div');
+    scrollColumn.className = 'kanban-column-content';
+    const listContainer = new DomNode('div');
+    listContainer.className = 'custom-group-tasks';
+    rootEl.appendChild(scrollColumn);
+    scrollColumn.appendChild(listContainer);
+
+    const board = Object.assign(new Board(), {
+        container: rootEl,
+        disposed: false,
+        pageSize: 2,
+        lifecycle: { frame: cb => frames.push(cb) },
+        renderKanban: () => { fullRenderCalls++; },
+        renderTaskTree: (host, batchRoots, hierarchy) => {
+            renderedBatches.push(batchRoots.map(t => t.id));
+            for (const item of batchRoots) {
+                host.appendChild(new DomNode('div', item.id));
+                for (const child of hierarchy.children(item.id)) {
+                    host.appendChild(new DomNode('div', child.id));
+                }
+            }
+        },
+    });
+
+    const tasks = [
+        { id: 'r1' }, { id: 'r1-c1', parentId: 'r1' },
+        { id: 'r2' },
+        { id: 'r3' },
+        { id: 'r4' },
+        { id: 'r5' },
+    ];
+
+    const { totalTop } = board.renderPaginatedTaskList(listContainer, tasks, 'status-mode-g1', 'doing');
+    assert.equal(totalTop, 5);
+    assert.deepEqual(renderedBatches, [['r1', 'r2']]);
+    assert.deepEqual(listContainer.children.map(n => n.dataset.taskId || n.className), ['r1', 'r1-c1', 'r2', 'kanban-scroll-sentinel']);
+
+    const firstNodeRef = listContainer.children[0];
+    // 下一帧挂载观察器，识别滚动容器并设置预加载边距
+    frames.splice(0).forEach(cb => cb());
+    assert.equal(observers.length, 1);
+    assert.equal(observers[0].options.root, scrollColumn);
+    assert.equal(observers[0].options.rootMargin, '300px 0px');
+
+    // 第一次触底：只追加 r3, r4，不重绘已有卡片也不触发 renderKanban
+    observers[0].trigger(true);
+    assert.equal(fullRenderCalls, 0);
+    assert.equal(listContainer.children[0], firstNodeRef);
+    assert.deepEqual(renderedBatches, [['r1', 'r2'], ['r3', 'r4']]);
+    assert.deepEqual(listContainer.children.map(n => n.dataset.taskId || n.className), ['r1', 'r1-c1', 'r2', 'r3', 'r4', 'kanban-scroll-sentinel']);
+    assert.equal(board.pageIndexMap['status-mode-g1'], 2);
+    assert.equal(observers[0].disconnected, false);
+
+    // 下一帧重新观察哨兵后再次触底：追加最后一批 r5，自动销毁观察器并移除哨兵
+    frames.splice(0).forEach(cb => cb());
+    assert.equal(observers[0].targets.size, 1);
+    observers[0].trigger(true);
+    assert.deepEqual(renderedBatches, [['r1', 'r2'], ['r3', 'r4'], ['r5']]);
+    assert.deepEqual(listContainer.children.map(n => n.dataset.taskId), ['r1', 'r1-c1', 'r2', 'r3', 'r4', 'r5']);
+    assert.equal(observers[0].disconnected, true);
+    assert.equal(board.scrollLoadCleanups.size, 0);
+
+    // 重新渲染或销毁视图时清理未完成的观察器
+    listContainer.children = [];
+    board.pageIndexMap['status-mode-g1'] = 1;
+    board.renderPaginatedTaskList(listContainer, tasks, 'status-mode-g1', 'doing');
+    frames.splice(0).forEach(cb => cb());
+    assert.equal(observers.length, 2);
+    board.clearScrollLoadObservers();
+    assert.equal(observers[1].disconnected, true);
+    assert.equal(listContainer.children.some(n => n.className === 'kanban-scroll-sentinel'), false);
+
+    // 验证 CSS 视口外绘制跳过与哨兵样式
+    const kanbanScss = fs.readFileSync(path.join(root, 'src/styles/projectKanban.scss'), 'utf8');
+    assert.match(kanbanScss, /\.kanban-task\s*\{[\s\S]*?content-visibility:\s*auto;[\s\S]*?contain-intrinsic-size:\s*auto\s+76px;/);
+    assert.match(kanbanScss, /\.kanban-scroll-sentinel\s*\{/);
+});
