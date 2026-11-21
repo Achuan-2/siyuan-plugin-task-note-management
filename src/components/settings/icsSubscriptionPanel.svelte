@@ -242,6 +242,7 @@
                             <div class="b3-label__text">${i18n('calendarProvider') || '日历平台'}</div>
                             <select class="b3-select fn__block" id="sub-provider">
                                 <option value="generic" ${(!subscription?.provider || subscription?.provider === 'generic') ? 'selected' : ''}>${i18n('genericCalendar') || '通用日历'}</option>
+                                <option value="apple" ${subscription?.provider === 'apple' ? 'selected' : ''}>${i18n('appleCalendar') || '苹果日历'}</option>
                                 <option value="feishu" ${subscription?.provider === 'feishu' ? 'selected' : ''}>${i18n('feishuCalendar') || '飞书日历'}</option>
                                 <option value="dingtalk" ${subscription?.provider === 'dingtalk' ? 'selected' : ''}>${i18n('dingtalkCalendar') || '钉钉日历'}</option>
                                 <option value="wecom" ${subscription?.provider === 'wecom' ? 'selected' : ''}>${i18n('wecomCalendar') || '企业微信日历'}</option>
@@ -369,6 +370,16 @@
                     caldavEditableInput.disabled = true;
                     caldavDeletableInput.checked = true;
                     caldavDeletableInput.disabled = true;
+                } else if (provider === 'apple') {
+                    caldavEditableInput.disabled = false;
+                    caldavDeletableInput.disabled = false;
+                    if (!subscription || subscription.provider !== 'apple') {
+                        caldavEditableInput.checked = true;
+                        caldavDeletableInput.checked = true;
+                    } else {
+                        caldavEditableInput.checked = subscription.caldavEditable !== false;
+                        caldavDeletableInput.checked = subscription.caldavDeletable !== false;
+                    }
                 } else if (provider === 'qq') {
                     caldavEditableInput.checked = false;
                     caldavEditableInput.disabled = true;
@@ -400,7 +411,9 @@
         const updateServerAddress = () => {
             if (subTypeSelect.value === 'caldav') {
                 const provider = subProviderSelect.value;
-                if (provider === 'feishu') {
+                if (provider === 'apple') {
+                    caldavServerInput.value = 'https://caldav.icloud.com';
+                } else if (provider === 'feishu') {
                     caldavServerInput.value = 'https://caldav.feishu.cn';
                 } else if (provider === 'dingtalk') {
                     caldavServerInput.value = 'https://calendar.dingtalk.com';
@@ -463,7 +476,7 @@
             );
             const provider = (
                 editDialog.element.querySelector('#sub-provider') as HTMLSelectElement
-            ).value as 'generic' | 'feishu' | 'dingtalk' | 'wecom' | 'qq';
+            ).value as 'generic' | 'apple' | 'feishu' | 'dingtalk' | 'wecom' | 'qq';
             const username = (
                 editDialog.element.querySelector('#sub-username') as HTMLInputElement
             )?.value.trim();
@@ -648,15 +661,17 @@
                         <div class="sub-info">
                             <div class="sub-name">{sub.name}</div>
                             <div class="sub-url ariaLabel" aria-label={sub.url}>
-                                {(sub.type || 'ics').toUpperCase()} · {sub.provider === 'feishu'
-                                    ? i18n('feishuCalendar') || '飞书日历'
-                                    : sub.provider === 'dingtalk'
-                                      ? i18n('dingtalkCalendar') || '钉钉日历'
-                                      : sub.provider === 'wecom'
-                                        ? i18n('wecomCalendar') || '企业微信日历'
-                                        : sub.provider === 'qq'
-                                          ? i18n('qqCalendar') || 'QQ邮箱日历'
-                                          : i18n('genericCalendar') || '通用日历'}
+                                {(sub.type || 'ics').toUpperCase()} · {sub.provider === 'apple'
+                                    ? i18n('appleCalendar') || '苹果日历'
+                                    : sub.provider === 'feishu'
+                                      ? i18n('feishuCalendar') || '飞书日历'
+                                      : sub.provider === 'dingtalk'
+                                        ? i18n('dingtalkCalendar') || '钉钉日历'
+                                        : sub.provider === 'wecom'
+                                          ? i18n('wecomCalendar') || '企业微信日历'
+                                          : sub.provider === 'qq'
+                                            ? i18n('qqCalendar') || 'QQ邮箱日历'
+                                            : i18n('genericCalendar') || '通用日历'}
                                 {#if sub.type === 'caldav'}
                                     ({sub.caldavEditable !== false ? '可编辑' : '不可编辑'} · {sub.caldavDeletable !== false ? '可删除' : '不可删除'})
                                 {:else}

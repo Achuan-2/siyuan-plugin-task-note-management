@@ -7,7 +7,7 @@ export interface IcsSubscription {
     id: string;
     name: string;
     type?: 'ics' | 'caldav';
-    provider?: 'generic' | 'feishu' | 'dingtalk' | 'wecom' | 'qq';
+    provider?: 'generic' | 'apple' | 'feishu' | 'dingtalk' | 'wecom' | 'qq';
     readonly?: boolean; // Whether CalDAV write-back is disabled (e.g. DingTalk is read-only)
     url: string;
     username?: string;
@@ -326,7 +326,11 @@ interface CalDavCapabilities {
 function getProviderCapabilities(subscription: IcsSubscription): CalDavCapabilities {
     const editable = isSubscriptionEditable(subscription);
     const provider = subscription.provider || 'generic';
-    const serverCanDelete = (provider === 'wecom' || provider === 'qq' || (provider === 'generic' && subscription.caldavDeletable !== false));
+    const serverCanDelete = (
+        provider === 'wecom' ||
+        provider === 'qq' ||
+        ((provider === 'generic' || provider === 'apple') && subscription.caldavDeletable !== false)
+    );
     return {
         canCreate: editable,
         canUpdate: editable,
@@ -631,6 +635,10 @@ async function buildTasksFromSubscriptionEvents(
         const isCompleted = preserveCompleted ? existingTask.completed : event.completed || isPast;
 
         if (existingTask) {
+            const shouldSyncRemoteNote =
+                subscriptionType === 'caldav' &&
+                event.description !== undefined &&
+                existingTask.notes !== true;
             tasks[id] = {
                 ...existingTask,
                 title: event.title,
@@ -639,6 +647,10 @@ async function buildTasksFromSubscriptionEvents(
                 endDate: event.endDate,
                 endTime: event.endTime,
                 repeat: event.repeat,
+                ...(shouldSyncRemoteNote ? { note: event.description } : {}),
+                ...(event.caldavHref ? { caldavHref: event.caldavHref } : {}),
+                ...(event.caldavEtag !== undefined ? { caldavEtag: event.caldavEtag } : {}),
+                ...(event.caldavRawIcs ? { caldavRawIcs: event.caldavRawIcs } : {}),
                 completed: isCompleted,
                 completedAt: preserveCompleted ? existingTask.completedAt : undefined,
                 kanbanStatus: isCompleted ? 'completed' : (existingTask.kanbanStatus === 'completed' ? defaultKanbanStatus : existingTask.kanbanStatus),

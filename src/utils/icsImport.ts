@@ -206,10 +206,13 @@ function parseIcalEvent(vevent: ICAL.Component): ParsedIcsEvent | null {
             console.warn("Failed to parse end time:", e);
         }
 
-        // 状态
+        // 状态（兼容标准 VEVENT 扩展属性 X-SIYUAN-COMPLETED 与历史 STATUS:COMPLETED）
         const status = vevent.getFirstPropertyValue('status');
-        if (status) {
-            parsedEvent.completed = status === 'COMPLETED';
+        const siyuanCompleted = vevent.getFirstPropertyValue('x-siyuan-completed');
+        if (status === 'COMPLETED' || String(siyuanCompleted || '').toUpperCase() === 'TRUE') {
+            parsedEvent.completed = true;
+        } else if (status) {
+            parsedEvent.completed = false;
         }
 
         // 创建时间

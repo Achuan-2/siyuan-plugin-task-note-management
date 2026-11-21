@@ -18,7 +18,9 @@ export function isSubscriptionDeletable(subscription: any): boolean {
     const provider = subscription.provider || 'generic';
     if (provider === 'wecom') return true;
     if (provider === 'qq') return true;
-    if (provider === 'feishu' || provider === 'dingtalk') return false;
+    if (provider === 'feishu' || provider === 'dingtalk') {
+        return subscription.caldavDeletable === true;
+    }
     return subscription.caldavDeletable !== false;
 }
 
