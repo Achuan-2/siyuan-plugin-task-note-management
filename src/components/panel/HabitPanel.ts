@@ -14,6 +14,7 @@ import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu, resolveDefaultPomodoroDuration } from "../../utils/pomodoroPresets";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
 import { HabitDayDialog } from "../dialog/HabitDayDialog";
+import { createPanelViewMenu, normalizePanelViewMode, type PanelViewMode } from "../menu/PanelViewMenu";
 import {
     buildLinkedHabitPomodoroData,
     getLinkedTaskIdsForHabit as getLinkedTaskIdsForHabitUtil,
@@ -31,6 +32,7 @@ import {
     isHabitCheckInDayComplete,
     getHabitPomodoroTargetMinutes as getHabitPomodoroTargetMinutesUtil,
     getHabitProgressOnDate as getHabitProgressOnDateUtil,
+    getHabitSuccessfulCheckInCount,
     getHabitStreakDays,
     formatHabitReminderTimeDisplay,
     getHabitReminderTimesForDate,
@@ -62,6 +64,7 @@ export class HabitPanel {
     private currentSearchQuery: string = '';
     private showCompletedHabitsInTodayPending: boolean = true;
     private showWeekCheckIns: boolean = true;
+    private viewMode: PanelViewMode = 'standard';
     private weekStartDay: number = 1;
     private checkInDaysMode: HabitCheckInDaysMode = 'total';
     private groupManager: HabitGroupManager;
@@ -78,6 +81,8 @@ export class HabitPanel {
     private pomodoroRecordManager: PomodoroRecordManager;
     private linkedTaskPomodoroStats: Map<string, Map<string, LinkedTaskPomodoroDayStats>> = new Map();
     private linkedTaskIdsByHabit: Map<string, Set<string>> = new Map();
+    private miniCheckInGlyphContext?: CanvasRenderingContext2D | null;
+    private miniCheckInGlyphImages = new Map<string, { url: string; width: number; height: number } | null>();
 
     constructor(container: HTMLElement, plugin?: any) {
         this.container = container;
@@ -144,12 +149,15 @@ export class HabitPanel {
         if (this.reminderUpdatedHandler) {
             window.removeEventListener('reminderUpdated', this.reminderUpdatedHandler);
         }
+        this.miniCheckInGlyphImages.clear();
+        this.miniCheckInGlyphContext = undefined;
         this.pomodoroManager.cleanupInactiveTimer();
     }
 
     private async restorePanelSettings() {
         try {
             const settings = await this.plugin.loadSettings();
+            this.viewMode = normalizePanelViewMode(settings.habitPanelViewMode);
             if (Array.isArray(settings.habitPanelSelectedGroups)) {
                 this.selectedGroups = settings.habitPanelSelectedGroups;
             }
@@ -172,6 +180,7 @@ export class HabitPanel {
             settings.habitPanelShowCompletedInTodayPending = this.showCompletedHabitsInTodayPending;
             settings.habitPanelCheckInDaysMode = this.checkInDaysMode;
             settings.habitPanelShowWeekCheckIns = this.showWeekCheckIns;
+            settings.habitPanelViewMode = this.viewMode;
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error("Failed to save habit panel settings:", error);
@@ -200,6 +209,7 @@ export class HabitPanel {
 
     private initUI() {
         this.container.classList.add('habit-panel');
+        this.container.dataset.viewMode = this.viewMode;
         this.container.innerHTML = '';
 
         // 与任务侧栏的“今日任务 / 每日可做”分组头保持一致
@@ -459,6 +469,13 @@ export class HabitPanel {
                 icon: 'iconEye',
                 label: i18n("displaySettings") || "显示设置",
                 submenu: [
+                    createPanelViewMenu(this.viewMode, async mode => {
+                        if (mode === this.viewMode) return;
+                        this.viewMode = mode;
+                        this.container.dataset.viewMode = mode;
+                        await this.savePanelSettings();
+                        if (!this.disposed) await this.loadHabits();
+                    }),
                     {
                         icon: this.showCompletedHabitsInTodayPending ? 'iconSelect' : '',
                         label: i18n("showTodayPendingCompletedHabits") || "今日待打卡显示已完成习惯",
@@ -470,7 +487,7 @@ export class HabitPanel {
                     },
                     {
                         icon: this.showWeekCheckIns ? 'iconSelect' : '',
-                        label: i18n("habitShowWeekCheckIns") || "侧栏显示一周打卡",
+                        label: this.viewMode === 'mini' ? i18n('habitShowRecentCheckIns') : i18n('habitShowWeekCheckIns'),
                         click: () => {
                             this.showWeekCheckIns = !this.showWeekCheckIns;
                             void this.savePanelSettings();
@@ -976,6 +993,7 @@ export class HabitPanel {
     }
 
     private renderHabits(habits: Habit[]) {
+        this.container.dataset.viewMode = this.viewMode;
         this.habitsContainer.innerHTML = '';
 
         // 如果没有习惯，根据当前 tab 决定是否继续渲染已打卡区
@@ -1080,6 +1098,31 @@ export class HabitPanel {
         groupHeader.appendChild(groupTitle);
         groupHeader.appendChild(groupCount);
         groupHeader.appendChild(collapseIcon);
+
+        if (this.viewMode === 'mini') {
+            groupHeader.classList.add('habit-mini-layout', 'habit-mini__group-header');
+            const label = document.createElement('span');
+            label.className = 'habit-mini__group-title';
+            label.append(groupTitle, groupCount);
+            groupHeader.replaceChildren(collapseIcon, label);
+            if (this.showWeekCheckIns) {
+                groupHeader.classList.add('habit-mini-layout--week');
+                const weekdays = document.createElement('span');
+                weekdays.className = 'habit-mini__week-labels';
+                weekdays.setAttribute('aria-hidden', 'true');
+                const start = this.getMiniCheckInStartDate();
+                for (let index = 0; index < 7; index++) {
+                    const name = document.createElement('span');
+                    const day = new Date(start);
+                    day.setDate(start.getDate() + index);
+                    name.textContent = String(day.getDate());
+                    name.title = getLocalDateString(day);
+                    if (index === 6) name.className = 'habit-mini__date--today';
+                    weekdays.appendChild(name);
+                }
+                groupHeader.appendChild(weekdays);
+            }
+        }
 
         const toggleGroup = () => {
             const currentlyCollapsed = this.collapsedGroups.has(groupId);
@@ -1198,6 +1241,7 @@ export class HabitPanel {
     }
 
     private createHabitCard(habit: Habit, date?: string): HTMLElement {
+        if (this.viewMode === 'mini') return this.createMiniHabitRow(habit, date);
         const card = document.createElement('div');
         card.className = 'habit-card';
 
@@ -1497,91 +1541,7 @@ export class HabitPanel {
 
         // 打卡按钮 - 已结束和已放弃的习惯不显示
         if (!isInactive) {
-            const actionsEl = document.createElement('div');
-            actionsEl.className = 'habit-card__actions';
-
-            const checkInBtn = document.createElement('button');
-            checkInBtn.className = 'habit-card__checkin-btn';
-
-            // 判断是否为番茄钟目标类型以及打卡按钮类型
-            const goalType = this.getHabitGoalType(habit);
-            const isPomodoroGoal = goalType === 'pomodoro';
-            // checkInButtonType: 'pomodoro' | 'countup'，默认为 'pomodoro'
-            const buttonType = isPomodoroGoal ? (habit.checkInButtonType || 'pomodoro') : 'normal';
-
-            if (isPomodoroGoal && buttonType === 'countup') {
-                // 正计时按钮
-                checkInBtn.innerHTML = `<span>${renderTaskMetadataIcon('timer')}</span><span>${i18n("countUpLabel")}</span>`;
-                checkInBtn.classList.add('ariaLabel');
-                checkInBtn.setAttribute('aria-label', i18n("startCountUp"));
-            } else if (isPomodoroGoal && buttonType === 'pomodoro') {
-                // 番茄钟按钮
-                checkInBtn.innerHTML = `<span>${renderTaskMetadataIcon('tomato')}</span><span>${i18n("pomodoroTimerLabel")}</span>`;
-                checkInBtn.classList.add('ariaLabel');
-                checkInBtn.setAttribute('aria-label', i18n("startPomodoro"));
-            } else {
-                // 默认打卡按钮
-                checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
-            }
-
-            // 使用习惯自定义颜色（支持随机颜色）
-            if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
-                checkInBtn.style.background = `linear-gradient(135deg, ${habitColor}, ${habitColor}dd)`;
-                checkInBtn.style.boxShadow = `0 4px 12px ${habitColor}4d`;
-            }
-
-            checkInBtn.addEventListener('click', (ev) => {
-                ev.preventDefault();
-                ev.stopPropagation();
-
-                if (isPomodoroGoal && buttonType === 'countup') {
-                    // 正计时按钮直接启动正计时
-                    this.startPomodoroCountUp(habit);
-                } else if (isPomodoroGoal && buttonType === 'pomodoro') {
-                    // 番茄钟按钮直接启动番茄钟
-                    this.startPomodoro(habit);
-                } else {
-                    // 默认显示打卡菜单
-                    try {
-                        const menu = new Menu('habitCardCheckInMenu');
-                        const submenu = this.createCheckInSubmenu(habit);
-                        submenu.forEach((it: any) => {
-                            if (it && it.type === 'separator') {
-                                menu.addSeparator();
-                            } else if (it) {
-                                menu.addItem(it);
-                            }
-                        });
-
-                        const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-                        const menuX = rect.left;
-                        const menuY = rect.top - 4;
-                        const maxX = window.innerWidth - 200;
-                        const maxY = window.innerHeight - 200;
-
-                        menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
-                    } catch (err) {
-                        console.error('openCheckInMenu failed', err);
-                        showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
-                    }
-                }
-            });
-
-            actionsEl.appendChild(checkInBtn);
-            if (goalType === 'either') {
-                const timerBtn = document.createElement('button');
-                timerBtn.className = 'habit-card__checkin-btn';
-                const countUp = habit.checkInButtonType === 'countup';
-                timerBtn.innerHTML = countUp ? `<span>${renderTaskMetadataIcon('timer')}</span><span>${i18n("countUpLabel")}</span>` : `<span>${renderTaskMetadataIcon('tomato')}</span><span>${i18n("pomodoroTimerLabel")}</span>`;
-                timerBtn.addEventListener('click', event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (countUp) this.startPomodoroCountUp(habit);
-                    else this.startPomodoro(habit);
-                });
-                actionsEl.appendChild(timerBtn);
-            }
-            footer.appendChild(actionsEl);
+            footer.appendChild(this.createHabitActions(habit, habitColor));
         }
         card.appendChild(footer);
 
@@ -1595,19 +1555,338 @@ export class HabitPanel {
         return card;
     }
 
+    private createHabitActions(habit: Habit, habitColor: string): HTMLElement {
+        const actionsEl = document.createElement('div');
+        actionsEl.className = 'habit-card__actions';
+
+        const checkInBtn = document.createElement('button');
+        checkInBtn.className = 'habit-card__checkin-btn';
+
+        // 判断是否为番茄钟目标类型以及打卡按钮类型
+        const goalType = this.getHabitGoalType(habit);
+        const isPomodoroGoal = goalType === 'pomodoro';
+        // checkInButtonType: 'pomodoro' | 'countup'，默认为 'pomodoro'
+        const buttonType = isPomodoroGoal ? (habit.checkInButtonType || 'pomodoro') : 'normal';
+
+        if (isPomodoroGoal && buttonType === 'countup') {
+            // 正计时按钮
+            checkInBtn.innerHTML = `<span>${renderTaskMetadataIcon('timer')}</span><span>${i18n("countUpLabel")}</span>`;
+            checkInBtn.classList.add('ariaLabel');
+            checkInBtn.setAttribute('aria-label', i18n("startCountUp"));
+        } else if (isPomodoroGoal && buttonType === 'pomodoro') {
+            // 番茄钟按钮
+            checkInBtn.innerHTML = `<span>${renderTaskMetadataIcon('tomato')}</span><span>${i18n("pomodoroTimerLabel")}</span>`;
+            checkInBtn.classList.add('ariaLabel');
+            checkInBtn.setAttribute('aria-label', i18n("startPomodoro"));
+        } else {
+            // 默认打卡按钮
+            checkInBtn.innerHTML = `<span>✓</span><span>${i18n("checkInBtn")}</span>`;
+        }
+
+        // 使用习惯自定义颜色（支持随机颜色）
+        if (habitColor && habitColor !== 'var(--b3-theme-primary)') {
+            checkInBtn.style.background = `linear-gradient(135deg, ${habitColor}, ${habitColor}dd)`;
+            checkInBtn.style.boxShadow = `0 4px 12px ${habitColor}4d`;
+        }
+
+        checkInBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+
+            if (isPomodoroGoal && buttonType === 'countup') {
+                // 正计时按钮直接启动正计时
+                this.startPomodoroCountUp(habit);
+            } else if (isPomodoroGoal && buttonType === 'pomodoro') {
+                // 番茄钟按钮直接启动番茄钟
+                this.startPomodoro(habit);
+            } else {
+                // 默认显示打卡菜单
+                try {
+                    const menu = new Menu('habitCardCheckInMenu');
+                    const submenu = this.createCheckInSubmenu(habit);
+                    submenu.forEach((it: any) => {
+                        if (it && it.type === 'separator') {
+                            menu.addSeparator();
+                        } else if (it) {
+                            menu.addItem(it);
+                        }
+                    });
+
+                    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                    const menuX = rect.left;
+                    const menuY = rect.top - 4;
+                    const maxX = window.innerWidth - 200;
+                    const maxY = window.innerHeight - 200;
+
+                    menu.open({ x: Math.min(menuX, maxX), y: Math.max(0, Math.min(menuY, maxY)) });
+                } catch (err) {
+                    console.error('openCheckInMenu failed', err);
+                    showMessage(i18n("openCheckInMenuFailed"), 2000, 'error');
+                }
+            }
+        });
+
+        actionsEl.appendChild(checkInBtn);
+        if (goalType === 'either') {
+            const timerBtn = document.createElement('button');
+            timerBtn.className = 'habit-card__checkin-btn';
+            const countUp = habit.checkInButtonType === 'countup';
+            timerBtn.innerHTML = countUp ? `<span>${renderTaskMetadataIcon('timer')}</span><span>${i18n("countUpLabel")}</span>` : `<span>${renderTaskMetadataIcon('tomato')}</span><span>${i18n("pomodoroTimerLabel")}</span>`;
+            timerBtn.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (countUp) this.startPomodoroCountUp(habit);
+                else this.startPomodoro(habit);
+            });
+            actionsEl.appendChild(timerBtn);
+        }
+        return actionsEl;
+    }
+
+    private createMiniHabitRow(habit: Habit, date = getLogicalDateString()): HTMLElement {
+        const row = document.createElement('div');
+        row.className = 'habit-card habit-mini habit-mini-layout';
+        if (this.showWeekCheckIns) row.classList.add('habit-mini-layout--week');
+        const inactive = this.isHabitEnded(habit) || habit.abandoned === true;
+        if (inactive || this.currentTab === 'todayCompleted' || this.currentTab === 'yesterdayCompleted') {
+            row.style.opacity = '0.7';
+        }
+
+        const icon = document.createElement('button');
+        icon.type = 'button';
+        icon.className = 'b3-button b3-button--text habit-mini__icon ariaLabel';
+        icon.textContent = habit.icon || '🌱';
+        const status = inactive
+            ? (this.isHabitEnded(habit) ? i18n('habitStatusEnded') : i18n('habitStatusAbandoned')) : '';
+        if (inactive) {
+            icon.innerHTML = `<svg aria-hidden="true"><use xlink:href="#${this.isHabitEnded(habit) ? 'iconInbox' : 'iconClose'}"></use></svg>`;
+        }
+        const progress = this.getHabitProgressDescription(habit, date);
+        icon.title = [habit.title, status, this.getFrequencyText(habit.frequency), progress].filter(Boolean).join('\n');
+        icon.setAttribute('aria-label', `${habit.title} · ${i18n('more')}`);
+        icon.setAttribute('aria-description', icon.title);
+        icon.setAttribute('aria-haspopup', 'menu');
+        icon.addEventListener('pointerdown', event => event.stopPropagation());
+        icon.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const rect = icon.getBoundingClientRect();
+            this.showHabitContextMenu({ clientX: rect.left, clientY: rect.bottom } as MouseEvent, habit);
+        });
+        row.appendChild(icon);
+
+        const title = document.createElement(habit.blockId ? 'a' : 'span');
+        title.className = 'habit-mini__title ariaLabel';
+        title.textContent = habit.title;
+        title.title = [habit.title, status].filter(Boolean).join(' · ');
+        title.setAttribute('aria-label', title.title);
+        if (habit.blockId) {
+            title.setAttribute('data-type', 'a');
+            title.setAttribute('href', `siyuan://blocks/${habit.blockId}`);
+            title.setAttribute('data-href', `siyuan://blocks/${habit.blockId}`);
+            title.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                try {
+                    openBlock(habit.blockId!);
+                } catch (error) {
+                    console.error('Failed to open habit bound block:', error);
+                    showMessage(i18n('openBlockFailed'), 3000, 'error');
+                }
+            });
+        }
+        row.appendChild(title);
+
+        if (this.showWeekCheckIns) row.appendChild(this.createWeekCheckIns(habit, getLogicalDateString(), true));
+
+        row.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.showHabitContextMenu(event, habit);
+        });
+        return row;
+    }
+
+    private getHabitProgressDescription(habit: Habit, date: string): string {
+        if (habit.frequency.type === 'none') return '';
+        const progress = this.getHabitProgressOnDate(habit, date);
+        const goal = this.getHabitGoalType(habit);
+        if (goal === 'either') {
+            return i18n('habitEitherProgress', {
+                count: String(progress.count.current), countTarget: String(progress.count.target),
+                duration: this.formatMinutesToHourMinute(progress.pomodoro.current),
+                durationTarget: this.formatMinutesToHourMinute(progress.pomodoro.target),
+            });
+        }
+        return goal === 'pomodoro'
+            ? `${this.formatMinutesToHourMinute(progress.current)}/${this.formatMinutesToHourMinute(progress.target)}`
+            : `${getHabitSuccessfulCheckInCount(habit, date)}/${progress.target} ${i18n('times')}`;
+    }
+
     private getWeekStartDate(): Date {
         const today = new Date(`${getLogicalDateString()}T12:00:00`);
         today.setDate(today.getDate() - (today.getDay() - this.weekStartDay + 7) % 7);
         return today;
     }
 
-    private createWeekCheckIns(habit: Habit, today: string): HTMLElement {
+    private getMiniCheckInStartDate(today = getLogicalDateString()): Date {
+        const start = new Date(`${today}T12:00:00`);
+        start.setDate(start.getDate() - 6);
+        return start;
+    }
+
+    private createMiniCheckInGlyph(symbol: string, glyphColor?: string): { element: SVGElement; extent: number } {
+        const ns = 'http://www.w3.org/2000/svg';
+        const color = glyphColor || getComputedStyle(this.container).color || '#000';
+        const key = `${color}\0${symbol}`;
+        this.miniCheckInGlyphImages ||= new Map();
+        let image = this.miniCheckInGlyphImages.get(key);
+        if (image === undefined) {
+            image = null;
+            try {
+                this.miniCheckInGlyphContext ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+                const context = this.miniCheckInGlyphContext;
+                if (context) {
+                    const scale = 4;
+                    const fontSize = 12 * scale;
+                    const font = `${fontSize}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+                    context.font = font;
+                    const metrics = context.measureText(symbol);
+                    const padding = fontSize * 2;
+                    context.canvas.width = Math.ceil(Math.max(metrics.width, fontSize) + padding * 2);
+                    context.canvas.height = fontSize * 4;
+                    context.font = font;
+                    context.textAlign = 'left';
+                    context.textBaseline = 'alphabetic';
+                    context.fillStyle = color;
+                    context.fillText(symbol, padding, fontSize * 2);
+                    const { width, height } = context.canvas;
+                    const pixels = context.getImageData(0, 0, width, height).data;
+                    let left = width, top = height, right = -1, bottom = -1;
+                    for (let y = 0; y < height; y++) {
+                        for (let x = 0; x < width; x++) {
+                            if (!pixels[(y * width + x) * 4 + 3]) continue;
+                            left = Math.min(left, x);
+                            top = Math.min(top, y);
+                            right = Math.max(right, x);
+                            bottom = Math.max(bottom, y);
+                        }
+                    }
+                    if (right >= left && bottom >= top) {
+                        const cropped = document.createElement('canvas');
+                        cropped.width = right - left + 1;
+                        cropped.height = bottom - top + 1;
+                        const croppedContext = cropped.getContext('2d');
+                        if (croppedContext) {
+                            // Measure and display the same painted pixels: SVG text and Canvas
+                            // can use different emoji baselines on Apple devices.
+                            croppedContext.drawImage(context.canvas, left, top, cropped.width, cropped.height,
+                                0, 0, cropped.width, cropped.height);
+                            image = { url: cropped.toDataURL('image/png'), width: cropped.width / scale, height: cropped.height / scale };
+                        }
+                    }
+                }
+            } catch {
+                // Restricted Canvas access still leaves a native text fallback.
+            }
+            this.miniCheckInGlyphImages.set(key, image);
+        }
+        if (image) {
+            const element = document.createElementNS(ns, 'image');
+            element.classList.add('habit-mini__ring-glyph');
+            element.setAttribute('href', image.url);
+            element.setAttribute('x', String(14 - image.width / 2));
+            element.setAttribute('y', String(14 - image.height / 2));
+            element.setAttribute('width', String(image.width));
+            element.setAttribute('height', String(image.height));
+            return { element, extent: Math.max(image.width, image.height) };
+        }
+        const element = document.createElementNS(ns, 'text');
+        element.classList.add('habit-mini__ring-glyph');
+        element.style.font = '12px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+        element.style.textAnchor = 'middle';
+        element.style.dominantBaseline = 'central';
+        element.style.letterSpacing = 'normal';
+        element.setAttribute('x', '14');
+        element.setAttribute('y', '14');
+        element.textContent = symbol;
+        return { element, extent: 12 };
+    }
+
+    private createMiniCheckInRing(percentage: number, symbols: string | string[], glyphColor?: string): SVGSVGElement {
+        const ns = 'http://www.w3.org/2000/svg';
+        const ring = document.createElementNS(ns, 'svg');
+        ring.classList.add('habit-mini__ring');
+        ring.setAttribute('viewBox', '0 0 28 28');
+        ring.setAttribute('aria-hidden', 'true');
+        for (const part of ['fill', 'track', 'progress']) {
+            const circle = document.createElementNS(ns, 'circle');
+            circle.classList.add(`habit-mini__ring-${part}`);
+            circle.setAttribute('cx', '14');
+            circle.setAttribute('cy', '14');
+            circle.setAttribute('r', '12');
+            circle.setAttribute('pathLength', '100');
+            if (part === 'progress') {
+                circle.setAttribute('stroke-dasharray', `${percentage} 100`);
+                circle.setAttribute('transform', 'rotate(-90 14 14)');
+                if (!percentage) circle.style.display = 'none';
+            }
+            ring.appendChild(circle);
+        }
+        const icon = document.createElementNS(ns, 'g');
+        icon.classList.add('habit-mini__day-icon');
+        const records = typeof symbols === 'string' ? [symbols] : symbols;
+        icon.dataset.symbol = records.join('');
+        const columns = Math.ceil(Math.sqrt(records.length));
+        const rows = Math.ceil(records.length / columns);
+        // Fit the whole grid inside the ring, preserving every record and duplicate.
+        const cell = records.length === 1 ? 28 : 20 / Math.hypot(columns, rows);
+        records.forEach((symbol, index) => {
+            const item = document.createElementNS(ns, 'g');
+            item.classList.add('habit-mini__record-icon');
+            item.dataset.symbol = symbol;
+            let extent = 6;
+            if (['○', '×', '—'].includes(symbol)) {
+                extent = symbol === '—' ? 10 : symbol === '×' ? 7 : 6;
+                const center = document.createElementNS(ns, symbol === '○' ? 'circle' : 'path');
+                center.classList.add('habit-mini__ring-center');
+                if (symbol === '○') {
+                    center.setAttribute('cx', '14');
+                    center.setAttribute('cy', '14');
+                    center.setAttribute('r', '3');
+                } else {
+                    center.setAttribute('d', symbol === '×' ? 'M10.5 10.5l7 7m0-7l-7 7' : 'M9 14h10');
+                }
+                item.appendChild(center);
+            } else {
+                const glyph = this.createMiniCheckInGlyph(symbol, glyphColor);
+                extent = glyph.extent;
+                item.appendChild(glyph.element);
+            }
+            if (records.length > 1) {
+                const row = Math.floor(index / columns);
+                const rowCount = Math.min(columns, records.length - row * columns);
+                const x = 14 - rowCount * cell / 2 + (index % columns + 0.5) * cell;
+                const y = 14 - rows * cell / 2 + (row + 0.5) * cell;
+                const scale = Math.min(1, cell * 0.88 / extent);
+                item.setAttribute('transform', `translate(${x} ${y}) scale(${scale}) translate(-14 -14)`);
+            } else if (extent > 16) {
+                item.setAttribute('transform', `translate(14 14) scale(${16 / extent}) translate(-14 -14)`);
+            }
+            icon.appendChild(item);
+        });
+        ring.appendChild(icon);
+        return ring;
+    }
+
+    private createWeekCheckIns(habit: Habit, today: string, mini = false): HTMLElement {
         const week = document.createElement('div');
         week.className = 'habit-card__week';
         const weekDays = document.createElement('div');
         weekDays.className = 'habit-card__week-days';
-        const weekStart = this.getWeekStartDate();
+        const weekStart = mini ? this.getMiniCheckInStartDate(today) : this.getWeekStartDate();
         const weekdayNames = i18n('weekdayNames').split(',');
+        const glyphColor = mini ? (getComputedStyle(this.container).color || '#000') : '';
 
         for (let offset = 0; offset < 7; offset++) {
             const day = new Date(weekStart);
@@ -1622,58 +1901,112 @@ export class HabitPanel {
                 ? checkIn.entries.map(entry => entry.emoji).filter(Boolean)
                 : checkIn?.status?.filter(Boolean) || [];
             const count = Math.max(emojis.length, checkIn?.count || 0);
+            const hasRecord = count > 0;
+            const progress = mini ? this.getHabitProgressOnDate(habit, date) : null;
+            const hasPomodoroProgress = !!progress && progress.pomodoro.current > 0;
+            const hasActivity = hasRecord || hasPomodoroProgress;
+            const ratio = progress ? (this.getHabitGoalType(habit) === 'count'
+                ? getHabitSuccessfulCheckInCount(habit, date) / progress.count.target
+                : progress.current / progress.target) : 0;
+            const percentage = completed ? 100 : Math.max(0, Math.min(99, Math.round((Number.isFinite(ratio) ? ratio : 0) * 100)));
+            const showProgress = mini && (hasActivity || ratio > 0)
+                && (this.getHabitGoalType(habit) !== 'count' || progress.count.target > 1);
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'habit-card__week-day';
             if (!required) button.classList.add('habit-card__week-day--not-required');
-            if (completed) button.classList.add('habit-card__week-day--done');
+            if (completed && (!mini || hasActivity)) button.classList.add('habit-card__week-day--done');
             if (date === today) button.classList.add('habit-card__week-day--today');
             button.style.setProperty('--habit-color', this.getHabitProgressColor(habit));
 
-            const weekday = document.createElement('span');
-            weekday.className = 'habit-card__week-weekday';
-            weekday.textContent = weekdayNames[day.getDay()] || String(day.getDay());
-            const dayNumber = document.createElement('span');
-            dayNumber.className = 'habit-card__week-date';
-            dayNumber.textContent = String(day.getDate());
-            const status = document.createElement('span');
-            status.className = 'habit-card__week-status';
-            // 旧数据可能只有 count，缺少逐条 emoji；沿用统计页的回退图标。
-            const displayedEmojis = emojis.length > 0
-                ? emojis
-                : Array.from({ length: Math.min(count, 8) }, () => habit.autoCheckInEmoji || '🍅');
-            if (displayedEmojis.length > 0) {
-                if (displayedEmojis.length <= 4) status.classList.add('habit-card__week-status--few');
-                else if (displayedEmojis.length <= 8) status.classList.add('habit-card__week-status--medium');
-                else status.classList.add('habit-card__week-status--many');
-                displayedEmojis.forEach(emoji => {
-                    const item = document.createElement('span');
-                    item.textContent = emoji;
-                    status.appendChild(item);
-                });
-                if (count > displayedEmojis.length) {
-                    const remainder = document.createElement('span');
-                    remainder.textContent = `+${count - displayedEmojis.length}`;
-                    status.appendChild(remainder);
-                }
+            if (mini) {
+                const defaultEmoji = habit.autoCheckInEmoji || habit.checkInEmojis?.[0]?.emoji || '✅';
+                const symbols = hasRecord
+                    ? Array.from({ length: count }, (_, index) => emojis[index] || defaultEmoji)
+                    : (completed || hasPomodoroProgress)
+                        ? [habit.autoCheckInEmoji || '🍅']
+                        : required ? (date < today ? '×' : '○') : '—';
+                button.dataset.progress = String(percentage);
+                button.appendChild(this.createMiniCheckInRing(percentage, symbols, glyphColor));
+                if (hasActivity || completed) button.classList.add('habit-mini__day--recorded');
+                if (!completed && hasActivity) button.classList.add('habit-mini__day--partial');
             } else {
-                status.textContent = completed ? '✓' : '·';
+                const weekday = document.createElement('span');
+                weekday.className = 'habit-card__week-weekday';
+                weekday.textContent = weekdayNames[day.getDay()] || String(day.getDay());
+                const dayNumber = document.createElement('span');
+                dayNumber.className = 'habit-card__week-date';
+                dayNumber.textContent = String(day.getDate());
+                const status = document.createElement('span');
+                status.className = 'habit-card__week-status';
+                // 旧数据可能只有 count，缺少逐条 emoji；沿用统计页的回退图标。
+                const displayedEmojis = emojis.length > 0
+                    ? emojis
+                    : Array.from({ length: Math.min(count, 8) }, () => habit.autoCheckInEmoji || '🍅');
+                if (displayedEmojis.length > 0) {
+                    if (displayedEmojis.length <= 4) status.classList.add('habit-card__week-status--few');
+                    else if (displayedEmojis.length <= 8) status.classList.add('habit-card__week-status--medium');
+                    else status.classList.add('habit-card__week-status--many');
+                    displayedEmojis.forEach(emoji => {
+                        const item = document.createElement('span');
+                        item.textContent = emoji;
+                        status.appendChild(item);
+                    });
+                    if (count > displayedEmojis.length) {
+                        const remainder = document.createElement('span');
+                        remainder.textContent = `+${count - displayedEmojis.length}`;
+                        status.appendChild(remainder);
+                    }
+                } else {
+                    status.textContent = completed ? '✓' : '·';
+                }
+                button.append(weekday, dayNumber, status);
             }
-            button.append(weekday, dayNumber, status);
 
             const checkInState = completed ? i18n('habitWeekCompleted')
-                : count > 0 ? i18n('habitWeekIncomplete')
+                : hasActivity ? i18n('habitWeekIncomplete')
                     : required ? i18n('habitWeekMissing') : i18n('habitWeekNotRequired');
-            const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}`;
-            button.title = description;
-            button.setAttribute('aria-label', description);
-            button.addEventListener('click', (event) => {
-                event.stopPropagation();
+            const progressDescription = mini ? this.getHabitProgressDescription(habit, date) : '';
+            const description = `${date} ${weekdayNames[day.getDay()] || ''}：${checkInState}${count > 0 ? ` (${count}) ${emojis.join(' ')}` : ''}${showProgress ? ` · ${percentage}%` : ''}${progressDescription ? ` · ${progressDescription}` : ''}`;
+            const label = mini ? `${description}\n${i18n('habitMiniDayActionHint')}` : description;
+            button.title = label;
+            button.setAttribute('aria-label', label);
+            const openDay = () => {
                 const dialog = new HabitDayDialog(this.cloneHabit(habit)!, date, async (updatedHabit) => {
                     await this.saveHabit(updatedHabit);
                 }, this.plugin);
                 dialog.show();
+            };
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                if (mini) {
+                    const menu = new Menu('habitDayCheckInMenu');
+                    const submenu = this.createCheckInSubmenu(this.cloneHabit(habit)!, date);
+                    submenu.forEach((item, idx) => {
+                        if (item.type === 'separator') {
+                            if (idx > 0) menu.addSeparator();
+                        } else {
+                            menu.addItem(item);
+                        }
+                    });
+                    menu.addItem({
+                        icon: 'iconCalendar',
+                        label: i18n('habitMiniViewDayRecords'),
+                        click: openDay,
+                    });
+                    const rect = button.getBoundingClientRect();
+                    menu.open({ x: rect.left, y: rect.bottom + 4 });
+                } else {
+                    openDay();
+                }
             });
+            if (mini) {
+                button.addEventListener('contextmenu', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openDay();
+                });
+            }
             weekDays.appendChild(button);
         }
 
@@ -2217,14 +2550,13 @@ export class HabitPanel {
         return remain > 0 ? `${hours}h ${remain}m` : `${hours}h`;
     }
 
-    private createCheckInSubmenu(habit: Habit): any[] {
+    private createCheckInSubmenu(habit: Habit, date = getLogicalDateString()): any[] {
         const submenu: any[] = [];
 
-        const today = getLogicalDateString();
-        const todayCheckIn = habit.checkIns?.[today];
-        const checkedOptionsToday = new Set<string>(); // "emoji:meaning:group"
-        const checkedGroupsToday = new Set<string>();
-        const checkedEmojisToday = new Set<string>();
+        const dateCheckIn = habit.checkIns?.[date];
+        const checkedOptionsOnDate = new Set<string>(); // "emoji:meaning:group"
+        const checkedGroupsOnDate = new Set<string>();
+        const checkedEmojisOnDate = new Set<string>();
 
         // 收集所有可能的 emoji 到分组的映射，用于旧数据兼容
         const emojiToGroups = new Map<string, Set<string>>();
@@ -2236,28 +2568,28 @@ export class HabitPanel {
             }
         });
 
-        if (todayCheckIn) {
-            const entries = todayCheckIn.entries || [];
+        if (dateCheckIn) {
+            const entries = dateCheckIn.entries || [];
             if (entries.length > 0) {
                 entries.forEach(entry => {
-                    checkedEmojisToday.add(entry.emoji);
+                    checkedEmojisOnDate.add(entry.emoji);
                     const m = entry.meaning || '';
                     const g = (entry.group || '').trim();
                     if (g) {
-                        checkedGroupsToday.add(g);
-                        checkedOptionsToday.add(`${entry.emoji}:${m}:${g}`);
+                        checkedGroupsOnDate.add(g);
+                        checkedOptionsOnDate.add(`${entry.emoji}:${m}:${g}`);
                     } else {
                         // 旧数据兼容：将该 emoji 对应的所有分组都视为已打卡
                         const groups = emojiToGroups.get(entry.emoji);
-                        if (groups) groups.forEach(pg => checkedGroupsToday.add(pg));
+                        if (groups) groups.forEach(pg => checkedGroupsOnDate.add(pg));
                     }
                 });
-            } else if (todayCheckIn.status) {
+            } else if (dateCheckIn.status) {
                 // 更旧格式兼容
-                todayCheckIn.status.forEach(emoji => {
-                    checkedEmojisToday.add(emoji);
+                dateCheckIn.status.forEach(emoji => {
+                    checkedEmojisOnDate.add(emoji);
                     const groups = emojiToGroups.get(emoji);
-                    if (groups) groups.forEach(pg => checkedGroupsToday.add(pg));
+                    if (groups) groups.forEach(pg => checkedGroupsOnDate.add(pg));
                 });
             }
         }
@@ -2270,18 +2602,16 @@ export class HabitPanel {
             if (habit.hideCheckedToday) {
                 if (groupName) {
                     // 如果有分组，检查该分组是否已打卡
-                    if (checkedGroupsToday.has(groupName)) return;
+                    if (checkedGroupsOnDate.has(groupName)) return;
                 } else {
                     // 如果没分组，检查该 emoji 是否已打卡
-                    if (checkedEmojisToday.has(emojiConfig.emoji)) return;
+                    if (checkedEmojisOnDate.has(emojiConfig.emoji)) return;
                 }
             }
 
             submenu.push({
                 label: `${emojiConfig.emoji} ${emojiConfig.meaning}`,
-                click: () => {
-                    this.checkInHabit(habit, emojiConfig);
-                }
+                click: () => this.checkInHabit(habit, emojiConfig, { date })
             });
         });
 
@@ -2305,30 +2635,32 @@ export class HabitPanel {
         habit: Habit,
         emojiConfig: HabitCheckInEmoji,
         plugin?: any,
-        options?: { skipPromptNote?: boolean; silent?: boolean }
+        options?: { skipPromptNote?: boolean; silent?: boolean; date?: string }
     ): Promise<boolean> {
         try {
             const currentPlugin = plugin || getPluginInstance();
-            const today = getLogicalDateString();
+            const logicalToday = getLogicalDateString();
+            const checkInDate = options?.date || logicalToday;
             const now = getLocalDateTimeString(new Date());
+            const defaultTimestamp = checkInDate === logicalToday ? now : `${checkInDate}${now.slice(10)}`;
 
             if (!habit.checkIns) {
                 habit.checkIns = {};
             }
 
-            if (!habit.checkIns[today]) {
-                habit.checkIns[today] = {
+            if (!habit.checkIns[checkInDate]) {
+                habit.checkIns[checkInDate] = {
                     count: 0,
                     status: [],
-                    timestamp: now,
+                    timestamp: defaultTimestamp,
                     entries: []
                 };
             }
 
-            const checkIn = habit.checkIns[today];
+            const checkIn = habit.checkIns[checkInDate];
             // 询问备注（如果配置了 promptNote）
             let note: string | undefined = undefined;
-            let customTimestamp: string = now; // 默认使用当前时间
+            let customTimestamp: string = defaultTimestamp;
             let cancelled = false; // 标记用户是否取消了打卡
             if (emojiConfig.promptNote && !options?.skipPromptNote) {
                 // 弹窗输入备注和打卡时间 —— 使用标准 dialog footer（.b3-dialog__action）放置按钮以保证样式与位置正确
@@ -2336,12 +2668,7 @@ export class HabitPanel {
                 const promise = new Promise<void>((resolve) => { resolveFn = resolve; });
 
                 // 格式化当前时间为 datetime-local 输入框所需的格式 (YYYY-MM-DDTHH:mm)
-                const nowDate = new Date();
-                const datetimeLocalValue = nowDate.getFullYear() + '-' +
-                    String(nowDate.getMonth() + 1).padStart(2, '0') + '-' +
-                    String(nowDate.getDate()).padStart(2, '0') + 'T' +
-                    String(nowDate.getHours()).padStart(2, '0') + ':' +
-                    String(nowDate.getMinutes()).padStart(2, '0');
+                const datetimeLocalValue = defaultTimestamp.replace(' ', 'T').slice(0, 16);
 
                 const inputDialog = new Dialog({
                     title: i18n("checkInInfo"),
@@ -2539,7 +2866,7 @@ export class HabitPanel {
     private async checkInHabit(
         habit: Habit,
         emojiConfig: HabitCheckInEmoji,
-        options?: { skipPromptNote?: boolean; silent?: boolean }
+        options?: { skipPromptNote?: boolean; silent?: boolean; date?: string }
     ) {
         await HabitPanel.checkInHabit(habit, emojiConfig, this.plugin, options);
     }

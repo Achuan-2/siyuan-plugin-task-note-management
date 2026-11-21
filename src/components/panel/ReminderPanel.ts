@@ -16,7 +16,9 @@ import { CategoryManageDialog } from "../dialog/CategoryManageDialog";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
 import { showAddTaskReminderTimeDialog } from "../dialog/AddTaskReminderTimeDialog";
 import { i18n } from "../../pluginInstance";
-import { TaskRenderer } from "../render/TaskRenderer";
+import { TaskRenderer, type TaskRenderContext } from "../render/TaskRenderer";
+import { showMiniTaskTouchTooltip } from '../render/miniTaskTouchTooltip';
+import { createPanelViewMenu, normalizePanelViewMode, type PanelViewMode } from "../menu/PanelViewMenu";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { normalizeReminderGroupMode, orderRemindersByGroup, type ReminderGroup, type ReminderGroupMode } from '../../utils/reminderGrouping';
 import { buildProjectFolderOrderMap } from '../../utils/projectFolderOrder';
@@ -70,10 +72,13 @@ interface ReminderElementRenderState {
     title: string;
     note: string;
     onNoteClick: (reminder: any, event: Event) => void;
+    tooltipContext?: TaskRenderContext;
 }
 
 export class ReminderPanel {
     private disposed = false;
+    private selectionOptions?: { onSelectTask: (task: any) => Promise<void> };
+    private selectingTask = false;
     private container: HTMLElement;
     private remindersContainer: HTMLElement;
     private filterSelect: HTMLSelectElement;
@@ -118,6 +123,7 @@ export class ReminderPanel {
     private showCompletedSubtasks: boolean = false;
     // 是否将任务标题限制在一行显示（超出部分省略号截断）
     private clipTitleToOneLine: boolean = false;
+    private viewMode: PanelViewMode = 'standard';
     // 是否在任务卡片上显示绑定块所属文档标题
     private showTaskCardDocumentTitle: boolean = true;
 
@@ -129,6 +135,10 @@ export class ReminderPanel {
     private allRemindersMap: Map<string, any> = new Map(); // 存储所有任务的完整信息，用于计算进度
     private optimisticUpdatesCache: Map<string, any> = new Map(); // 存储乐观更新缓存，避免刷新跳动
     private reminderElementStates = new WeakMap<HTMLElement, ReminderElementRenderState>();
+    private miniTaskTooltipHandler = (event: CustomEvent) => this.handleMiniTaskTooltip(event);
+    private miniTaskTouchClickHandler = (event: MouseEvent) => this.handleMiniTaskTouchClick(event);
+    private miniTaskTouchTooltipClose?: () => void;
+    private miniTaskTouchTooltipAnchor?: HTMLElement;
     private reminderSharedRenderSignature: string | undefined;
     private reminderSharedRenderVersion: number = 0;
     private loadingDialog: Dialog | null = null;
@@ -171,9 +181,11 @@ export class ReminderPanel {
     private docTitleCache: Map<string, Map<string, string>> = new Map();
     private lute: any;
 
-    constructor(container: HTMLElement, plugin?: any, closeCallback?: () => void) {
+    constructor(container: HTMLElement, plugin?: any, closeCallback?: () => void,
+        selectionOptions?: { onSelectTask: (task: any) => Promise<void> }) {
         this.container = container;
         this.plugin = plugin;
+        this.selectionOptions = selectionOptions;
         this.isMobileClient = getFrontend().endsWith('mobile') || (this.plugin && this.plugin.isInMobileApp);
         // 唯一 ID，用于标记由本面板发出的全局事件，避免自身响应
         this.panelId = `ReminderPanel_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -228,6 +240,7 @@ export class ReminderPanel {
                 await this.refreshReminderSkipDateContext();
                 try {
                     const settings = await this.plugin.loadSettings();
+                    this.viewMode = normalizePanelViewMode(settings.reminderPanelViewMode);
                     const groupMode = normalizeReminderGroupMode(settings.reminderPanelGroupBy);
                     if (groupMode !== this.reminderGroupMode) {
                         this.reminderGroupMode = groupMode;
@@ -264,6 +277,7 @@ export class ReminderPanel {
         // 加载持久化设置（例如 showCompletedSubtasks）
         try {
             const settings = await this.plugin.loadSettings();
+            this.viewMode = normalizePanelViewMode(settings.reminderPanelViewMode);
             if (this.disposed) return;
             if (settings.showCompletedSubtasks !== undefined) {
                 this.showCompletedSubtasks = !!settings.showCompletedSubtasks;
@@ -321,6 +335,44 @@ export class ReminderPanel {
         window.addEventListener('sortConfigUpdated', this.sortConfigUpdatedHandler);
         window.addEventListener('projectUpdated', this.projectUpdatedHandler);
         window.addEventListener('reminderSettingsUpdated', this.settingsUpdatedHandler);
+        this.plugin?.eventBus?.on('before-show-tooltip', this.miniTaskTooltipHandler);
+        this.container.addEventListener('click', this.miniTaskTouchClickHandler, true);
+    }
+
+    private handleMiniTaskTooltip(event: CustomEvent) {
+        const target = event.detail?.target as HTMLElement | undefined;
+        if (this.disposed || this.viewMode !== 'mini' || !target || !this.container.contains(target)) return;
+        if (!target.matches('.reminder-item--mini, .reminder-item__title, .reminder-item__time')) return;
+        const row = target.closest<HTMLElement>('.reminder-item--mini');
+        if (row?.dataset.miniTaskTooltip) event.detail.message = row.dataset.miniTaskTooltip;
+    }
+
+    private handleMiniTaskTouchClick(event: MouseEvent) {
+        if (this.disposed || this.viewMode !== 'mini' || !this.isMobileClient || this.selectionOptions) return;
+        const target = event.target instanceof Element ? event.target : (event.target as Node | null)?.parentElement;
+        if (!target) return;
+        const row = target.closest<HTMLElement>('.reminder-item--mini');
+        if (!row || !this.container.contains(row)) return;
+        if (this.isMultiSelectMode || event.ctrlKey || event.metaKey || event.shiftKey
+            || target.closest('button, input, textarea, select, a, [contenteditable="true"], .reminder-item__time')) {
+            this.miniTaskTouchTooltipClose?.();
+            return;
+        }
+        if (!row.dataset.miniTaskTooltip) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (this.miniTaskTouchTooltipAnchor === row) {
+            this.miniTaskTouchTooltipClose?.();
+            return;
+        }
+        this.miniTaskTouchTooltipClose?.();
+        this.miniTaskTouchTooltipAnchor = row;
+        this.miniTaskTouchTooltipClose = showMiniTaskTouchTooltip(row, row.dataset.miniTaskTooltip, () => {
+            if (this.miniTaskTouchTooltipAnchor === row) {
+                this.miniTaskTouchTooltipAnchor = undefined;
+                this.miniTaskTouchTooltipClose = undefined;
+            }
+        });
     }
 
     private async savePanelSettings(partialSettings: Record<string, any>): Promise<void> {
@@ -355,6 +407,9 @@ export class ReminderPanel {
     public destroy() {
         if (this.disposed) return;
         this.disposed = true;
+        this.miniTaskTouchTooltipClose?.();
+        this.container.removeEventListener('click', this.miniTaskTouchClickHandler, true);
+        this.plugin?.eventBus?.off('before-show-tooltip', this.miniTaskTooltipHandler);
         this.reminderLoadVersion++;
         this.pendingReminderLoad = false;
         this.pendingReminderForceLoad = false;
@@ -455,6 +510,7 @@ export class ReminderPanel {
 
     private initUI() {
         this.container.classList.add('reminder-panel');
+        this.container.dataset.viewMode = this.viewMode;
         this.container.innerHTML = '';
 
         // 注入拖拽时的全局样式（确保 drag 状态下透明度生效）
@@ -646,6 +702,7 @@ export class ReminderPanel {
             this.showMoreMenu(e);
         });
         actionContainer.appendChild(moreBtn);
+        if (this.selectionOptions) actionContainer.replaceChildren(this.sortButton, moreBtn);
 
         // 标题单独一行
         header.appendChild(titleContainer);
@@ -779,7 +836,7 @@ export class ReminderPanel {
         this.container.appendChild(this.remindersContainer);
 
         // 为容器添加拖拽事件，支持拖动到空白区域移除父子关系
-        this.addContainerDragEvents();
+        if (!this.selectionOptions) this.addContainerDragEvents();
 
         // 渲染分类过滤器
         this.updateCategoryFilterButtonText();
@@ -1705,6 +1762,7 @@ export class ReminderPanel {
      * @param docId 文档ID
      */
     private async addDocumentTitle(container: HTMLElement, docId: string) {
+        if (this.viewMode === 'mini') return;
         try {
             // 如果容器已经有文档标题，避免重复插入
             if (container.querySelector('.reminder-item__doc-title')) return;
@@ -3218,6 +3276,7 @@ export class ReminderPanel {
             today, tab: this.currentTab,
             multiSelect: this.isMultiSelectMode,
             clipTitle: this.clipTitleToOneLine,
+            viewMode: this.viewMode,
             showCompletedSubtasks: this.showCompletedSubtasks,
             showProjectKanbanStatus: this.showProjectKanbanStatus,
             showDocumentTitle: this.isTaskCardDocumentTitleEnabled(),
@@ -3293,6 +3352,7 @@ export class ReminderPanel {
             Object.assign(state.reminder, reminder);
         }
         const title = reminder.title || '';
+        const tooltipChanged = state.title !== title || state.note !== (reminder.note || '');
         if (state.title !== title) {
             const titleEl = element.querySelector('.reminder-item__title');
             if (titleEl) {
@@ -3307,7 +3367,7 @@ export class ReminderPanel {
         if (state.note !== note) {
             const currentNote = element.querySelector<HTMLElement>('.reminder-item__note');
             const updatedNote = TaskRenderer.createNoteElement(state.reminder, {
-                plugin: this.plugin, today: getLogicalDateString(), lute: this.lute,
+                plugin: this.plugin, today: getLogicalDateString(), lute: this.lute, viewMode: this.viewMode,
             }, state.onNoteClick);
             if (currentNote && updatedNote) {
                 currentNote.replaceChildren(...Array.from(updatedNote.childNodes));
@@ -3324,6 +3384,7 @@ export class ReminderPanel {
             }
             state.note = note;
         }
+        if (tooltipChanged && state.tooltipContext) TaskRenderer.updateMiniTaskTooltip(element, state.reminder, state.tooltipContext);
     }
 
     private createReminderElementOptimized(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number = 0, allVisibleReminders: any[] = [], indexes?: ReminderRenderIndexes): HTMLElement {
@@ -3338,6 +3399,8 @@ export class ReminderPanel {
         }
         const context = {
             plugin: this.plugin,
+            viewMode: this.viewMode,
+            selectionMode: !!this.selectionOptions,
             today: today,
             collapsedTasks: this.collapsedTasks,
             selectedTaskIds: this.selectedReminderIds,
@@ -3612,10 +3675,13 @@ export class ReminderPanel {
 
         // 回调使用独立对象，局部同步时不会把实例等显示字段写入原始存储数据。
         const renderedReminder = { ...reminder };
-        const element = TaskRenderer.render(renderedReminder, context, callbacks, level, allVisibleReminders);
+        const renderCallbacks = this.selectionOptions ? { onCollapseClick: callbacks.onCollapseClick } : callbacks;
+        const element = TaskRenderer.render(renderedReminder, context, renderCallbacks, level, allVisibleReminders);
+        if (this.selectionOptions) this.configureTaskSelection(element, renderedReminder);
         this.reminderElementStates.set(element, {
             reminder: renderedReminder, signature, title: reminder.title || '', note: reminder.note || '',
             onNoteClick: callbacks.onNoteClick,
+            tooltipContext: this.viewMode === 'mini' ? context : undefined,
         });
         if (this.reminderGroupMode !== 'none') {
             const visible = indexes?.visible.byId || new Map(allVisibleReminders.map(task => [task.id, task]));
@@ -3641,10 +3707,43 @@ export class ReminderPanel {
         return element;
     }
 
-    /**
-     * 获取按深度优先（DFS）遍历的可见任务 ID 序列
-     * 逻辑与 renderRemindersIteratively 保持一致，用于确定乐观插入时的 DOM 位置
-     */
+    /** 复用任务卡片显示和折叠，只将点击操作替换为选择任务。 */
+    private configureTaskSelection(element: HTMLElement, task: any): void {
+        element.draggable = false;
+        element.tabIndex = 0;
+        element.setAttribute('role', 'button');
+        element.setAttribute('aria-label', task.title || i18n('untitledTask'));
+        const select = (event: Event) => {
+            if ((event.target as Element)?.closest?.('.collapse-btn')) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            void this.selectTask(task, element);
+        };
+        element.addEventListener('click', select, true);
+        element.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') select(event);
+        }, true);
+        element.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }, true);
+    }
+
+    private async selectTask(task: any, element: HTMLElement): Promise<void> {
+        if (this.disposed || this.selectingTask || !this.selectionOptions) return;
+        this.selectingTask = true;
+        element.setAttribute('aria-busy', 'true');
+        try {
+            await this.selectionOptions.onSelectTask(task);
+        } catch (error) {
+            console.error('Failed to select task:', error);
+            if (!this.disposed) showMessage(i18n('operationFailed'), 3000, 'error');
+        } finally {
+            this.selectingTask = false;
+            element.removeAttribute('aria-busy');
+        }
+    }
+
     private formatPomodoroMinutes(minutes: number): string {
         const hours = Math.floor(minutes / 60);
         const mins = Math.floor(minutes % 60);
@@ -3734,6 +3833,15 @@ export class ReminderPanel {
     }
 
     private upsertPomodoroDisplay(reminderEl: HTMLElement, reminder: any, cachedData: any): void {
+        if (this.viewMode === 'mini') {
+            const state = this.reminderElementStates.get(reminderEl);
+            if (state?.tooltipContext) {
+                const cache = state.tooltipContext.projectCache;
+                cache?.set(reminder.id, { ...cache.get(reminder.id), ...cachedData });
+                TaskRenderer.updateMiniTaskTooltip(reminderEl, state.reminder, state.tooltipContext);
+            }
+            return;
+        }
         const infoEl = reminderEl.querySelector('.reminder-item__info') as HTMLElement | null;
         if (!infoEl) {
             return;
@@ -4977,6 +5085,8 @@ export class ReminderPanel {
     }
 
     private renderReminders(reminderData: any) {
+        this.miniTaskTouchTooltipClose?.();
+        this.container.dataset.viewMode = this.viewMode;
         // 先移除旧的分页控件
         const existingControls = this.container.querySelector('.reminder-pagination-controls');
         if (existingControls) {
@@ -5656,7 +5766,7 @@ export class ReminderPanel {
         if (completed) {
             el.classList.add('reminder-completed');
             el.style.setProperty('opacity', '0.5', 'important');
-            if (infoEl) {
+            if (infoEl && this.viewMode !== 'mini') {
                 const timeText = completedTime || getLocalDateTimeString(new Date());
                 infoEl.appendChild(createTaskCompletedTimeElement(timeText));
             }
@@ -5665,6 +5775,8 @@ export class ReminderPanel {
             el.style.removeProperty('opacity');
             el.style.opacity = '';
         }
+        const state = this.reminderElementStates.get(el);
+        if (state?.tooltipContext) TaskRenderer.updateMiniTaskTooltip(el, { ...state.reminder, completed, completedTime }, state.tooltipContext);
     }
 
     private applyOptimisticCompletionForIds(reminderIds: string[], completed: boolean, completedTime?: string): void {
@@ -5947,7 +6059,7 @@ export class ReminderPanel {
         let result = '';
 
         // 处理跨天事件
-        if (endDate && endDate !== date) {
+        if (this.viewMode !== 'mini' && endDate && endDate !== date) {
             let endDateStr = '';
             if (logicalEnd === today) {
                 endDateStr = i18n("today");
@@ -5971,7 +6083,7 @@ export class ReminderPanel {
             const startTimeStr = time ? ` ${time}` : '';
             const endTimeStr = endTime ? ` ${endTime}` : '';
             result = `${dateStr}${startTimeStr} → ${endDateStr}${endTimeStr}`;
-        } else if (endTime && endTime !== time) {
+        } else if (this.viewMode !== 'mini' && endTime && endTime !== time) {
             // 当天时间段：显示开始时间 - 结束时间
             const startTimeStr = time || '';
             result = `${dateStr} ${startTimeStr} - ${endTime}`;
@@ -10029,6 +10141,16 @@ export class ReminderPanel {
      * 局部更新指定父任务的进度条
      */
     private updateParentProgressBar(parentId: string) {
+        if (this.viewMode === 'mini') {
+            const element = this.remindersContainer.querySelector<HTMLElement>(`[data-reminder-id="${parentId}"]`);
+            const state = element && this.reminderElementStates.get(element);
+            if (state?.tooltipContext) {
+                state.tooltipContext.allTasks = Array.from(this.allRemindersMap.values());
+                state.tooltipContext.taskHierarchy = new TaskHierarchyIndex(state.tooltipContext.allTasks);
+                TaskRenderer.updateMiniTaskTooltip(element, state.reminder, state.tooltipContext);
+            }
+            return;
+        }
         try {
             const parentEl = this.remindersContainer.querySelector(`[data-reminder-id="${parentId}"]`) as HTMLElement | null;
             if (!parentEl) return;
@@ -10282,7 +10404,7 @@ export class ReminderPanel {
                     const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;
                     if (el) {
                         const infoEl = el.querySelector('.reminder-item__info') as HTMLElement | null;
-                        if (infoEl) {
+                        if (infoEl && this.viewMode !== 'mini') {
                             // 移除现有的分类标签
                             const existingCategoryTag = infoEl.querySelector('.reminder-item__category');
                             if (existingCategoryTag) {
@@ -11665,6 +11787,13 @@ export class ReminderPanel {
                 icon: 'iconEye',
                 label: i18n("displaySettings") || "显示设置",
                 submenu: [
+                    createPanelViewMenu(this.viewMode, async mode => {
+                        if (mode === this.viewMode) return;
+                        this.viewMode = mode;
+                        this.container.dataset.viewMode = mode;
+                        await this.savePanelSettings({ reminderPanelViewMode: mode });
+                        if (!this.disposed) await this.loadReminders(true);
+                    }),
                     {
                         icon: this.showProjectKanbanStatus ? 'iconSelect' : '',
                         label: i18n("showProjectKanbanStatus") || "显示项目看板状态",
@@ -11713,7 +11842,7 @@ export class ReminderPanel {
             });
 
             // 多选模式
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: this.isMultiSelectMode ? 'iconClose' : 'iconCheck',
                 label: this.isMultiSelectMode
                     ? (i18n('exitBatchSelect') || '退出多选')
@@ -11728,7 +11857,7 @@ export class ReminderPanel {
             });
 
             // 添加粘贴新建任务
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: 'iconTNPaste',
                 label: i18n("pasteCreateTask") || "粘贴新建任务",
                 click: () => {
@@ -11746,7 +11875,7 @@ export class ReminderPanel {
             });
 
             // 添加分类管理
-            menu.addItem({
+            if (!this.selectionOptions) menu.addItem({
                 icon: 'iconTags',
                 label: i18n("manageCategories"),
                 click: () => this.showCategoryManageDialog()

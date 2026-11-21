@@ -1,0 +1,431 @@
+// Keep compact density local to the two sidebars; other TaskRenderer consumers stay unchanged.
+.reminder-panel[data-view-mode='mini'],
+.habit-panel[data-view-mode='mini'] {
+    .reminder-section-header {
+        min-height: 26px;
+        box-sizing: border-box;
+        padding: 4px;
+        margin: 4px 0 2px;
+    }
+}
+
+.reminder-panel[data-view-mode='mini'] {
+    .reminder-item--mini {
+        box-sizing: border-box;
+        min-height: 36px;
+        margin-bottom: 2px;
+        padding: 2px 4px;
+        border-radius: 4px;
+    }
+
+    .reminder-item--mini .reminder-item__content {
+        min-height: 30px;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .reminder-item--mini .reminder-item__left-controls {
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        padding: 0;
+    }
+
+    .reminder-item--mini .reminder-task-checkbox {
+        box-sizing: border-box;
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        border-width: 1px;
+        transform: none;
+    }
+
+    .reminder-item--mini .collapse-btn {
+        order: 0;
+        flex: 0 0 28px;
+        min-width: 28px !important;
+        width: 28px !important;
+        height: 30px !important;
+    }
+
+    .reminder-item--mini .reminder-item__info {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .reminder-item--mini .reminder-item__title-container,
+    .reminder-item--mini .reminder-item__title-row {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .reminder-item--mini .reminder-item__title {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        line-height: 20px;
+    }
+
+    .reminder-item--mini .reminder-item__time-container {
+        min-width: 0;
+        flex: 0 1 auto;
+        max-width: 90px;
+    }
+
+    .reminder-item--mini .reminder-item__time {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        line-height: 20px;
+    }
+
+    .reminder-item--mini .reminder-item__time-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .reminder-item--mini .reminder-item__reminder-indicator {
+        display: inline-flex;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .reminder-item--mini .reminder-repeat-icon,
+    .reminder-item--mini .reminder-item__pin-badge,
+    .reminder-item--mini .reminder-item__url-icon {
+        flex-shrink: 0;
+    }
+
+    .reminder-item--mini .reminder-item__pin-badge {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .reminder-item--mini .reminder-item__more-button {
+        top: 50%;
+        right: 1px;
+        transform: translateY(-50%);
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+}
+
+.habit-panel[data-view-mode='mini'] {
+    container: habit-mini / inline-size;
+
+    .habit-group {
+        margin-bottom: 4px;
+        animation: none;
+    }
+
+    .habit-mini-layout {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        align-items: center;
+        gap: 4px;
+        padding: 2px 4px;
+    }
+
+    .habit-mini-layout--week {
+        --habit-mini-day-width: 20px;
+        --habit-mini-day-gap: 1px;
+        grid-template-columns: 24px minmax(0, 1fr) calc(7 * var(--habit-mini-day-width) + 6 * var(--habit-mini-day-gap));
+    }
+
+    .habit-mini {
+        box-sizing: border-box;
+        min-height: 34px;
+        margin-bottom: 0;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        box-shadow: inset 0 0 0 1px transparent;
+        transition: box-shadow 0.15s;
+        overflow: visible;
+
+        &:hover,
+        &:active {
+            transform: none;
+            box-shadow: inset 0 0 0 1px var(--b3-border-color);
+            background: transparent;
+        }
+    }
+
+    .habit-mini__title,
+    .habit-mini__group-title .reminder-section-header__title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .habit-mini__title {
+        color: var(--b3-theme-on-background);
+        text-decoration: none;
+        line-height: 20px;
+    }
+
+    a.habit-mini__title {
+        color: var(--b3-protyle-inline-blockref-color);
+        text-decoration: underline dotted;
+    }
+
+    .habit-mini__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        width: 24px;
+        height: 30px;
+        padding: 0;
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 14px;
+        font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+        line-height: 1;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--b3-theme-surface-light);
+        }
+
+        svg {
+            width: 14px;
+            height: 14px;
+        }
+    }
+
+    .habit-mini__group-title {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 4px;
+    }
+
+    .habit-mini__group-title .reminder-section-header__count {
+        margin-left: 0;
+    }
+
+    .habit-mini__week-labels,
+    .habit-mini .habit-card__week-days {
+        display: grid;
+        grid-template-columns: repeat(7, var(--habit-mini-day-width));
+        gap: var(--habit-mini-day-gap);
+        text-align: center;
+    }
+
+    .habit-mini__week-labels {
+        font-size: 11px;
+        color: var(--b3-theme-on-surface-light);
+    }
+
+    .habit-mini__date--today {
+        color: var(--b3-theme-primary);
+        font-weight: 600;
+    }
+
+    .habit-mini__group-header .reminder-section-header__arrow {
+        justify-self: center;
+    }
+
+    .habit-mini__group-header[data-collapsed='true'] .habit-mini__week-labels {
+        visibility: hidden;
+    }
+
+    .habit-mini .habit-card__week {
+        margin: 0;
+        min-width: 0;
+    }
+
+    .habit-mini .habit-card__week-day {
+        position: relative;
+        box-sizing: border-box;
+        width: var(--habit-mini-day-width);
+        min-height: 30px;
+        height: 30px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        font-size: 12px;
+        line-height: 1;
+    }
+
+    .habit-mini .habit-mini__ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: var(--habit-mini-day-width);
+        height: var(--habit-mini-day-width);
+        fill: none;
+        pointer-events: none;
+    }
+
+    .habit-mini__ring-track {
+        stroke: var(--b3-border-color);
+        stroke-width: 1.5;
+    }
+
+    .habit-mini__ring-progress {
+        stroke: var(--habit-color);
+        stroke-width: 2;
+        stroke-linecap: round;
+    }
+
+    .habit-mini__ring-fill {
+        fill: transparent;
+        stroke: none;
+        transition: fill 0.15s;
+    }
+
+    .habit-mini__day--recorded .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 12%, transparent);
+    }
+
+    .habit-mini .habit-mini__day--recorded {
+        opacity: 1;
+    }
+
+    .habit-card__week-day--done .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 20%, transparent);
+    }
+
+    .habit-mini__ring-center {
+        fill: none;
+        stroke: var(--b3-theme-on-surface-light);
+        stroke-width: 1.1;
+        stroke-linecap: round;
+    }
+
+    .habit-mini__ring-glyph {
+        fill: currentColor;
+        stroke: none;
+    }
+
+    .habit-mini__day--partial .habit-mini__day-icon,
+    .habit-mini__day--partial .habit-mini__ring-center {
+        opacity: 0.4;
+    }
+
+    .habit-card__week-day--not-required .habit-mini__ring-track {
+        stroke-dasharray: 2 3;
+    }
+
+    .habit-mini .habit-card__week-day:hover .habit-mini__ring-fill,
+    .habit-mini .habit-card__week-day:focus-visible .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 8%, transparent);
+    }
+
+    .habit-mini .habit-mini__day--recorded:hover .habit-mini__ring-fill,
+    .habit-mini .habit-mini__day--recorded:focus-visible .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 20%, transparent);
+    }
+
+    .habit-mini .habit-card__week-day--done:hover .habit-mini__ring-fill,
+    .habit-mini .habit-card__week-day--done:focus-visible .habit-mini__ring-fill {
+        fill: color-mix(in srgb, var(--habit-color) 28%, transparent);
+    }
+
+}
+
+@container habit-mini (min-width: 300px) {
+    .habit-panel[data-view-mode='mini'] .habit-mini-layout--week {
+        --habit-mini-day-width: 26px;
+        --habit-mini-day-gap: 2px;
+    }
+}
+
+@container habit-mini (min-width: 360px) {
+    .habit-panel[data-view-mode='mini'] .habit-mini-layout--week {
+        --habit-mini-day-width: 30px;
+    }
+}
+
+// The host tooltip is a body-level surface, outside the sidebar's DOM tree.
+.tooltip .task-mini-tooltip,
+.task-mini-touch-tooltip .task-mini-tooltip {
+    width: min(340px, calc(100vw - 32px));
+    max-width: 100%;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+
+    &__title {
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    &__row {
+        display: grid;
+        grid-template-columns: 80px minmax(0, 1fr);
+        gap: 8px;
+        margin-top: 3px;
+
+        > span:first-child {
+            opacity: 0.7;
+        }
+    }
+
+    &__note {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid var(--b3-border-color);
+        white-space: pre-wrap;
+        display: -webkit-box;
+        -webkit-line-clamp: 8;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+}
+
+.task-mini-touch-tooltip {
+    position: fixed;
+    z-index: 1000000;
+    box-sizing: border-box;
+    width: min(360px, calc(100vw - 24px));
+    max-height: calc(100dvh - 24px);
+    overflow: auto;
+    padding: 12px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: 8px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    box-shadow: 0 4px 20px #0003;
+    font-size: 13px;
+
+    .task-mini-tooltip__title {
+        padding-right: 26px;
+    }
+
+    .task-mini-tooltip__note {
+        display: block;
+    }
+
+    &__close {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 30px;
+        height: 30px;
+        padding: 6px;
+
+        svg {
+            width: 16px;
+            height: 16px;
+        }
+    }
+}

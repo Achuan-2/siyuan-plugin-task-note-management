@@ -295,7 +295,7 @@ export function isHabitCheckInDayComplete(
     return getHabitSuccessfulCheckInCount(habit, date) >= Math.max(1, Number(habit.target) || 1);
 }
 
-function getHabitSuccessfulCheckInCount(habit: Habit, date: string): number {
+export function getHabitSuccessfulCheckInCount(habit: Habit, date: string): number {
     const checkIn = habit?.checkIns?.[date];
     if (!checkIn) return 0;
 
