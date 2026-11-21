@@ -829,7 +829,7 @@ export class SubtasksDialog {
         const dialog = new SortMenuDialog({
             plugin: this.plugin,
             currentCriteria: this.getActiveSortCriteria(),
-            allowManualOrder: true,
+            allowEmptyCriteria: true,
             onSave: criteria => this.applySortCriteria(criteria),
             onChange: criteria => this.applySortCriteria(criteria),
         });
@@ -857,8 +857,9 @@ export class SubtasksDialog {
         const sortBtn = this.getRootElement().querySelector('#sortBtn') as HTMLButtonElement;
         if (sortBtn) {
             sortBtn.classList.add('ariaLabel');
-            const sortText = this.getActiveSortCriteria().map(getSortCriterionName).join('<br>') || i18n('manual');
-            sortBtn.setAttribute('aria-label', `${i18n("sortBy") || "排序"}:<br>${sortText}`);
+            const sortLabel = i18n('sortBy') || '排序';
+            const sortText = this.getActiveSortCriteria().map(getSortCriterionName).join('<br>');
+            sortBtn.setAttribute('aria-label', sortText ? `${sortLabel}:<br>${sortText}` : sortLabel);
         }
     }
 

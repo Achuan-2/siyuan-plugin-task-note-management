@@ -10,7 +10,7 @@ export interface SortMenuDialogOptions {
     onSave: (criteria: SortCriterion[]) => void;
     onChange?: (criteria: SortCriterion[]) => void; // 实时变更回调
     availableMethods?: Array<{ key: string; label: () => string; icon: string }>;
-    allowManualOrder?: boolean;
+    allowEmptyCriteria?: boolean;
     grouping?: {
         value: string;
         options: Array<{ key: string; label: string }>;
@@ -181,27 +181,28 @@ export class SortMenuDialog {
                 this.toggleOrder(index);
             });
 
-            // 删除按钮
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'b3-button b3-button--text';
-            removeBtn.innerHTML = '✕';
-            removeBtn.classList.add('ariaLabel'); removeBtn.setAttribute('aria-label', i18n("remove") || "移除");
-            removeBtn.style.cssText = 'padding: 4px 8px; color: var(--b3-theme-error);';
-            removeBtn.addEventListener('click', () => {
-                this.removeCriterion(index);
-            });
-
             item.appendChild(dragHandle);
             item.appendChild(orderNum);
             item.appendChild(name);
             item.appendChild(orderBtn);
-            item.appendChild(removeBtn);
+            item.appendChild(this.createRemoveButton(index));
 
             // 拖拽事件
             this.bindDragEvents(item, index);
 
             container.appendChild(item);
         });
+    }
+
+    private createRemoveButton(index: number): HTMLButtonElement {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'b3-button b3-button--text ariaLabel';
+        button.textContent = '✕';
+        button.setAttribute('aria-label', i18n('remove') || '移除');
+        button.style.cssText = 'padding: 4px 8px; color: var(--b3-theme-error);';
+        button.addEventListener('click', () => this.removeCriterion(index));
+        return button;
     }
 
     private renderCurrentSingleItem() {
@@ -237,6 +238,7 @@ export class SortMenuDialog {
 
             container.appendChild(name);
             container.appendChild(orderBtn);
+            if (this.options.allowEmptyCriteria) container.appendChild(this.createRemoveButton(0));
         } else {
             (wrapper as HTMLElement).style.display = 'none';
         }
@@ -257,23 +259,6 @@ export class SortMenuDialog {
 
         // 获取已选择的方法
         const selectedMethods = new Set(this.selectedCriteria.map(c => c.method));
-
-        if (this.options.allowManualOrder) {
-            const manual = document.createElement('button');
-            const selected = this.selectedCriteria.length === 0;
-            manual.type = 'button';
-            manual.className = `b3-button ${selected ? 'b3-button--primary' : 'b3-button--outline'}`;
-            manual.style.cssText = 'justify-content: flex-start; padding: 10px 12px;';
-            manual.textContent = i18n('manual');
-            manual.setAttribute('aria-pressed', String(selected));
-            manual.addEventListener('click', () => {
-                if (selected) return;
-                this.selectedCriteria = [];
-                this.updateModeUI();
-                this.notifyChange();
-            });
-            container.appendChild(manual);
-        }
 
         this.availableMethods.forEach(method => {
             const isSelected = selectedMethods.has(method.key);
@@ -326,7 +311,7 @@ export class SortMenuDialog {
 
     // 通知外部变更（实时更新）
     private notifyChange() {
-        if (this.selectedCriteria.length > 0 || this.options.allowManualOrder) {
+        if (this.selectedCriteria.length > 0 || this.options.allowEmptyCriteria) {
             this.options.onChange?.(this.selectedCriteria);
         }
     }
@@ -439,6 +424,7 @@ export class SortMenuDialog {
     private removeCriterion(index: number) {
         this.selectedCriteria.splice(index, 1);
         this.renderSelectedList();
+        this.renderCurrentSingleItem();
         this.renderAvailableOptions();
         this.notifyChange();
     }
