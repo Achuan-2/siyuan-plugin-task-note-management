@@ -141,7 +141,7 @@ test('写入尚未完成时保持弹窗、不回调，连按确认也只提交�
 
 test('保存父任务会等待列表中的子任务标题提交，失败时保留弹窗', async () => {
     const f = fixture(), gate = deferred();
-    f.dialog.subtasksDialog = { finishInlineTitle: () => gate.promise };
+    f.dialog.subtasksDialog = { finishPendingChanges: () => gate.promise };
     const pending = [f.dialog.saveReminder(), f.dialog.saveReminder()];
     await drain();
     assert.equal(f.state.writes.length, 0);
@@ -152,7 +152,7 @@ test('保存父任务会等待列表中的子任务标题提交，失败时保�
     assert.equal(f.state.data.child.title, '行内改名');
 
     const failed = fixture();
-    failed.dialog.subtasksDialog = { finishInlineTitle: async () => false };
+    failed.dialog.subtasksDialog = { finishPendingChanges: async () => false };
     await failed.dialog.saveReminder();
     assert.equal(failed.state.writes.length, 0);
     assert.equal(failed.state.closed, false);

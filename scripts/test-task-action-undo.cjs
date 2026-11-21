@@ -571,7 +571,7 @@ test('子任务右键和更多按钮打开思源菜单，只读时仅保留查�
         startInlineSubtask: id => actions.push(['create', id]),
         editSubtask: task => actions.push(['edit', task.id]),
         deleteSubtask: id => actions.push(['delete', id]),
-        finishInlineTitle: async () => true,
+        finishPendingChanges: async () => true,
     });
     const row = { getBoundingClientRect: () => ({ right: 100, bottom: 60 }) };
     view.showSubtaskActionMenu({ id: 'first', blockId: 'block' }, row, { type: 'contextmenu', clientX: 20, clientY: 40 });
@@ -655,6 +655,92 @@ test('行内新建保留重复实例的父子关系，改名只更新对应实�
     assert.equal(f.state.data.child.title, '模板标题');
     assert.equal(f.state.data.child.repeat.instances[date].title, '只改当前实例');
     assert.equal(f.state.data.child.repeat.instances[date].note, '备注');
+});
+
+function subtaskDropFixture(initial) {
+    const f = fixture(initial);
+    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
+        'getSubtaskDropPosition', 'canNestSubtaskDrop', 'wouldCreateSubtaskCycle', 'nestSubtask',
+        'getVisibleSubtaskEntries', 'parseInstanceParentId', 'getReminderSortValue', 'finishPendingChanges',
+        'setupSubtaskDragAndDrop', 'applySubtaskDrop', 'showSubtaskDropIndicator', 'hideSubtaskDropIndicator',
+    ]);
+    Object.assign(view, {
+        parentId: 'root', subtasks: Object.values(clone(initial)), collapsedSubtaskIds: new Set(),
+        renderSubtasks() {}, loadSubtasks: async () => {},
+        compareSubtasks: (a, b) => a.sort - b.sort,
+        canSortSubtaskDrop: (a, b) => a.parentId === b.parentId,
+        finishInlineTitle() {},
+    });
+    return { ...f, view };
+}
+
+test('中间落点嵌套临时子任务并带上原有后代，上下边缘继续排序', async () => {
+    const f = subtaskDropFixture({
+        a: { id: 'a', parentId: '__TEMP_PARENT__', sort: 10 },
+        b: { id: 'b', parentId: '__TEMP_PARENT__', sort: 20 },
+        child: { id: 'child', parentId: 'a', sort: 10 },
+    });
+    const [a, b, child] = f.view.subtasks;
+    const row = { getBoundingClientRect: () => ({ top: 100, height: 40 }) };
+    const dropAt = (y, target = b) => f.view.getSubtaskDropPosition(row, { clientY: y }, a, target);
+    f.view.isTempMode = true;
+    assert.equal(dropAt(102), 'before');
+    assert.equal(dropAt(138), 'after');
+    assert.equal(dropAt(120), 'inside');
+    assert.equal(dropAt(120, child), undefined);
+    assert.equal(dropAt(120, a), undefined);
+    f.view.canSortSubtaskDrop = () => false;
+    assert.equal(dropAt(102), undefined);
+    assert.equal(dropAt(120), 'inside');
+
+    let temporary;
+    f.view.onTempSubtasksUpdate = tasks => { temporary = tasks; };
+    f.view.collapsedSubtaskIds.add('b');
+    const card = () => Object.assign(element('div'), row, {
+        style: {}, dataset: {}, classList: { add() {} },
+        removeAttribute() { delete this.dataset.subtaskDrop; },
+    });
+    const source = card(), target = card();
+    f.view.setupSubtaskDragAndDrop(source, a);
+    f.view.setupSubtaskDragAndDrop(target, b);
+    const event = { clientY: 120, preventDefault() {}, stopPropagation() {} };
+    source.listeners.dragstart(event);
+    target.listeners.dragover(event);
+    assert.equal(target.dataset.subtaskDrop, 'inside');
+    const drop = target.listeners.drop(event);
+    assert.ok(f.view.finishPendingChanges());
+    await drop;
+    assert.equal(target.dataset.subtaskDrop, undefined);
+    assert.equal(f.view.finishPendingChanges(), undefined);
+    assert.equal(temporary.find(task => task.id === 'a').parentId, 'b');
+    assert.equal(f.state.writes, 0);
+    const rows = () => f.view.getVisibleSubtaskEntries().map(({ task, level }) => [task.id, level]);
+    assert.deepEqual(rows(), [['b', 0], ['a', 1], ['child', 2]]);
+    f.view.collapsedSubtaskIds.add('b');
+    assert.deepEqual(rows(), [['b', 0]]);
+});
+
+test('保存嵌套时读取最新数据并重新检查循环，按目标实例保存独立子任务', async () => {
+    const f = subtaskDropFixture({
+        a: { id: 'a', parentId: 'root_2026-11-21', sort: 10, projectId: 'a-project' },
+        b: { id: 'b', parentId: 'root', sort: 20, projectId: 'b-project' },
+        sibling: { id: 'sibling', parentId: 'b_2026-11-21', sort: 50 },
+    });
+    const a = f.view.subtasks[0];
+    const b = { ...f.view.subtasks[1], id: 'b_2026-11-21', originalId: 'b', isRepeatInstance: true, parentId: 'root_2026-11-21' };
+    f.view.subtasks[1] = b;
+    assert.equal(f.view.canNestSubtaskDrop(b, a), false);
+    f.state.data.b.parentId = 'a';
+    await assert.rejects(f.view.nestSubtask('a', b.id), /Circular/);
+    assert.equal(f.state.writes, 0);
+    f.state.data.b.parentId = 'root';
+    await f.view.nestSubtask('a', b.id);
+    assert.deepEqual(f.state.localReads, [true, true]);
+    assert.equal(f.state.data.a.parentId, b.id);
+    assert.equal(f.state.data.a.sort, 60);
+    assert.equal(f.state.data.a.projectId, 'a-project');
+    assert.equal(f.state.data.b.parentId, 'root');
+    assert.equal(f.state.events.at(-1).type, 'reminderUpdated');
 });
 
 test('文档任务和子任务弹窗响应撤回，关闭后移除刷新监听', async () => {

@@ -2711,6 +2711,34 @@
             border-width: 0 0 1px;
             border-radius: 0;
             padding-block: 8px;
+
+            &[data-subtask-drop]::after {
+                content: '';
+                position: absolute;
+                inset-inline: 0;
+                z-index: 3;
+                pointer-events: none;
+            }
+
+            &[data-subtask-drop='before']::after,
+            &[data-subtask-drop='after']::after {
+                height: 2px;
+                background: var(--b3-theme-primary);
+            }
+
+            &[data-subtask-drop='before']::after {
+                top: 0;
+            }
+
+            &[data-subtask-drop='after']::after {
+                bottom: 0;
+            }
+
+            &[data-subtask-drop='inside']::after {
+                inset-block: 0;
+                border: 2px dashed var(--b3-theme-primary);
+                border-radius: var(--b3-border-radius);
+            }
         }
     }
 

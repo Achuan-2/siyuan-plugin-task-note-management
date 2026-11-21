@@ -7144,10 +7144,10 @@ export class QuickReminderDialog {
         // 项目关联的分组、状态尚未就绪时不读取半填充表单（含快捷键保存）。
         if (this.projectChangeQueue) return;
 
-        const inlineSave = this.subtasksDialog?.finishInlineTitle();
-        if (inlineSave) {
+        const subtaskSave = this.subtasksDialog?.finishPendingChanges();
+        if (subtaskSave) {
             const dialog = this.dialog;
-            if (!await inlineSave || this.dialog !== dialog || this.isSaving || this.isDeletingTask || this.projectChangeQueue) return;
+            if (!await subtaskSave || this.dialog !== dialog || this.isSaving || this.isDeletingTask || this.projectChangeQueue) return;
         }
 
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;

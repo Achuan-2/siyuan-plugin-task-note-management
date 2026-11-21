@@ -24,6 +24,8 @@ interface InlineSubtaskTitle {
     pending?: Promise<boolean>;
 }
 
+type SubtaskDropPosition = 'before' | 'after' | 'inside';
+
 export class SubtasksDialog {
     private dialog: Dialog;
     private embeddedContainer?: HTMLElement;
@@ -40,6 +42,8 @@ export class SubtasksDialog {
         this.onUpdate?.();
     };
     private draggingId: string | null = null;
+    private subtaskDropTarget?: HTMLElement;
+    private pendingSubtaskDrop?: Promise<boolean>;
     private currentSortCriteria: SortCriterion[] = [{ method: 'time', order: 'asc' }];
     private isTempMode: boolean = false; // 是否为临时模式（新建任务的子任务）
     private tempSubtasks: any[] = []; // 临时子任务列表
@@ -633,15 +637,13 @@ export class SubtasksDialog {
         const entries: Array<{ task: any; level: number }> = [];
         const visited = new Set<string>();
 
-        const visit = (parentId: string, level: number) => {
+        const visit = (parentId: string, level: number, visible = true) => {
             const children = childrenByParent.get(parentId) || [];
             for (const child of children) {
                 if (!child?.id || visited.has(child.id)) continue;
                 visited.add(child.id);
-                entries.push({ task: child, level });
-                if (!this.collapsedSubtaskIds.has(child.id)) {
-                    visit(child.id, level + 1);
-                }
+                if (visible) entries.push({ task: child, level });
+                visit(child.id, level + 1, visible && !this.collapsedSubtaskIds.has(child.id));
             }
         };
 
@@ -690,7 +692,7 @@ export class SubtasksDialog {
         };
         const callbacks: TaskRenderCallbacks = {
             onCheckboxClick: async (task: any, checked: boolean, event: Event) => {
-                if (await this.finishInlineTitle() === false) {
+                if (await this.finishPendingChanges() === false) {
                     (event.target as HTMLInputElement).checked = !checked;
                     return;
                 }
@@ -788,7 +790,7 @@ export class SubtasksDialog {
                 icon: 'iconTrashcan',
                 label: i18n('delete'),
                 click: async () => {
-                    if (await this.finishInlineTitle() !== false) await this.deleteSubtask(task.id);
+                    if (await this.finishPendingChanges() !== false) await this.deleteSubtask(task.id);
                 },
             });
         }
@@ -813,7 +815,7 @@ export class SubtasksDialog {
         });
 
         rootElement.querySelector("#closeSubtasksBtn")?.addEventListener("click", async () => {
-            if (await this.finishInlineTitle() !== false) this.dialog.destroy();
+            if (await this.finishPendingChanges() !== false) this.dialog.destroy();
         });
 
         rootElement.querySelector("#sortBtn")?.addEventListener("click", (e) => {
@@ -868,7 +870,7 @@ export class SubtasksDialog {
         button.addEventListener('dblclick', event => event.stopPropagation());
         button.addEventListener('click', async event => {
             event.stopPropagation();
-            if (await this.finishInlineTitle() === false || !button.isConnected || this.inlineTitle) return;
+            if (await this.finishPendingChanges() === false || !button.isConnected || this.inlineTitle) return;
             this.openInlineTitle(row, this.getRenderedParentId(task), task, button);
         });
         title.replaceWith(button);
@@ -880,7 +882,7 @@ export class SubtasksDialog {
             this.inlineTitle.input.focus();
             return;
         }
-        if (await this.finishInlineTitle() !== false && !this.inlineTitle) this.openSubtaskDraft(parentId);
+        if (await this.finishPendingChanges() !== false && !this.inlineTitle) this.openSubtaskDraft(parentId);
     }
 
     private openSubtaskDraft(parentId: string) {
@@ -942,7 +944,11 @@ export class SubtasksDialog {
         input.setSelectionRange(input.value.length, input.value.length);
     }
 
-    public finishInlineTitle(createNext = false): Promise<boolean> | undefined {
+    public finishPendingChanges(): Promise<boolean> | undefined {
+        return this.pendingSubtaskDrop ?? this.finishInlineTitle();
+    }
+
+    private finishInlineTitle(createNext = false): Promise<boolean> | undefined {
         const editor = this.inlineTitle;
         if (!editor) return;
         return editor.pending ??= this.saveInlineTitle(editor, createNext);
@@ -1068,7 +1074,7 @@ export class SubtasksDialog {
     }
 
     private async editSubtask(task: any) {
-        if (await this.finishInlineTitle() === false) return;
+        if (await this.finishPendingChanges() === false) return;
         const dialog = new QuickReminderDialog(undefined, undefined, async (modifiedReminder) => {
             if (!modifiedReminder) return;
 
@@ -1329,7 +1335,7 @@ export class SubtasksDialog {
     }
 
     private setupSubtaskDragAndDrop(element: HTMLElement, task: any) {
-        if (this.readOnly || this.plugin?.isInMobileApp || this.isDragDisabledBySortMode()) {
+        if (this.readOnly || this.plugin?.isInMobileApp) {
             element.draggable = false;
             element.style.cursor = 'default';
             return;
@@ -1339,6 +1345,10 @@ export class SubtasksDialog {
         element.style.cursor = 'grab';
 
         element.addEventListener('dragstart', (e) => {
+            if (this.pendingSubtaskDrop) {
+                e.preventDefault();
+                return;
+            }
             this.draggingId = task.id;
             element.classList.add('dragging');
             element.style.opacity = '0.5';
@@ -1365,32 +1375,39 @@ export class SubtasksDialog {
 
         element.addEventListener('dragover', (e) => {
             const draggedTask = this.subtasks.find(t => t.id === this.draggingId);
-            if (!draggedTask || !this.canSortSubtaskDrop(draggedTask, task)) {
+            const position = this.getSubtaskDropPosition(element, e, draggedTask, task);
+            if (!position) {
                 this.hideSubtaskDropIndicator();
                 return;
             }
 
             e.preventDefault();
+            e.stopPropagation();
             if (e.dataTransfer) {
                 e.dataTransfer.dropEffect = 'move';
             }
-            this.showSubtaskDropIndicator(element, this.getSubtaskDropPosition(element, e));
+            this.showSubtaskDropIndicator(element, position);
         });
 
         element.addEventListener('drop', async (e) => {
             const draggedTask = this.subtasks.find(t => t.id === this.draggingId);
-            if (!draggedTask || !this.canSortSubtaskDrop(draggedTask, task)) {
-                this.hideSubtaskDropIndicator();
-                return;
-            }
+            const position = this.getSubtaskDropPosition(element, e, draggedTask, task);
+            this.hideSubtaskDropIndicator();
+            if (!position) return;
 
             e.preventDefault();
-            const insertBefore = this.getSubtaskDropPosition(element, e) === 'before';
-            await this.reorderSubtasks(draggedTask.id, task.id, insertBefore);
-            this.hideSubtaskDropIndicator();
+            e.stopPropagation();
+            this.draggingId = null;
+            this.pendingSubtaskDrop = this.applySubtaskDrop(draggedTask.id, task.id, position);
+            try {
+                await this.pendingSubtaskDrop;
+            } finally {
+                this.pendingSubtaskDrop = undefined;
+            }
         });
 
         element.addEventListener('dragleave', (e) => {
+            if (this.subtaskDropTarget !== element) return;
             const rect = element.getBoundingClientRect();
             const x = e.clientX;
             const y = e.clientY;
@@ -1450,40 +1467,103 @@ export class SubtasksDialog {
         return true;
     }
 
-    private getSubtaskDropPosition(element: HTMLElement, event: DragEvent): 'before' | 'after' {
-        const rect = element.getBoundingClientRect();
-        return event.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+    private canNestSubtaskDrop(draggedTask: any, targetTask: any): boolean {
+        if (this.readOnly || !draggedTask?.id || !targetTask?.id || draggedTask.parentId === targetTask.id) return false;
+        // 实例中从模板生成的行没有可独立修改的父任务字段。
+        if (draggedTask.isSubscribed || targetTask.isSubscribed || (draggedTask.isRepeatInstance && draggedTask.originalId)) return false;
+        return !this.wouldCreateSubtaskCycle(draggedTask.id, targetTask.id, id => this.subtasks.find(task => task.id === id)?.parentId);
     }
 
-    private showSubtaskDropIndicator(element: HTMLElement, position: 'before' | 'after') {
-        this.hideSubtaskDropIndicator();
-
-        const indicator = document.createElement('div');
-        indicator.className = 'subtasks-drop-indicator';
-        indicator.style.cssText = `
-            position: absolute;
-            left: 0;
-            right: 0;
-            ${position === 'before' ? 'top: 0;' : 'bottom: 0;'}
-            height: 2px;
-            background-color: var(--b3-theme-primary);
-            z-index: 1000;
-            pointer-events: none;
-        `;
-        element.style.position = 'relative';
-        if (position === 'before') {
-            element.insertBefore(indicator, element.firstChild);
-        } else {
-            element.appendChild(indicator);
+    private wouldCreateSubtaskCycle(childId: string, parentId: string, getParentId: (id: string) => string | undefined): boolean {
+        const visited = new Set([childId]);
+        let currentId: string | undefined = parentId;
+        while (currentId) {
+            if (visited.has(currentId)) return true;
+            visited.add(currentId);
+            currentId = getParentId(currentId);
         }
+        return false;
+    }
+
+    private getSubtaskDropPosition(element: HTMLElement, event: DragEvent, draggedTask: any, targetTask: any): SubtaskDropPosition | undefined {
+        if (this.pendingSubtaskDrop || !draggedTask || draggedTask.id === targetTask.id) return;
+        const rect = element.getBoundingClientRect();
+        const offset = event.clientY - rect.top;
+        if (offset >= rect.height * 0.25 && offset <= rect.height * 0.75) {
+            return this.canNestSubtaskDrop(draggedTask, targetTask) ? 'inside' : undefined;
+        }
+        if (this.canSortSubtaskDrop(draggedTask, targetTask)) return offset < rect.height / 2 ? 'before' : 'after';
+    }
+
+    private showSubtaskDropIndicator(element: HTMLElement, position: SubtaskDropPosition) {
+        if (this.subtaskDropTarget !== element) {
+            this.hideSubtaskDropIndicator();
+            this.subtaskDropTarget = element;
+        }
+        element.dataset.subtaskDrop = position;
     }
 
     private hideSubtaskDropIndicator() {
-        document.querySelectorAll('.subtasks-drop-indicator').forEach(indicator => indicator.remove());
+        this.subtaskDropTarget?.removeAttribute('data-subtask-drop');
+        this.subtaskDropTarget = undefined;
     }
 
-    private async reorderSubtasks(draggingId: string, targetId: string, insertBefore: boolean = true) {
-        if (await this.finishInlineTitle() === false) return;
+    private async applySubtaskDrop(draggingId: string, targetId: string, position: SubtaskDropPosition): Promise<boolean> {
+        try {
+            if (await this.finishInlineTitle() === false) return false;
+            if (position === 'inside') await this.nestSubtask(draggingId, targetId);
+            else await this.reorderSubtasks(draggingId, targetId, position === 'before');
+            return true;
+        } catch (error) {
+            console.error('Failed to move subtask:', error);
+            showMessage(i18n('operationFailed'), 3000, 'error');
+            return false;
+        }
+    }
+
+    private async nestSubtask(draggingId: string, targetId: string) {
+        const draggedTask = this.subtasks.find(task => task.id === draggingId);
+        const targetTask = this.subtasks.find(task => task.id === targetId);
+        if (!this.canNestSubtaskDrop(draggedTask, targetTask)) return;
+
+        const lastChildSort = (tasks: any[]) => tasks.reduce((max, task) =>
+            task?.parentId === targetId ? Math.max(max, this.getReminderSortValue(task)) : max, 0);
+        const localSort = lastChildSort(this.subtasks);
+        if (this.isTempMode) {
+            draggedTask.parentId = targetId;
+            draggedTask.sort = localSort + 10;
+            this.onTempSubtasksUpdate?.([...this.subtasks]);
+        } else {
+            const data = await this.plugin.loadReminderData(true) || {};
+            const source = data[draggingId];
+            const ghostTarget = !data[targetId] && targetTask.isRepeatInstance && targetTask.originalId;
+            const target = ghostTarget ? data[targetTask.originalId] : data[targetId];
+            if (!source || !target || source.isSubscribed || target.isSubscribed) throw new Error('Subtask or target is no longer available');
+            if (ghostTarget) {
+                const { instanceDate } = this.parseInstanceParentId(targetId);
+                if (!instanceDate || target.repeat?.excludeDates?.includes(instanceDate) || getRepeatInstanceState(target, instanceDate)?.deleted) {
+                    throw new Error('The target instance is no longer available');
+                }
+            }
+            const getSavedParentId = (id: string): string | undefined => {
+                if (data[id]) return data[id].parentId;
+                const templateId = this.parseInstanceParentId(id).targetParentId;
+                return templateId === draggingId ? draggingId : data[templateId]?.parentId;
+            };
+            if (this.wouldCreateSubtaskCycle(draggingId, targetId, getSavedParentId)) throw new Error('Circular subtask relationship');
+            if (source.parentId !== targetId) {
+                const sort = Math.max(localSort, lastChildSort(Object.values(data))) + 10;
+                await this.plugin.saveReminderData({ ...data, [draggingId]: { ...source, parentId: targetId, sort } });
+            }
+            await this.loadSubtasks();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: {} }));
+        }
+        this.collapsedSubtaskIds.delete(targetId);
+        this.renderSubtasks();
+        this.onUpdate?.();
+    }
+
+    private async reorderSubtasks(draggingId: string, targetId: string, insertBefore: boolean) {
         const movedTask = this.subtasks.find(t => t.id === draggingId);
         const targetTask = this.subtasks.find(t => t.id === targetId);
         if (!movedTask || !targetTask || !this.canSortSubtaskDrop(movedTask, targetTask)) return;
@@ -1559,7 +1639,7 @@ export class SubtasksDialog {
 
     // 显示粘贴新建子任务对话框
     private async showPasteSubtaskDialog() {
-        if (await this.finishInlineTitle() === false) return;
+        if (await this.finishPendingChanges() === false) return;
         let parentTask: any = null;
         let instanceDate: string | undefined = undefined;
         
