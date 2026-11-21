@@ -2287,6 +2287,7 @@ export class QuickReminderDialog {
         if (tab === 'subtasks') {
             await this.mountSubtasksTab();
         } else if (tab === 'notes' && this.noteEditor) {
+            this.noteEditor.resize();
             this.noteEditor.focus();
         }
     }

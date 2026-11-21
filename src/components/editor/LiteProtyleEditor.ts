@@ -150,6 +150,10 @@ export class LiteProtyleEditor {
         this.wysiwyg = wysiwyg;
         this.hintElement = hintElement;
 
+        // 精简版 Protyle 关闭了 websocket，需参考官方 fragmentEditor.ts 主动结束 loading 状态，
+        // 否则 initUI 中 addLoading() 的延迟定时器会一直插入 .wysiwygLoading 转圈遮罩
+        this.clearLoading(protyle);
+
         if (hintElement) {
             hintElement.classList.add(PROTYLE_LITE_HINT_OVERLAY_CLASS, "tn-lite-protyle__hint");
             document.body.appendChild(hintElement);
@@ -178,6 +182,10 @@ export class LiteProtyleEditor {
 
             // 设置初始内容
             this.setMarkdown(this.options.initialMarkdown || "");
+            this.clearLoading(protyle);
+            try {
+                (instance as any).resize?.();
+            } catch { /* ignore */ }
 
             // 监听内容变更
             this.contentObserver = new MutationObserver(() => {
@@ -350,6 +358,22 @@ export class LiteProtyleEditor {
 
     public isUploading(): boolean {
         return !!this.instance?.isUploading?.() || !!this.instance?.protyle?.upload?.isUploading;
+    }
+
+    private clearLoading(protyle: any): void {
+        const element = protyle?.element as HTMLElement | undefined;
+        if (!element) return;
+        element.setAttribute("data-loading", "finished");
+        element.querySelectorAll(".wysiwygLoading").forEach((item) => item.remove());
+    }
+
+    public resize(): void {
+        if (this.destroyed || this.fallbackTextarea) return;
+        try {
+            (this.instance as any)?.resize?.();
+        } catch {
+            // ignore
+        }
     }
 
     public focus(): void {
