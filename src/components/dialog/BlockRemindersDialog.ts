@@ -12,6 +12,7 @@ import { PomodoroTimer } from "../panel/PomodoroTimer";
 import { createPomodoroStartSubmenu } from "../../utils/pomodoroPresets";
 import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, generateRepeatInstancesWithFutureGuarantee, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion } from "../dataManager/repeatUtils";
 import type { HolidayData } from "../../utils/reminderSkipDate";
+import { deleteSubscriptionReminderTask, getAllReminders, saveReminders } from '../../utils/icsSubscription';
 
 /**
  * 块绑定任务查看对话框
@@ -56,7 +57,7 @@ export class BlockRemindersDialog {
             const reminderIds = await getBlockReminderIds(this.blockId);
 
             // 获取提醒数据
-            const reminderData = await this.plugin.loadReminderData();
+            const reminderData = await getAllReminders(this.plugin);
             this.holidayData = await this.plugin.loadHolidayData();
             this.allRemindersMap = new Map(Object.entries(reminderData || {}));
             const reminders = this.resolveBoundReminders(reminderData, reminderIds);
@@ -81,7 +82,7 @@ export class BlockRemindersDialog {
 
             // 监听提醒更新事件
             this.reminderUpdatedHandler = async () => {
-                const updatedReminderData = await this.plugin.loadReminderData();
+                const updatedReminderData = await getAllReminders(this.plugin);
                 this.holidayData = await this.plugin.loadHolidayData();
                 this.allRemindersMap = new Map(Object.entries(updatedReminderData || {}));
                 await this.buildMilestoneMap();
@@ -170,6 +171,7 @@ export class BlockRemindersDialog {
         for (const id of currentIds) {
             if (reminderData[id]) {
                 const reminder = reminderData[id];
+                if (reminder.isSubscribed && reminder.blockId !== this.blockId) continue;
                 if (reminder.repeat?.enabled) {
                     const isLunarRepeat = reminder.repeat.type === 'lunar-monthly' || reminder.repeat.type === 'lunar-yearly';
 
@@ -406,13 +408,15 @@ export class BlockRemindersDialog {
         });
         menu.addSeparator();
 
-        menu.addItem({
-            icon: "iconTrashcan",
-            label: i18n("delete") || "删除",
-            click: () => {
-                void this.deleteReminder(reminder);
-            }
-        });
+        if (!reminder.isSubscribed || reminder.caldavDeletable) {
+            menu.addItem({
+                icon: "iconTrashcan",
+                label: i18n("delete") || "删除",
+                click: () => {
+                    void this.deleteReminder(reminder);
+                }
+            });
+        }
 
         menu.open({
             x: position.clientX,
@@ -560,12 +564,17 @@ export class BlockRemindersDialog {
 
     private async toggleReminderComplete(reminder: any, completed: boolean) {
         try {
-            const reminderData = await this.plugin.loadReminderData();
+            const reminderData = reminder.isSubscribed
+                ? await getAllReminders(this.plugin, undefined, false, 'none', { strict: true })
+                : await this.plugin.loadReminderData();
+            const save = () => reminder.isSubscribed
+                ? saveReminders(this.plugin, reminderData)
+                : this.plugin.saveReminderData(reminderData);
             if (reminder.isRepeatInstance && reminder.originalId && reminder.instanceDate && reminderData[reminder.originalId]) {
                 const original = reminderData[reminder.originalId];
                 setRepeatInstanceCompletion(original, reminder.instanceDate, completed);
 
-                await this.plugin.saveReminderData(reminderData);
+                await save();
                 await updateBindBlockAtrrs(this.blockId, this.plugin);
                 window.dispatchEvent(new CustomEvent('reminderUpdated'));
                 showMessage(completed ? (i18n("taskCompleted") || "任务已完成") : (i18n("taskUncompleted") || "任务已取消完成"), 2000);
@@ -579,7 +588,7 @@ export class BlockRemindersDialog {
                 } else {
                     delete reminderData[reminder.id].completedAt;
                 }
-                await this.plugin.saveReminderData(reminderData);
+                await save();
 
                 // 更新块的书签状态
                 await updateBindBlockAtrrs(this.blockId, this.plugin);
@@ -633,7 +642,16 @@ export class BlockRemindersDialog {
             async () => {
                 // 用户确认删除
                 try {
-                    const reminderData = await this.plugin.loadReminderData();
+                    if (reminder.isSubscribed && !reminder.isRepeatInstance) {
+                        await deleteSubscriptionReminderTask(this.plugin, reminder);
+                        await updateBindBlockAtrrs(this.blockId, this.plugin);
+                        window.dispatchEvent(new CustomEvent('reminderUpdated'));
+                        showMessage(i18n('taskDeleted'));
+                        return;
+                    }
+                    const reminderData = reminder.isSubscribed
+                        ? await getAllReminders(this.plugin, undefined, false, 'none', { strict: true })
+                        : await this.plugin.loadReminderData();
                     const undo = new TaskActionUndo(this.plugin, reminderData);
                     if (reminder.isRepeatInstance && reminder.originalId && reminder.instanceDate) {
                         const original = reminderData[reminder.originalId];

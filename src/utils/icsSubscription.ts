@@ -1,4 +1,4 @@
-import { pushErrMsg, pushMsg, putFile, getFile, removeFile, forwardProxy } from '../api';
+import { pushErrMsg, pushMsg, putFile, getFile, removeFile, forwardProxy, getBlockByID, updateBindBlockAtrrs } from '../api';
 import { ParsedIcsEvent, parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
 import { deleteCalDavTask, fetchCalDavEvents, hasCalDavRemoteTaskChanged, putCalDavTask } from './caldavSubscription';
 import {
@@ -11,6 +11,7 @@ import {
     type DidaSelectedProject,
 } from './didaSubscription';
 import { i18n } from "../pluginInstance";
+import { getTaskBoundBlockId } from './taskTitleLinks';
 
 export interface IcsSubscription {
     id: string;
@@ -487,6 +488,7 @@ async function syncCalDavTaskChanges(
 }
 
 async function syncDidaTaskChanges(
+    plugin: any,
     subscription: IcsSubscription,
     currentTasks: any,
     nextTasks: any,
@@ -529,11 +531,22 @@ async function syncDidaTaskChanges(
         .filter(([id, nextTask]) => !nextTask?.manualDelete && (!touchedIds || touchedIds.has(id)));
     candidateEntries.sort(([, a], [, b]) => Number(Boolean(a.didaTaskId)) - Number(Boolean(b.didaTaskId)));
 
-    for (const [id, nextTask] of candidateEntries) {
+    // A rate-limited batch can stop before it reaches a changed binding. Keep it pending in that case too.
+    for (const [id, task] of candidateEntries) {
+        const currentTask = currentTasks?.[id];
+        if (canEdit && currentTask?.didaTaskId && (
+            currentTask.didaBlockSyncPending || getTaskBoundBlockId(currentTask) !== getTaskBoundBlockId(task)
+        )) {
+            syncedTasks[id] = { ...task, didaBlockSyncPending: true };
+        }
+    }
+
+    for (const [id] of candidateEntries) {
+        const nextTask = syncedTasks[id];
         const currentTask = currentTasks?.[id];
         const isNew = !nextTask.didaTaskId;
 
-        if (!isNew && currentTask && !hasDidaRemoteTaskChanged(currentTask, nextTask)) {
+        if (!isNew && currentTask && !nextTask.didaBlockSyncPending && !hasDidaRemoteTaskChanged(currentTask, nextTask)) {
             continue;
         }
 
@@ -544,7 +557,7 @@ async function syncDidaTaskChanges(
         if (isNew) {
             try {
                 const parentTask = nextTask.parentId ? (syncedTasks[nextTask.parentId] || currentTasks?.[nextTask.parentId]) : undefined;
-                const created = await createDidaTask(subscription, nextTask, parentTask);
+                const created = await createDidaTask(subscription, nextTask, parentTask, plugin);
                 syncedTasks[id] = {
                     ...nextTask,
                     uid: created.uid,
@@ -567,14 +580,16 @@ async function syncDidaTaskChanges(
         }
 
         try {
-            const result = await updateDidaTask(subscription, currentTask || nextTask, nextTask);
+            const result = await updateDidaTask(subscription, currentTask || nextTask, nextTask, plugin);
             syncedTasks[id] = {
                 ...nextTask,
                 didaProjectId: result.didaProjectId,
                 didaListId: result.didaListId,
                 didaEtag: result.didaEtag,
+                didaNoteFields: result.didaNoteFields,
                 subscriptionType: 'dida',
             };
+            delete syncedTasks[id].didaBlockSyncPending;
         } catch (e: any) {
             console.warn(`[Dida365] UPDATE failed for task ${id}, keeping local state:`, e?.message || e);
             if (e?.status === 429) {
@@ -585,6 +600,31 @@ async function syncDidaTaskChanges(
     }
 
     return syncedTasks;
+}
+
+async function refreshDidaBlockBindings(plugin: any, before: any, after: any): Promise<void> {
+    const blocksToRefresh = new Set<string>();
+    const taskIds = new Set([...Object.keys(before), ...Object.keys(after)]);
+    for (const id of taskIds) {
+        const previous = before[id];
+        const current = after[id];
+        const previousBlockId = previous?.manualDelete ? undefined : previous?.blockId;
+        const currentBlockId = current?.manualDelete ? undefined : current?.blockId;
+        if (previousBlockId !== currentBlockId || previous?.docId !== current?.docId || previous?.completed !== current?.completed) {
+            if (previousBlockId) blocksToRefresh.add(previousBlockId);
+            if (currentBlockId) blocksToRefresh.add(currentBlockId);
+        }
+    }
+    if (blocksToRefresh.size === 0) return;
+
+    try {
+        const allReminders = await getAllReminders(plugin, undefined, false, 'none', { strict: true });
+        for (const blockId of blocksToRefresh) {
+            await updateBindBlockAtrrs(blockId, plugin, allReminders);
+        }
+    } catch (error) {
+        console.warn('Failed to refresh Dida task block bindings:', error);
+    }
 }
 
 async function saveSubscriptionReminderTasks(
@@ -606,7 +646,7 @@ async function saveSubscriptionReminderTasks(
     if (isCalDavSubscription(subscription)) {
         tasksToSave = await syncCalDavTaskChanges(subscription, currentTasks, tasksToSave, touchedIds);
     } else if (isDidaSubscription(subscription)) {
-        tasksToSave = await syncDidaTaskChanges(subscription, currentTasks, tasksToSave, touchedIds);
+        tasksToSave = await syncDidaTaskChanges(plugin, subscription, currentTasks, tasksToSave, touchedIds);
     }
 
     if (
@@ -616,6 +656,7 @@ async function saveSubscriptionReminderTasks(
         )
     ) {
         await saveSubscriptionTasks(plugin, subscription.id, tasksToSave);
+        if (isDidaSubscription(subscription)) await refreshDidaBlockBindings(plugin, currentTasks, tasksToSave);
     }
 }
 
@@ -833,6 +874,7 @@ async function buildTasksFromSubscriptionEvents(
     const subscriptionType = subscription.type || 'ics';
     const isDida = subscriptionType === 'dida';
     const didaTaskIdToLocalId = new Map<string, string>();
+    const documentIdsByBlock = new Map<string, string | undefined>();
 
     for (const event of events) {
         // Skip events the user has manually deleted locally
@@ -855,6 +897,20 @@ async function buildTasksFromSubscriptionEvents(
             ? Boolean(event.completed)
             : (preserveCompleted ? existingTask.completed : event.completed || isPast);
 
+        let restoredBinding: { blockId: string; docId?: string } | undefined;
+        if (isDida && event.blockId && !existingTask?.didaBlockSyncPending) {
+            const blockId = event.blockId;
+            if (existingTask?.blockId === blockId && existingTask.docId) {
+                restoredBinding = { blockId, docId: existingTask.docId };
+            } else {
+                if (!documentIdsByBlock.has(blockId)) {
+                    const block = await getBlockByID(blockId).catch(() => undefined);
+                    documentIdsByBlock.set(blockId, block?.root_id || (block?.type === 'd' ? block.id : undefined));
+                }
+                restoredBinding = { blockId, docId: documentIdsByBlock.get(blockId) };
+            }
+        }
+
         if (existingTask) {
             const shouldSyncRemoteNote =
                 (subscriptionType === 'caldav' || subscriptionType === 'dida') &&
@@ -863,6 +919,7 @@ async function buildTasksFromSubscriptionEvents(
             tasks[id] = {
                 ...existingTask,
                 title: event.title,
+                ...restoredBinding,
                 date: event.date,
                 time: event.time,
                 endDate: event.endDate,
@@ -883,6 +940,7 @@ async function buildTasksFromSubscriptionEvents(
                 ...(event.didaKind !== undefined ? { didaKind: event.didaKind } : {}),
                 ...(event.didaItems !== undefined ? { didaItems: event.didaItems } : {}),
                 ...(event.didaTags !== undefined ? { didaTags: event.didaTags } : {}),
+                ...(isDida ? { didaNoteFields: event.didaNoteFields } : {}),
                 completed: isCompleted,
                 completedAt: isDida
                     ? (isCompleted ? (event.completedAt || existingTask.completedAt) : undefined)
@@ -899,6 +957,7 @@ async function buildTasksFromSubscriptionEvents(
             tasks[id] = {
                 id,
                 ...event,
+                ...restoredBinding,
                 note: event.description,
                 projectId: subscription.projectId,
                 categoryId: subscription.categoryId,
@@ -990,6 +1049,9 @@ export async function syncSubscription(
         // 无变化时不重写文件或刷新视图；空订阅也要保留手动删除标记。
         if (!isSameReminderPayload(existingTasks, tasks)) {
             await saveSubscriptionTasks(plugin, subscription.id, tasks);
+            if (subscriptionType === 'dida') {
+                await refreshDidaBlockBindings(plugin, existingTasks, tasks);
+            }
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'icsSubscription' } }));
         }
 

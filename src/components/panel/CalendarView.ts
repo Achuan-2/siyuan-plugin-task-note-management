@@ -1,5 +1,6 @@
 import { renderPomodoroIcons } from "../render/pomodoroIcons";
 import { renderTaskMetadataIcon, setTaskMetadataText } from "../render/taskMetadataIcons";
+import { renderTaskTitleContent } from '../render/taskTitleContent';
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { Calendar, formatDate, formatRange } from '@fullcalendar/core';
@@ -4059,7 +4060,7 @@ export class CalendarView {
                 if (this.mobileSelectedEventId) this.keepMobileEventSelected(this.mobileSelectedEventId);
                 return;
             }
-            if (target.closest('button, input, textarea, select, .reminder-calendar-event-checkbox')) return;
+            if (target.closest('button, input, textarea, select, .reminder-calendar-event-checkbox, .task-title-link')) return;
             // FullCalendar 的事件节点本身就是 <a class="fc-event">，仅排除事件内部的普通链接
             const link = target.closest('a');
             if (link && !link.classList.contains('fc-event')) return;
@@ -6094,7 +6095,7 @@ export class CalendarView {
 
             const titleEl = document.createElement('div');
             titleEl.className = 'fc-event-title';
-            titleEl.textContent = event.title;
+            renderTaskTitleContent(titleEl, event.title, props.blockId || props.docId, true);
             titleEl.style.textDecoration = 'line-through';
             mainFrame.appendChild(titleEl);
 
@@ -6150,27 +6151,28 @@ export class CalendarView {
         // 2. 任务标题（与复选框同行）
         const titleEl = document.createElement('div');
         titleEl.className = 'fc-event-title';
-        const titleHtml = isReminderTimeEvent
-            ? renderTaskMetadataIcon('alarm') + ' ' + this.escapeHtml(event.title.replace(/^⏰\s*/u, ''))
-            : event.title;
-
-        // 如果有绑定块，将内容包裹在 span 中并添加虚线边框
-        if (props.blockId && !props.isSubscribed && !props.isHabit) {
+        const titleText = isReminderTimeEvent ? event.title.replace(/^⏰\s*/u, '') : event.title;
+        const boundBlockId = !props.isHabit ? (props.blockId || props.docId) : undefined;
+        if (boundBlockId) {
             const textSpan = document.createElement('span');
-            textSpan.innerHTML = titleHtml;
+            renderTaskTitleContent(textSpan, titleText, boundBlockId, true);
             textSpan.style.display = 'inline-block';
             textSpan.style.boxSizing = 'border-box';
             textSpan.style.paddingBottom = '2px';
             textSpan.style.borderBottom = `2px dashed currentColor `;
             textSpan.style.cursor = 'pointer';
             textSpan.setAttribute('data-type', 'a');
-            textSpan.setAttribute('data-href', `siyuan://blocks/${props.blockId}`);
+            textSpan.setAttribute('data-href', `siyuan://blocks/${boundBlockId}`);
             textSpan.classList.add('ariaLabel'); textSpan.setAttribute('aria-label', i18n("boundToBlock"));
 
             titleEl.appendChild(textSpan);
         } else {
-            // 没有绑定块时，直接设置 innerHTML
-            titleEl.innerHTML = titleHtml;
+            renderTaskTitleContent(titleEl, titleText, undefined, true);
+        }
+        if (isReminderTimeEvent) {
+            const alarmIcon = document.createElement('span');
+            alarmIcon.innerHTML = renderTaskMetadataIcon('alarm');
+            titleEl.prepend(alarmIcon, ' ');
         }
 
         // 实际打卡时间事件在标题前显示本次打卡 emoji，左侧仍保留习惯自身图标
@@ -6988,9 +6990,10 @@ export class CalendarView {
             const reminderData = await getAllReminders(this.plugin);
             const originalReminder = reminderData[originalEventId];
 
-            if (originalReminder?.blockId) {
+            const blockId = originalReminder?.blockId || originalReminder?.docId;
+            if (blockId) {
                 try {
-                    openBlock(originalReminder.blockId);
+                    openBlock(blockId);
                 } catch (error) {
                     console.error("Failed to open note:", error);
                     showMessage(i18n("openNoteFailed"));
@@ -7001,10 +7004,11 @@ export class CalendarView {
 
         const reminder = info.event.extendedProps;
         const actualEventId = info.event.id.includes('_block_') ? info.event.id.split('_block_')[0] : info.event.id;
-        const blockId = reminder.blockId || actualEventId; // 兼容旧数据格式
+        const boundBlockId = reminder.blockId || reminder.docId;
+        const blockId = boundBlockId || actualEventId; // 兼容旧数据格式
 
         // 如果没有绑定块，提示用户绑定块 (订阅任务除外)
-        if (!reminder.blockId) {
+        if (!boundBlockId) {
             if (reminder.isSubscribed) {
                 this.showTimeEditDialog(info.event);
             }

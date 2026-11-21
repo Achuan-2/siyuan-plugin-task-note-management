@@ -1114,7 +1114,21 @@ export async function updateBindBlockAtrrs(blockId: string, plugin: any, provide
     try {
         // 不修改任务的绑定信息：块可能被移入回收站，恢复后应能继续同步。
         if (!await getBlockByID(blockId)) return;
-        const reminderData = providedReminderData || (plugin && plugin.reminderDataCache) || await plugin.loadReminderData();
+        let reminderData = providedReminderData || plugin?.reminderDataCache || await plugin.loadReminderData();
+        if (!providedReminderData && typeof plugin?.loadSubscriptionData === 'function') {
+            const { loadSubscriptions, loadSubscriptionTasks } = await import('./utils/icsSubscription');
+            const { subscriptions } = await loadSubscriptions(plugin);
+            const didaSubscriptions = Object.values(subscriptions || {}).filter(sub => sub?.enabled && sub.type === 'dida');
+            if (didaSubscriptions.length > 0) {
+                const didaTasks = await Promise.all(didaSubscriptions.map(sub => loadSubscriptionTasks(plugin, sub.id)));
+                reminderData = { ...reminderData };
+                for (const tasks of didaTasks) {
+                    for (const [id, task] of Object.entries(tasks) as [string, any][]) {
+                        if (task && !task.manualDelete) reminderData[id] = task;
+                    }
+                }
+            }
+        }
 
         // 查找该块的所有提醒
         const directBlockReminders = Object.values(reminderData).filter((reminder: any) =>

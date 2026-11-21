@@ -66,6 +66,7 @@ import { SortCriterion, getSortCriterionName } from "../../utils/sortConfig";
 import { shouldTreatStartDateOnlyAsOverdue } from "../../utils/startDateOverdue";
 import { shouldSkipReminderOnDate, type HolidayData } from "../../utils/reminderSkipDate";
 import { TaskRenderer } from "../render/TaskRenderer";
+import { renderTaskTitleContent } from '../render/taskTitleContent';
 import { ProjectFolderManager, FolderKanbanSettings } from "../dataManager/projectFolderManager";
 interface KanbanSortConfigProjectData {
     sortRule?: string;
@@ -14952,11 +14953,13 @@ export class ProjectKanbanView {
 
         // 根据更新内容选择性更新 DOM
         if ('title' in updates) {
-            const titleEl = taskEl.querySelector('.kanban-task-title, .reminder-item__title');
+            const titleEl = taskEl.querySelector<HTMLElement>('.kanban-task-title, .reminder-item__title');
             if (titleEl) {
                 // 保留子任务数量指示器
                 const subtaskIndicator = titleEl.querySelector('.subtask-indicator');
-                titleEl.textContent = task.title || i18n('noContentHint');
+                const boundBlockId = task.blockId || task.docId;
+                const titleText = renderTaskTitleContent(titleEl, task.title || i18n('noContentHint'), boundBlockId);
+                titleEl.setAttribute('aria-label', boundBlockId ? i18n('openBoundBlockTooltip', { title: titleText }) : titleText);
                 if (subtaskIndicator) {
                     titleEl.appendChild(subtaskIndicator);
                 }

@@ -3,7 +3,8 @@ import { forwardProxy } from '../api';
 import { i18n } from '../pluginInstance';
 import { formatDate, formatTime, parseIcalRRule } from './icsImport';
 import type { IcsSubscription } from './icsSubscription';
-import { getTaskNotePreviewText } from './taskNoteStorage';
+import { getTaskNotePreviewText, loadTaskNote } from './taskNoteStorage';
+import { getTaskBoundBlockId, parseSiyuanTaskTitle } from './taskTitleLinks';
 
 const DIDA_API_BASE_URL = 'https://api.dida365.com/open/v1';
 const DIDA_REQUEST_TIMEOUT_MS = 30000;
@@ -91,6 +92,7 @@ interface DidaProjectDataResponse {
 export interface DidaRemoteTaskEvent {
     uid: string;
     title: string;
+    blockId?: string;
     description?: string;
     date?: string;
     time?: string;
@@ -110,6 +112,7 @@ export interface DidaRemoteTaskEvent {
     didaKind?: string;
     didaItems?: DidaChecklistItem[];
     didaTags?: string[];
+    didaNoteFields?: { content: string; desc: string };
     url?: string;
 }
 
@@ -288,10 +291,19 @@ function parseDidaRepeatFlag(repeatFlag?: string): any {
     }
 }
 
-function buildTaskDescription(task: DidaApiTask): string | undefined {
+function splitDidaBlockLink(value?: string | null): { text: string; blockId?: string } {
+    const body = (value || '').trim();
+    const lineEnd = body.indexOf('\n');
+    const firstLine = lineEnd === -1 ? body : body.slice(0, lineEnd);
+    const link = parseSiyuanTaskTitle(firstLine);
+    if (link && ['打开思源块', '打开绑定块', 'Open SiYuan Block', 'Open Linked Block'].includes(link.title)) {
+        return { blockId: link.blockId, text: lineEnd === -1 ? '' : body.slice(lineEnd + 1).trimStart() };
+    }
+    return { text: body };
+}
+
+function buildTaskDescription(task: DidaApiTask, content: string, desc: string): string | undefined {
     const parts: string[] = [];
-    const content = (task.content || '').trim();
-    const desc = (task.desc || '').trim();
     if (content) parts.push(content);
     if (desc && desc !== content) parts.push(desc);
 
@@ -356,11 +368,17 @@ function convertDidaTaskToEvent(
     const createdDt = parseDidaTimestamp(task.createdTime);
     const completedDt = parseDidaTimestamp(task.completedTime);
     const completed = task.status === 2;
+    const title = (task.title || '').trim();
+    const titleLink = parseSiyuanTaskTitle(title);
+    const content = splitDidaBlockLink(task.content);
+    const desc = splitDidaBlockLink(task.desc);
+    const description = buildTaskDescription(task, content.text, desc.text);
 
     return {
         uid: `dida:${task.id}`,
-        title: (task.title || '').trim() || i18n('unnamedCalendarEvent') || 'Untitled',
-        description: buildTaskDescription(task),
+        title: (titleLink?.title || title) || i18n('unnamedCalendarEvent') || 'Untitled',
+        blockId: content.blockId || desc.blockId || titleLink?.blockId,
+        description,
         date,
         time,
         endDate,
@@ -379,6 +397,9 @@ function convertDidaTaskToEvent(
         didaKind: task.kind,
         didaItems: Array.isArray(task.items) ? task.items : undefined,
         didaTags: Array.isArray(task.tags) ? task.tags : undefined,
+        didaNoteFields: content.text !== (description || '') || desc.blockId
+            ? { content: task.content || '', desc: task.desc || '' }
+            : undefined,
         url: `https://dida365.com/webapp/#p/${task.projectId}/tasks/${task.id}`,
     };
 }
@@ -645,7 +666,18 @@ async function ensureInboxRealProjectId(subscription: IcsSubscription): Promise<
     }
 }
 
-function buildDidaTaskPayloadFields(task: any): Record<string, any> {
+function formatDidaTaskContent(note: string, blockId?: string): string {
+    if (!blockId) return note;
+    const label = i18n('openBoundBlock') || 'Open Linked Block';
+    const link = `[${label}](siyuan://blocks/${blockId})`;
+    return note ? `${link}\n\n${note}` : link;
+}
+
+function getDidaNoteText(task: any): string {
+    return typeof task.note === 'string' ? task.note : getTaskNotePreviewText(task);
+}
+
+async function buildDidaTaskPayloadFields(task: any, plugin: any, currentTask?: any): Promise<Record<string, any>> {
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
     const payload: Record<string, any> = {
         title: task.title || i18n('unnamedCalendarEvent') || 'Untitled',
@@ -653,9 +685,16 @@ function buildDidaTaskPayloadFields(task: any): Record<string, any> {
         timeZone,
     };
 
-    const noteText = task.note ?? getTaskNotePreviewText(task);
-    if (typeof noteText === 'string') {
-        payload.content = noteText;
+    const blockId = getTaskBoundBlockId(task);
+    const oldNoteFields = currentTask?.didaNoteFields;
+    const noteChanged = currentTask && getDidaNoteText(currentTask) !== getDidaNoteText(task);
+    const noteText = oldNoteFields && !noteChanged
+        ? splitDidaBlockLink(oldNoteFields.content).text
+        : task.notes === true ? await loadTaskNote(plugin, task) : getDidaNoteText(task);
+    payload.content = formatDidaTaskContent(noteText, blockId);
+    if (oldNoteFields) {
+        const desc = splitDidaBlockLink(oldNoteFields.desc);
+        if (desc.blockId) payload.desc = desc.text;
     }
 
     if (task.date) {
@@ -687,10 +726,11 @@ function buildDidaTaskPayloadFields(task: any): Record<string, any> {
 export function hasDidaRemoteTaskChanged(currentTask: any, nextTask: any): boolean {
     if (!currentTask || !nextTask) return true;
     const normStr = (v: any) => String(v ?? '');
-    const currentNote = normStr(currentTask.note ?? getTaskNotePreviewText(currentTask) ?? '');
-    const nextNote = normStr(nextTask.note ?? getTaskNotePreviewText(nextTask) ?? '');
+    const currentNote = normStr(getDidaNoteText(currentTask));
+    const nextNote = normStr(getDidaNoteText(nextTask));
     if (normStr(currentTask.title) !== normStr(nextTask.title)) return true;
     if (currentNote !== nextNote) return true;
+    if (getTaskBoundBlockId(currentTask) !== getTaskBoundBlockId(nextTask)) return true;
     if (normStr(currentTask.date) !== normStr(nextTask.date)) return true;
     if (normStr(currentTask.time) !== normStr(nextTask.time)) return true;
     if (normStr(currentTask.endDate) !== normStr(nextTask.endDate)) return true;
@@ -708,7 +748,8 @@ export function hasDidaRemoteTaskChanged(currentTask: any, nextTask: any): boole
 export async function createDidaTask(
     subscription: IcsSubscription,
     task: any,
-    parentTask?: any
+    parentTask: any,
+    plugin: any
 ): Promise<{
     uid: string;
     didaTaskId: string;
@@ -736,9 +777,7 @@ export async function createDidaTask(
         targetProjectId = listId;
     }
 
-    const payload: Record<string, any> = {
-        ...buildDidaTaskPayloadFields(task),
-    };
+    const payload = await buildDidaTaskPayloadFields(task, plugin);
     if (targetProjectId) {
         payload.projectId = targetProjectId;
     }
@@ -788,11 +827,13 @@ export async function createDidaTask(
 export async function updateDidaTask(
     subscription: IcsSubscription,
     currentTask: any,
-    nextTask: any
+    nextTask: any,
+    plugin: any
 ): Promise<{
     didaProjectId: string;
     didaListId: string;
     didaEtag?: string;
+    didaNoteFields?: DidaRemoteTaskEvent['didaNoteFields'];
 }> {
     const token = (subscription.didaToken || '').trim();
     const taskId = nextTask?.didaTaskId || currentTask?.didaTaskId;
@@ -827,7 +868,7 @@ export async function updateDidaTask(
     const payload: Record<string, any> = {
         id: taskId,
         projectId,
-        ...buildDidaTaskPayloadFields(nextTask),
+        ...await buildDidaTaskPayloadFields(nextTask, plugin, currentTask),
     };
 
     const wasCompleted = Boolean(currentTask?.completed);
@@ -858,6 +899,10 @@ export async function updateDidaTask(
         didaProjectId: projectId,
         didaListId: listId,
         didaEtag: updated?.etag || nextTask?.didaEtag,
+        didaNoteFields: currentTask?.didaNoteFields ? {
+            content: payload.content,
+            desc: payload.desc ?? currentTask.didaNoteFields.desc,
+        } : undefined,
     };
 }
 

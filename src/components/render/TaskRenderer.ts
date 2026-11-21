@@ -7,6 +7,7 @@
 import { colorWithOpacity } from "../../utils/uiUtils";
 import { renderTaskMetadataIcon, setTaskMetadataText } from "./taskMetadataIcons";
 import { createTaskCompletedTimeElement } from './taskCompletedTimeElement';
+import { renderTaskTitleContent } from './taskTitleContent';
 import type { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { updateBindBlockAtrrs } from "../../api";
 import { getLuteInstance } from "../../utils/luteSingleton";
@@ -1182,9 +1183,9 @@ export class TaskRenderer {
             titleEl.style.cssText += `; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; margin-bottom: 0;`;
         }
 
-        titleEl.textContent = task.title || i18n("unnamedNote");
+        const titleText = renderTaskTitleContent(titleEl, task.title || i18n("unnamedNote"), boundBlockId);
         titleEl.classList.add('ariaLabel');
-        titleEl.setAttribute('aria-label', boundBlockId ? i18n("openBoundBlockTooltip", { title: String(task.title || i18n("unnamedNote")) }) : (task.title || i18n("unnamedNote")));
+        titleEl.setAttribute('aria-label', boundBlockId ? i18n("openBoundBlockTooltip", { title: titleText }) : titleText);
         titleRow.appendChild(titleEl);
 
         // 链接 URL 链图标
@@ -1861,7 +1862,7 @@ export class TaskRenderer {
         }
         if (task.estimatedPomodoroDuration) add(i18n('estimatedPomodoro'), `${task.estimatedPomodoroDuration} ${i18n('minutes')}`);
         if (task.completed && task.completedTime) add(i18n('completedAt'), task.completedTime);
-        const title = String(task.title || i18n('unnamedNote'));
+        const title = element.querySelector('.reminder-item__title')?.textContent ?? String(task.title || i18n('unnamedNote'));
         const note = String(getTaskNotePreviewText(task) || '').trim();
         const escape = (value: string) => value.replace(/[&<>"']/g, character => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
