@@ -17,6 +17,7 @@ const paths = {
     checkOutline: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/>',
     hourglass: '<path d="M5 2h14M5 22h14M6 2v5l6 5-6 5v5M18 2v5l-6 5 6 5v5"/>',
     flag: '<path d="M4 22V3c5-4 11 4 16 0v12c-5 4-11-4-16 0"/>',
+    arrowUpDown: '<path d="M7 20V4m-4 4 4-4 4 4M17 4v16m-4-4 4 4 4-4"/>',
     pin: '<path d="M12 17v5M8 3h8l-1 7 4 4v3H5v-3l4-4Z"/>',
     calendarHeart: '<path d="M12.127 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.125"/><path d="M14.62 17.8A2.25 2.25 0 1118 14.836a2.25 2.25 0 113.38 2.966l-2.626 2.856a.998.998 0 01-1.507 0z"/><path d="M16 2v3"/><path d="M3 9h18"/><path d="M8 2v3"/>',
     calendarCheck: '<path d="M 19 3 L 5 3"/><path d="M 21 13 L 21 5"/><path d="M 21 5 A2 2 0 0 0 19 3"/><path d="M 3 19 A2 2 0 0 0 5 21"/><path d="M 3 5 L 3 19"/><path d="M 5 3 A2 2 0 0 0 3 5"/><path d="m16 19 2 2 4-4"/><path d="M16 2v3"/><path d="M3 9h18"/><path d="M5 21 L12.5 21"/><path d="M8 2v3"/>',
@@ -49,10 +50,10 @@ const emojiIcons: Record<string, TaskMetadataIcon> = {
     '🔄': 'repeat', '🔁': 'repeat', '🍅': 'tomato', '⏱': 'duration',
     '✅': 'check',
     '🍰': 'calendarHeart', '📌': 'pin', '📋': 'clipboard', '📝': 'note',
-    '🎯': 'flag', '📜': 'document',
+    '🎯': 'flag', '📜': 'document', '↕': 'arrowUpDown',
     '🕒': 'duration', '🕐': 'clock', '⏰': 'alarm',
 };
-const metadataIconPattern = /(📂|📁|🏷️?|🗓️*|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅|🍰|📌|📋|📝|🎯|📜)/u;
+const metadataIconPattern = /(📂|📁|🏷️?|🗓️*|📅|🔄|🔁|🍅|⏱️?|🕒|🕐|⏰|✅|🍰|📌|📋|📝|🎯|📜|↕️?)/u;
 
 /** 模板和 Svelte 共用：先转义动态文字，只插入固定的可信 SVG。 */
 export function renderTaskMetadataText(text: string): string {
