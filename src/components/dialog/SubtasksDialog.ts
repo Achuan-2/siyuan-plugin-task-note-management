@@ -10,8 +10,19 @@ import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import { getLogicalDateString } from "../../utils/dateUtils";
 import { getSortCriterionName, loadSortConfig, saveSortConfig, type SortCriterion } from "../../utils/sortConfig";
-import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState } from "../dataManager/repeatUtils";
+import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState, patchRepeatInstanceState } from "../dataManager/repeatUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
+
+interface InlineSubtaskTitle {
+    id: string;
+    input: HTMLTextAreaElement;
+    row: HTMLElement;
+    parentId: string;
+    task?: any;
+    titleButton?: HTMLButtonElement;
+    wasDraggable: boolean;
+    pending?: Promise<boolean>;
+}
 
 export class SubtasksDialog {
     private dialog: Dialog;
@@ -43,6 +54,8 @@ export class SubtasksDialog {
     private milestoneMap: Map<string, any> = new Map();
     private lute: any;
     private readOnly: boolean = false; // 是否为只读模式
+    private inlineTitle?: InlineSubtaskTitle;
+    private subtaskRenderPending = false;
 
     constructor(
         parentId: string,
@@ -141,15 +154,15 @@ export class SubtasksDialog {
                             <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
                             ${i18n("pasteSubtasks") || "粘贴新建"}
                         </button>
-                        <button id="addSubtaskBtn" class="b3-button b3-button--primary">
-                            <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                            ${i18n("createSubtask") || "创建子任务"}
-                        </button>
                         `}
                     </div>
-                    <div id="subtasksList" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column;min-height: 100px;max-height: 500px;">
-                        <!-- 子任务列表 -->
-                    </div>
+                    <div id="subtasksList" class="subtasks-dialog__list"></div>
+                    ${this.readOnly ? '' : `
+                    <button type="button" id="addSubtaskBtn" class="b3-button b3-button--text subtasks-dialog__add">
+                        <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                        ${i18n("createSubtask")}
+                    </button>
+                    `}
                     ${showCloseButton ? `
                     <div class="subtasks-actions" style="display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; border-top: 1px solid var(--b3-border-color); flex-wrap: wrap;">
                         <button id="closeSubtasksBtn" class="b3-button b3-button--outline">
@@ -655,18 +668,23 @@ export class SubtasksDialog {
         return projectCache;
     }
 
-    private renderSubtasks() {
+    private renderSubtasks(preserveRows = false, changedParentId?: string) {
         const listEl = this.getRootElement().querySelector("#subtasksList") as HTMLElement;
         if (!listEl) return;
 
+        // 保留正在输入的节点，等保存或取消后再刷新列表。
+        if (this.inlineTitle) {
+            this.subtaskRenderPending = true;
+            return;
+        }
+        this.subtaskRenderPending = false;
         if (this.subtasks.length === 0) {
-            listEl.innerHTML = `<div style="text-align: center; color: var(--b3-theme-on-surface-light); padding: 20px;">${i18n("noSubtasks") || "暂无子任务"}</div>`;
+            listEl.innerHTML = this.readOnly ? `<div class="subtasks-dialog__empty">${i18n("noSubtasks")}</div>` : '';
             return;
         }
 
         const entries = this.getVisibleSubtaskEntries();
         const projectCache = this.buildProjectCache(this.subtasks);
-        const fragment = document.createDocumentFragment();
         const context: TaskRenderContext = {
             plugin: this.plugin,
             today: getLogicalDateString(),
@@ -685,8 +703,12 @@ export class SubtasksDialog {
             getTaskStatus: (t: any) => t.completed ? 'completed' : (t.kanbanStatus || t.status || 'todo')
         };
         const callbacks: TaskRenderCallbacks = {
-            onCheckboxClick: (task: any, checked: boolean) => {
-                void this.toggleSubtask(task.id, checked);
+            onCheckboxClick: async (task: any, checked: boolean, event: Event) => {
+                if (await this.finishInlineTitle() === false) {
+                    (event.target as HTMLInputElement).checked = !checked;
+                    return;
+                }
+                await this.toggleSubtask(task.id, checked);
             },
             onCollapseClick: (task: any, collapsed: boolean) => {
                 if (collapsed) {
@@ -699,8 +721,9 @@ export class SubtasksDialog {
             onMoreClick: (task: any, element: HTMLElement, event: MouseEvent) => {
                 this.showSubtaskActionMenu(task, element, event);
             },
-            onCardDoubleClick: (task: any) => {
-                this.editSubtask(task);
+            onCardDoubleClick: (task: any, event: MouseEvent) => {
+                if (this.inlineTitle?.task?.id === task.id && (event.target as Element).closest('.reminder-item__title-row')) return;
+                void this.editSubtask(task);
             },
             onTitleClick: (task: any) => {
                 const targetId = task.blockId || task.docId;
@@ -719,13 +742,37 @@ export class SubtasksDialog {
             }
         };
 
-        entries.forEach(({ task, level }) => {
+        const existingRows = new Map<string, HTMLElement>();
+        if (preserveRows) {
+            listEl.querySelectorAll<HTMLElement>(':scope > [data-task-id]').forEach(row => {
+                if (row.dataset.taskId !== changedParentId) existingRows.set(row.dataset.taskId!, row);
+            });
+        }
+        const rows = entries.map(({ task, level }) => {
+            const existing = existingRows.get(task.id);
+            if (existing) return existing;
             const taskEl = TaskRenderer.render(task, context, callbacks, level, this.subtasks);
-            fragment.appendChild(taskEl);
+            if (this.readOnly) {
+                const checkbox = taskEl.querySelector<HTMLInputElement>('.reminder-task-checkbox');
+                if (checkbox) checkbox.disabled = true;
+            } else if (!task.isSubscribed) {
+                this.bindInlineTitle(task, taskEl);
+            }
+            return taskEl;
         });
 
-        listEl.innerHTML = '';
-        listEl.appendChild(fragment);
+        if (!preserveRows) {
+            listEl.replaceChildren(...rows);
+            return;
+        }
+        // 保留未改动的行，失焦保存时仍能接收到用户在其他行的点击。
+        const visibleRows = new Set(rows);
+        Array.from(listEl.children).forEach(row => {
+            if (!visibleRows.has(row as HTMLElement)) row.remove();
+        });
+        rows.forEach((row, index) => {
+            if (row !== listEl.children[index]) listEl.insertBefore(row, listEl.children[index] ?? null);
+        });
     }
 
     private showSubtaskActionMenu(task: any, element: HTMLElement, event: MouseEvent) {
@@ -761,12 +808,18 @@ export class SubtasksDialog {
 
         if (!this.readOnly) {
             createButton(i18n("createSubtask") || "创建子任务", '#iconAdd', () => {
-                void this.addSubtask(task);
+                void this.startInlineSubtask(task.id);
             });
+            const boundBlockId = task.blockId || task.docId;
+            if (boundBlockId && !task.isSubscribed) {
+                createButton(i18n("openBoundBlock"), '#iconOpenWindow', () => { void openBlock(boundBlockId); });
+            }
         }
         createButton(this.readOnly ? (i18n("viewTasks") || "查看任务") : (i18n("edit") || "编辑"), '#iconEdit', () => this.editSubtask(task));
         if (!this.readOnly) {
-            createButton(i18n("delete") || "删除", '#iconTrashcan', () => this.deleteSubtask(task.id));
+            createButton(i18n("delete") || "删除", '#iconTrashcan', async () => {
+                if (await this.finishInlineTitle() !== false) await this.deleteSubtask(task.id);
+            });
         }
 
         document.body.appendChild(menuEl);
@@ -792,15 +845,15 @@ export class SubtasksDialog {
         const rootElement = this.getRootElement();
 
         rootElement.querySelector("#addSubtaskBtn")?.addEventListener("click", () => {
-            this.addSubtask();
+            void this.startInlineSubtask();
         });
 
         rootElement.querySelector("#pasteSubtaskBtn")?.addEventListener("click", () => {
             this.showPasteSubtaskDialog();
         });
 
-        rootElement.querySelector("#closeSubtasksBtn")?.addEventListener("click", () => {
-            this.dialog.destroy();
+        rootElement.querySelector("#closeSubtasksBtn")?.addEventListener("click", async () => {
+            if (await this.finishInlineTitle() !== false) this.dialog.destroy();
         });
 
         rootElement.querySelector("#sortBtn")?.addEventListener("click", (e) => {
@@ -845,94 +898,217 @@ export class SubtasksDialog {
         }
     }
 
-    private async addSubtask(parentTaskOverride?: any) {
-        const parentIdForNew = parentTaskOverride?.id || (this.isTempMode ? '__TEMP_PARENT__' : this.parentId);
-        let parentTask: any = parentTaskOverride || null;
+    private bindInlineTitle(task: any, row: HTMLElement) {
+        const title = row.querySelector('.reminder-item__title');
+        if (!title) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'reminder-item__title subtasks-dialog__title';
+        button.textContent = title.textContent;
+        button.addEventListener('dblclick', event => event.stopPropagation());
+        button.addEventListener('click', async event => {
+            event.stopPropagation();
+            if (await this.finishInlineTitle() === false || !button.isConnected || this.inlineTitle) return;
+            this.openInlineTitle(row, this.getRenderedParentId(task), task, button);
+        });
+        title.replaceWith(button);
+    }
 
-        if (this.isTempMode) {
-            if (!parentTask) {
-                if (parentIdForNew !== '__TEMP_PARENT__') {
-                    parentTask = this.subtasks.find(t => t.id === parentIdForNew) || null;
-                }
-                if (!parentTask) {
-                    parentTask = this.getResolvedTempParentTask();
-                }
-            }
-        } else if (!parentTask) {
-            const reminderData = await this.plugin.loadReminderData() || {};
-            const { targetParentId } = this.parseInstanceParentId(parentIdForNew);
+    private async startInlineSubtask(parentId = this.getRenderedParentId(null)) {
+        if (this.readOnly) return;
+        if (this.inlineTitle && !this.inlineTitle.task && this.inlineTitle.parentId === parentId) {
+            this.inlineTitle.input.focus();
+            return;
+        }
+        if (await this.finishInlineTitle() !== false && !this.inlineTitle) this.openSubtaskDraft(parentId);
+    }
 
-            // 获取原始父任务（支持重复实例）
-            parentTask = reminderData[targetParentId];
+    private openSubtaskDraft(parentId: string) {
+        const list = this.getRootElement().querySelector<HTMLElement>('#subtasksList');
+        if (!list?.isConnected) return;
+        if (this.collapsedSubtaskIds.delete(parentId)) this.renderSubtasks();
+        const parentRow = Array.from(list.children).find(row => (row as HTMLElement).dataset.taskId === parentId);
+        const level = parentRow ? Number(parentRow.getAttribute('data-level')) + 1 : 0;
+        let nextRow = parentRow?.nextElementSibling ?? null;
+        while (nextRow && Number(nextRow.getAttribute('data-level')) >= level) {
+            nextRow = nextRow.nextElementSibling;
         }
 
-        // 只按同一父任务下的兄弟节点计算 sort，避免多层子任务互相影响排序。
-        const siblingSubtasks = this.subtasks.filter(t => t.parentId === parentIdForNew);
-        const maxSort = siblingSubtasks.reduce((max, t) => Math.max(max, t.sort || 0), 0);
-        const newSort = maxSort + 1000;
+        const row = document.createElement('div');
+        row.className = 'subtasks-dialog__draft';
+        row.style.marginLeft = `${level * 20}px`;
+        row.innerHTML = '<div class="reminder-item__left-controls"><input type="checkbox" class="reminder-task-checkbox" disabled aria-hidden="true"></div>';
+        list.insertBefore(row, nextRow);
+        this.openInlineTitle(row, parentId);
+    }
 
-        const { instanceDate } = this.parseInstanceParentId(parentIdForNew);
-        const defaultDate = instanceDate || undefined;
+    private openInlineTitle(row: HTMLElement, parentId: string, task?: any, titleButton?: HTMLButtonElement) {
+        const input = document.createElement('textarea');
+        input.className = 'b3-text-field subtasks-dialog__input';
+        input.rows = 1;
+        input.value = task?.title ?? '';
+        input.setAttribute('aria-label', i18n('taskTitle'));
+        input.setAttribute('enterkeyhint', 'enter');
+        input.placeholder = i18n('taskTitle');
+        input.spellcheck = false;
 
-        const dialog = new QuickReminderDialog(defaultDate, undefined, async (newReminder) => {
-            if (!newReminder) return;
+        const id = task?.id ?? `reminder_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+        const editor: InlineSubtaskTitle = { id, input, row, parentId, task, titleButton, wasDraggable: row.draggable };
+        this.inlineTitle = editor;
+        row.draggable = false;
+        if (titleButton) titleButton.replaceWith(input);
+        else row.appendChild(input);
 
-            // 设置 sort 值为最大值+1000，确保放在最后
-            newReminder.sort = newSort;
-
-            if (this.isTempMode) {
-                // 临时模式：将新子任务添加到临时列表
-                newReminder.parentId = parentIdForNew;
-                newReminder.isTempSubtask = true;
-
-                // 检查是否已存在（避免重复添加）
-                const exists = this.subtasks.some(t => t.id === newReminder.id);
-                if (!exists) {
-                    this.subtasks.push(newReminder);
-                    this.renderSubtasks();
-                }
-                if (this.onTempSubtasksUpdate) {
-                    this.onTempSubtasksUpdate([...this.subtasks]);
-                }
-                if (this.onUpdate) {
-                    this.onUpdate();
-                }
-            } else {
-                const exists = this.subtasks.some(t => t.id === newReminder.id);
-                if (!exists) {
-                    this.subtasks.push(newReminder);
-                    this.renderSubtasks();
-                }
-                // 延迟重新加载以确保数据已保存到存储
-                setTimeout(async () => {
-                    await this.loadSubtasks();
-                    this.renderSubtasks();
-                    if (this.onUpdate) {
-                        this.onUpdate();
-                    }
-                }, 100);
+        for (const event of ['click', 'dblclick', 'contextmenu']) {
+            input.addEventListener(event, event => event.stopPropagation());
+        }
+        input.addEventListener('blur', () => { void this.finishInlineTitle(); });
+        input.addEventListener('keydown', event => {
+            if (event.isComposing || event.keyCode === 229) {
+                event.stopPropagation();
+                return;
             }
-        }, undefined, {
-            mode: 'quick',
-            defaultParentId: parentIdForNew,
-            // 继承父任务的项目、分组、状态等属性
-            defaultProjectId: parentTask?.projectId,
-            defaultCustomGroupId: parentTask?.customGroupId,
-            defaultStatus: parentTask?.kanbanStatus,
-            defaultMilestoneId: parentTask?.milestoneId,
-            defaultCategoryId: parentTask?.categoryId,
-            defaultPriority: parentTask?.priority,
-            defaultSort: newSort, // 传入预计算的 sort 值，确保保存时一致
-            plugin: this.plugin,
-            skipSave: this.isTempMode, // 临时模式下跳过保存，通过回调返回数据
-            tempParentName: this.isTempMode && parentIdForNew === '__TEMP_PARENT__'
-                ? (typeof this.tempParentName === 'function' ? this.tempParentName() : this.tempParentName)
-                : (parentTask?.title || undefined)
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!editor.pending) this.closeInlineTitle(editor, true);
+            } else if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (input.value.trim()) void this.finishInlineTitle(true);
+            }
         });
-        dialog.show();
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+    }
+
+    public finishInlineTitle(createNext = false): Promise<boolean> | undefined {
+        const editor = this.inlineTitle;
+        if (!editor) return;
+        return editor.pending ??= this.saveInlineTitle(editor, createNext);
+    }
+
+    private closeInlineTitle(editor: InlineSubtaskTitle, restoreFocus = false) {
+        this.inlineTitle = undefined;
+        if (editor.titleButton) {
+            editor.titleButton.textContent = editor.task.title || i18n('unnamedNote');
+            editor.input.replaceWith(editor.titleButton);
+            editor.row.draggable = editor.wasDraggable;
+        } else {
+            editor.row.remove();
+        }
+        if (restoreFocus) {
+            if (this.subtaskRenderPending) this.renderSubtasks();
+            const row = editor.task && this.getRootElement().querySelector<HTMLElement>(`[data-task-id="${CSS.escape(editor.task.id)}"] .subtasks-dialog__title`);
+            (row || this.getRootElement().querySelector<HTMLElement>('#addSubtaskBtn'))?.focus();
+        }
+    }
+
+    private async saveInlineTitle(editor: InlineSubtaskTitle, createNext: boolean): Promise<boolean> {
+        const title = editor.input.value.trim();
+        const previousTitle = String(editor.task?.title ?? '').trim();
+        const changed = !!title && title !== previousTitle;
+        if (changed) {
+            editor.input.readOnly = true;
+            try {
+                await this.writeInlineTitle(editor, title);
+            } catch (error) {
+                editor.input.readOnly = false;
+                editor.pending = undefined;
+                console.error('Failed to save inline subtask title:', error);
+                showMessage(i18n(editor.task ? 'updateReminderFailed' : 'createFailed'), 3000, 'error');
+                return false;
+            }
+        }
+        const continueEditing = createNext && document.activeElement === editor.input;
+        const pendingRender = this.subtaskRenderPending;
+        this.closeInlineTitle(editor);
+        if (changed || pendingRender) this.renderSubtasks(!pendingRender, editor.task ? undefined : editor.parentId);
+        if (continueEditing) this.openSubtaskDraft(editor.parentId);
+        if (changed) {
+            if (this.isTempMode) this.onTempSubtasksUpdate?.([...this.subtasks]);
+            this.onUpdate?.();
+        }
+        return true;
+    }
+
+    private buildInlineSubtask(id: string, title: string, parentId: string, parent: any, savedTasks: any[] = []) {
+        const { instanceDate } = this.parseInstanceParentId(parentId);
+        const sort = [...savedTasks, ...this.subtasks]
+            .reduce((max, task) => task?.parentId === parentId ? Math.max(max, Number(task.sort) || 0) : max, 0) + 1000;
+        const parentStatus = parent?.kanbanStatus;
+        const kanbanStatus = parentStatus && parentStatus !== 'completed' && parentStatus !== 'abandoned' ? parentStatus : 'doing';
+        return {
+            id,
+            parentId,
+            title,
+            date: instanceDate,
+            projectId: parent?.projectId || this.plugin.settings?.unassignedTasksProjectId,
+            customGroupId: parent?.customGroupId,
+            milestoneId: parent?.milestoneId,
+            categoryId: parent?.categoryId,
+            priority: parent?.priority || 'none',
+            kanbanStatus,
+            completed: false,
+            createdAt: new Date().toISOString(),
+            sort,
+        };
+    }
+
+    private async writeInlineTitle({ id, task, parentId }: InlineSubtaskTitle, title: string) {
+        if (this.isTempMode) {
+            if (task) {
+                task.title = title;
+            } else {
+                const parent = parentId === '__TEMP_PARENT__' ? this.getResolvedTempParentTask() : this.subtasks.find(task => task.id === parentId);
+                if (parentId !== '__TEMP_PARENT__' && !parent) throw new Error('The parent task no longer exists');
+                this.subtasks.push({ ...this.buildInlineSubtask(id, title, parentId, parent), isTempSubtask: true });
+            }
+            return;
+        }
+
+        const data = await this.plugin.loadReminderData(true) || {};
+        let savedTask: any;
+        let original: any;
+        if (task) {
+            const direct = data[task.id];
+            original = direct || data[this.getSubtaskStorageId(task)!];
+            if (!original) throw new Error('The subtask no longer exists');
+            savedTask = structuredClone(original);
+            const { instanceDate } = this.parseInstanceParentId(task.id);
+            if (!direct && instanceDate) {
+                if (original.repeat?.excludeDates?.includes(instanceDate) || getRepeatInstanceState(original, instanceDate)?.deleted) {
+                    throw new Error('The subtask instance is no longer visible');
+                }
+                patchRepeatInstanceState(savedTask, instanceDate, { title });
+            } else {
+                savedTask.title = title;
+                savedTask.updatedAt = new Date().toISOString();
+            }
+        } else {
+            const { targetParentId, instanceDate } = this.parseInstanceParentId(parentId);
+            const template = data[parentId] || data[targetParentId];
+            if (!template) throw new Error('The parent task no longer exists');
+            const parent = instanceDate ? { ...template, ...getRepeatInstanceState(template, instanceDate) } : template;
+            savedTask = data[id] ? { ...data[id], title } : this.buildInlineSubtask(id, title, parentId, parent, Object.values(data));
+        }
+
+        await this.plugin.saveReminderData({ ...data, [savedTask.id]: savedTask });
+        if (task) {
+            task.title = title;
+            const visibleTask = this.subtasks.find(item => item.id === task.id);
+            if (visibleTask) visibleTask.title = title;
+        } else if (!this.subtasks.some(item => item.id === savedTask.id)) {
+            this.subtasks.push(savedTask);
+        }
+        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { projectId: task?.projectId || savedTask.projectId } }));
+        void this.plugin.updateMobileNotification?.(savedTask, original)?.catch((error: unknown) => {
+            console.warn('Failed to update subtask notifications:', error);
+        });
     }
 
     private async editSubtask(task: any) {
+        if (await this.finishInlineTitle() === false) return;
         const dialog = new QuickReminderDialog(undefined, undefined, async (modifiedReminder) => {
             if (!modifiedReminder) return;
 
@@ -1347,6 +1523,7 @@ export class SubtasksDialog {
     }
 
     private async reorderSubtasks(draggingId: string, targetId: string, insertBefore: boolean = true) {
+        if (await this.finishInlineTitle() === false) return;
         const movedTask = this.subtasks.find(t => t.id === draggingId);
         const targetTask = this.subtasks.find(t => t.id === targetId);
         if (!movedTask || !targetTask || !this.canSortSubtaskDrop(movedTask, targetTask)) return;
@@ -1425,6 +1602,7 @@ export class SubtasksDialog {
 
     // 显示粘贴新建子任务对话框
     private async showPasteSubtaskDialog() {
+        if (await this.finishInlineTitle() === false) return;
         let parentTask: any = null;
         let instanceDate: string | undefined = undefined;
         

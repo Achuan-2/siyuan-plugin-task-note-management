@@ -579,6 +579,7 @@ export class QuickReminderDialog {
     private tempParentName?: string;
     private reminderSkipHolidayData: HolidayData = {};
     private projectSelectorPopup?: ProjectSelectorPopup;
+    private subtasksDialog?: SubtasksDialog;
     private activeDialogTab: 'task' | 'select-task' = 'task';
     private onSelectExistingTask?: (task: any) => Promise<void>;
     private taskSelectionPanel?: { destroy(): void };
@@ -2247,7 +2248,9 @@ export class QuickReminderDialog {
 
         subtasksPanel.dataset.mounted = 'loading';
         try {
-            await this.createSubtasksDialogForTab().mount(subtasksPanel);
+            const subtasksDialog = this.createSubtasksDialogForTab();
+            await subtasksDialog.mount(subtasksPanel);
+            if (this.dialog === dialog) this.subtasksDialog = subtasksDialog;
         } catch (error) {
             delete subtasksPanel.dataset.mounted;
             console.error('Failed to initialize subtasks tab:', error);
@@ -3413,6 +3416,7 @@ export class QuickReminderDialog {
             destroyCallback: () => {
                 this.taskSelectionPanel?.destroy();
                 this.taskSelectionPanel = undefined;
+                this.subtasksDialog = undefined;
                 if (this.editor) {
                     this.editor.destroy();
                     this.editor = undefined;
@@ -7139,6 +7143,12 @@ export class QuickReminderDialog {
         if (this.isFormInitializing) return;
         // 项目关联的分组、状态尚未就绪时不读取半填充表单（含快捷键保存）。
         if (this.projectChangeQueue) return;
+
+        const inlineSave = this.subtasksDialog?.finishInlineTitle();
+        if (inlineSave) {
+            const dialog = this.dialog;
+            if (!await inlineSave || this.dialog !== dialog || this.isSaving || this.isDeletingTask || this.projectChangeQueue) return;
+        }
 
         const titleInput = this.dialog.element.querySelector('#quickReminderTitle') as HTMLTextAreaElement;
         const blockInput = this.dialog.element.querySelector('#quickBlockInput') as HTMLInputElement;

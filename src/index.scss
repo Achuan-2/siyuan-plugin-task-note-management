@@ -2700,6 +2700,64 @@
     font-style: italic;
 }
 
+/* 子任务编辑列表 */
+.subtasks-dialog {
+    &__list {
+        overflow-y: auto;
+        max-height: 500px;
+
+        > .reminder-item {
+            margin-bottom: 0;
+            border-width: 0 0 1px;
+            border-radius: 0;
+            padding-block: 8px;
+        }
+    }
+
+    &__empty {
+        color: var(--b3-theme-on-surface-light);
+        text-align: center;
+        padding: 20px;
+    }
+
+    &__add {
+        align-self: flex-start;
+    }
+
+    &__title {
+        min-width: 0;
+        padding: 2px 4px;
+        border: 0;
+        border-radius: var(--b3-border-radius);
+        background: transparent;
+        font: inherit;
+        font-weight: 500;
+        text-align: start;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    &__draft {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 32px 8px 8px;
+        border-bottom: 1px solid var(--b3-theme-surface-lighter);
+    }
+
+    &__input {
+        flex: 1;
+        min-width: 0;
+        min-height: 28px;
+        max-height: 120px;
+        field-sizing: content;
+        resize: none;
+        padding: 3px 4px;
+        line-height: 1.4;
+        user-select: text;
+    }
+}
+
 /* 快速提醒对话框样式 */
 .quick-reminder-dialog {
     &__content {

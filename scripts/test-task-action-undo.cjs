@@ -557,6 +557,75 @@ test('子任务弹窗删除已保存任务及 ghost 实例后都可撤回', asyn
     }
 });
 
+function inlineSubtaskFixture(initial = {}) {
+    const f = fixture(initial);
+    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
+        'openInlineTitle', 'finishInlineTitle', 'closeInlineTitle', 'saveInlineTitle', 'writeInlineTitle',
+        'buildInlineSubtask', 'parseInstanceParentId', 'getSubtaskStorageId', 'getResolvedTempParentTask',
+    ]);
+    Object.assign(view, { subtasks: [], renderSubtasks() {}, getRootElement: () => ({ querySelector: () => null }) });
+    return { ...f, view };
+}
+
+test('临时子任务在列表中回车连续创建，输入法确认和空标题不会新建', async () => {
+    const f = inlineSubtaskFixture();
+    const created = [];
+    f.document.createElement = (tag) => Object.assign(element(tag), {
+        focus() { f.document.activeElement = this; },
+        setSelectionRange() {},
+    });
+    Object.assign(f.view, {
+        isTempMode: true,
+        tempParentTask: { projectId: 'project', kanbanStatus: 'waiting' },
+        onTempSubtasksUpdate: tasks => { created.push(tasks); },
+        openSubtaskDraft(parentId) {
+            const row = element('div');
+            row.appendChild = child => row.append(child);
+            f.document.body.append(row);
+            this.openInlineTitle(row, parentId);
+        },
+    });
+    const pressEnter = (input, isComposing = false) => input.listeners.keydown({
+        key: 'Enter', isComposing, stopPropagation() {}, preventDefault() {},
+    });
+    f.view.openSubtaskDraft('__TEMP_PARENT__');
+    pressEnter(f.view.inlineTitle.input);
+    assert.equal(created.length, 0);
+    const input = f.view.inlineTitle.input;
+    input.value = '  第一条  ';
+    pressEnter(input, true);
+    assert.equal(created.length, 0);
+    pressEnter(input);
+    await f.view.inlineTitle.pending;
+    assert.equal(created.length, 1);
+    assert.equal(created[0][0].title, '第一条');
+    assert.equal(created[0][0].projectId, 'project');
+    assert.equal(created[0][0].kanbanStatus, 'waiting');
+    assert.equal(f.view.inlineTitle.input.value, '');
+    assert.equal(f.document.activeElement, f.view.inlineTitle.input);
+    assert.equal(f.state.writes, 0);
+});
+
+test('行内新建保留重复实例的父子关系，改名只更新对应实例', async () => {
+    const date = '2026-11-21';
+    const before = {
+        parent: { id: 'parent', kanbanStatus: 'completed', projectId: 'project' },
+        child: { id: 'child', parentId: 'parent', title: '模板标题', repeat: { enabled: true, instances: { [date]: { note: '备注' } } } },
+    };
+    const f = inlineSubtaskFixture(before);
+    const task = { ...before.child, id: `child_${date}`, originalId: 'child' };
+    f.view.subtasks = [task];
+    await f.view.writeInlineTitle({ id: 'new', parentId: `parent_${date}` }, '新建子任务');
+    await f.view.writeInlineTitle({ task, parentId: `parent_${date}` }, '只改当前实例');
+    assert.equal(f.state.data.new.parentId, `parent_${date}`);
+    assert.equal(f.state.data.new.date, date);
+    assert.equal(f.state.data.new.completed, false);
+    assert.equal(f.state.data.new.projectId, 'project');
+    assert.equal(f.state.data.child.title, '模板标题');
+    assert.equal(f.state.data.child.repeat.instances[date].title, '只改当前实例');
+    assert.equal(f.state.data.child.repeat.instances[date].note, '备注');
+});
+
 test('文档任务和子任务弹窗响应撤回，关闭后移除刷新监听', async () => {
     for (const className of ['DocumentReminderDialog', 'SubtasksDialog']) {
         const f = fixture();
