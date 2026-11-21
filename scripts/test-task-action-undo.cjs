@@ -591,29 +591,39 @@ test('子任务右键和更多按钮打开思源菜单，只读时仅保留查�
 function inlineSubtaskFixture(initial = {}) {
     const f = fixture(initial);
     const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
-        'openInlineTitle', 'finishInlineTitle', 'closeInlineTitle', 'saveInlineTitle', 'writeInlineTitle',
+        'createInlineTitle', 'finishPendingChanges', 'finishInlineTitles', 'finishInlineTitle', 'closeInlineTitle', 'saveInlineTitle', 'writeInlineTitle',
         'buildInlineSubtask', 'parseInstanceParentId', 'getSubtaskStorageId', 'getResolvedTempParentTask',
     ]);
-    Object.assign(view, { subtasks: [], renderSubtasks() {}, getRootElement: () => ({ querySelector: () => null }) });
+    Object.assign(view, {
+        subtasks: [], dirtyInlineTitles: new Set(), renderSubtasks() {},
+        getActiveSortCriteria: () => [], getRootElement: () => ({ querySelector: () => null }),
+    });
+    f.document.createElement = tag => Object.assign(element(tag), {
+        isConnected: true,
+        focus() {
+            const previous = f.document.activeElement;
+            if (previous === this) return;
+            f.document.activeElement = this;
+            previous?.fire('blur');
+            this.fire('focus');
+        },
+    });
     return { ...f, view };
 }
 
 test('临时子任务在列表中回车连续创建，输入法确认和空标题不会新建', async () => {
     const f = inlineSubtaskFixture();
     const created = [];
-    f.document.createElement = (tag) => Object.assign(element(tag), {
-        focus() { f.document.activeElement = this; },
-        setSelectionRange() {},
-    });
     Object.assign(f.view, {
         isTempMode: true,
         tempParentTask: { projectId: 'project', kanbanStatus: 'waiting' },
         onTempSubtasksUpdate: tasks => { created.push(tasks); },
         openSubtaskDraft(parentId) {
             const row = element('div');
-            row.appendChild = child => row.append(child);
             f.document.body.append(row);
-            this.openInlineTitle(row, parentId);
+            const input = this.createInlineTitle(row, parentId);
+            row.append(input);
+            input.focus();
         },
     });
     const pressEnter = (input, isComposing = false) => input.listeners.keydown({
@@ -635,6 +645,48 @@ test('临时子任务在列表中回车连续创建，输入法确认和空标�
     assert.equal(f.view.inlineTitle.input.value, '');
     assert.equal(f.document.activeElement, f.view.inlineTitle.input);
     assert.equal(f.state.writes, 0);
+});
+
+test('已有子任务的输入框在保存前后保持同一节点，连续切换标题时按序保存', async () => {
+    const f = inlineSubtaskFixture({ a: { id: 'a', title: 'First' }, b: { id: 'b', title: 'Second' } });
+    const a = element('div'), b = element('div');
+    const inputA = f.view.createInlineTitle(a, 'parent', { ...f.state.data.a });
+    const inputB = f.view.createInlineTitle(b, 'parent', { ...f.state.data.b });
+    a.append(inputA);
+    b.append(inputB);
+    let allowFirstWrite;
+    const gate = new Promise(resolve => { allowFirstWrite = resolve; });
+    const save = f.plugin.saveReminderData.bind(f.plugin);
+    f.plugin.saveReminderData = async data => {
+        if (f.state.writes === 0) await gate;
+        await save(data);
+    };
+    let renders = 0;
+    f.view.renderSubtasks = () => { renders++; };
+
+    assert.equal(inputA.tag, 'textarea');
+    inputA.focus();
+    inputA.value = 'First edited';
+    inputA.fire('input');
+    inputB.focus();
+    inputB.value = 'Second edited';
+    inputB.fire('input');
+    const saved = f.view.finishPendingChanges();
+    assert.equal(f.state.writes, 0);
+    allowFirstWrite();
+    assert.equal(await saved, true);
+    assert.equal(f.state.writes, 2);
+    assert.equal(f.state.data.a.title, 'First edited');
+    assert.equal(f.state.data.b.title, 'Second edited');
+    assert.equal(renders, 0);
+    assert.equal(a.children[0], inputA);
+    assert.equal(b.children[0], inputB);
+    assert.equal(f.document.activeElement, inputB);
+    inputB.value = 'Cancelled';
+    inputB.fire('input');
+    inputB.listeners.keydown({ key: 'Escape', stopPropagation() {}, preventDefault() {} });
+    assert.equal(inputB.value, 'Second edited');
+    assert.equal(b.children[0], inputB);
 });
 
 test('行内新建保留重复实例的父子关系，改名只更新对应实例', async () => {
@@ -669,7 +721,7 @@ function subtaskDropFixture(initial) {
         renderSubtasks() {}, loadSubtasks: async () => {},
         compareSubtasks: (a, b) => a.sort - b.sort,
         canSortSubtaskDrop: (a, b) => a.parentId === b.parentId,
-        finishInlineTitle() {},
+        finishInlineTitles() {},
     });
     return { ...f, view };
 }

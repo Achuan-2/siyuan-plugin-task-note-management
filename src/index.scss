@@ -2756,8 +2756,8 @@
 
     &__title {
         display: block;
-        flex: 1;
         min-width: 0;
+        max-width: 100%;
         max-height: 120px;
         box-sizing: border-box;
         field-sizing: content;
@@ -2782,8 +2782,11 @@
         gap: 6px;
         padding: 8px 32px 8px 8px;
         border-bottom: 1px solid var(--b3-theme-surface-lighter);
-    }
 
+        .subtasks-dialog__title {
+            flex: 1;
+        }
+    }
 }
 
 /* 快速提醒对话框样式 */

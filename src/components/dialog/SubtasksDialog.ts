@@ -19,7 +19,6 @@ interface InlineSubtaskTitle {
     row: HTMLElement;
     parentId: string;
     task?: any;
-    titleButton?: HTMLButtonElement;
     wasDraggable: boolean;
     pending?: Promise<boolean>;
 }
@@ -59,6 +58,8 @@ export class SubtasksDialog {
     private lute: any;
     private readOnly: boolean = false; // 是否为只读模式
     private inlineTitle?: InlineSubtaskTitle;
+    private dirtyInlineTitles = new Set<InlineSubtaskTitle>();
+    private pendingTitleSave?: Promise<boolean>;
     private subtaskRenderPending = false;
 
     constructor(
@@ -663,7 +664,7 @@ export class SubtasksDialog {
         if (!listEl) return;
 
         // 保留正在输入的节点，等保存或取消后再刷新列表。
-        if (this.inlineTitle) {
+        if (this.inlineTitle || this.dirtyInlineTitles.size) {
             this.subtaskRenderPending = true;
             return;
         }
@@ -709,8 +710,7 @@ export class SubtasksDialog {
             onMoreClick: (task: any, element: HTMLElement, event: MouseEvent) => {
                 this.showSubtaskActionMenu(task, element, event);
             },
-            onCardDoubleClick: (task: any, event: MouseEvent) => {
-                if (this.inlineTitle?.task?.id === task.id && (event.target as Element).closest('.reminder-item__title-row')) return;
+            onCardDoubleClick: (task: any) => {
                 void this.editSubtask(task);
             },
             onTitleClick: (task: any) => {
@@ -863,17 +863,7 @@ export class SubtasksDialog {
     private bindInlineTitle(task: any, row: HTMLElement) {
         const title = row.querySelector('.reminder-item__title');
         if (!title) return;
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'reminder-item__title subtasks-dialog__title';
-        button.textContent = title.textContent;
-        button.addEventListener('dblclick', event => event.stopPropagation());
-        button.addEventListener('click', async event => {
-            event.stopPropagation();
-            if (await this.finishPendingChanges() === false || !button.isConnected || this.inlineTitle) return;
-            this.openInlineTitle(row, this.getRenderedParentId(task), task, button);
-        });
-        title.replaceWith(button);
+        title.replaceWith(this.createInlineTitle(row, this.getRenderedParentId(task), task));
     }
 
     private async startInlineSubtask(parentId = this.getRenderedParentId(null)) {
@@ -900,31 +890,39 @@ export class SubtasksDialog {
         row.className = 'subtasks-dialog__draft';
         row.style.marginLeft = `${level * 20}px`;
         row.innerHTML = '<div class="reminder-item__left-controls"><input type="checkbox" class="reminder-task-checkbox" disabled aria-hidden="true"></div>';
+        const input = this.createInlineTitle(row, parentId);
+        row.appendChild(input);
         list.insertBefore(row, nextRow);
-        this.openInlineTitle(row, parentId);
+        input.focus();
     }
 
-    private openInlineTitle(row: HTMLElement, parentId: string, task?: any, titleButton?: HTMLButtonElement) {
+    private createInlineTitle(row: HTMLElement, parentId: string, task?: any): HTMLTextAreaElement {
         const input = document.createElement('textarea');
-        input.className = 'b3-text-field subtasks-dialog__input';
+        input.className = 'subtasks-dialog__title';
         input.rows = 1;
         input.value = task?.title ?? '';
         input.setAttribute('aria-label', i18n('taskTitle'));
         input.setAttribute('enterkeyhint', 'enter');
-        input.placeholder = i18n('taskTitle');
+        input.placeholder = i18n(task ? 'unnamedNote' : 'taskTitle');
         input.spellcheck = false;
 
         const id = task?.id ?? `reminder_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-        const editor: InlineSubtaskTitle = { id, input, row, parentId, task, titleButton, wasDraggable: row.draggable };
-        this.inlineTitle = editor;
-        row.draggable = false;
-        if (titleButton) titleButton.replaceWith(input);
-        else row.appendChild(input);
-
-        for (const event of ['click', 'dblclick', 'contextmenu']) {
+        const editor: InlineSubtaskTitle = { id, input, row, parentId, task, wasDraggable: row.draggable };
+        for (const event of ['click', 'dblclick', 'dragstart']) {
             input.addEventListener(event, event => event.stopPropagation());
         }
-        input.addEventListener('blur', () => { void this.finishInlineTitle(); });
+        input.addEventListener('focus', () => {
+            this.inlineTitle = editor;
+            row.draggable = false;
+        });
+        input.addEventListener('input', () => {
+            if (document.activeElement === input) this.inlineTitle = editor;
+            this.dirtyInlineTitles.add(editor);
+        });
+        input.addEventListener('blur', () => {
+            row.draggable = editor.wasDraggable;
+            if (this.inlineTitle === editor || this.dirtyInlineTitles.has(editor)) void this.finishInlineTitle(editor);
+        });
         input.addEventListener('keydown', event => {
             if (event.isComposing || event.keyCode === 229) {
                 event.stopPropagation();
@@ -933,41 +931,52 @@ export class SubtasksDialog {
             if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopPropagation();
-                if (!editor.pending) this.closeInlineTitle(editor, true);
+                if (editor.pending) return;
+                this.closeInlineTitle(editor);
+                if (this.subtaskRenderPending) this.renderSubtasks();
+                if (!input.isConnected) {
+                    const field = editor.task && this.getRootElement().querySelector<HTMLElement>(`[data-task-id="${CSS.escape(editor.id)}"] .subtasks-dialog__title`);
+                    (field || this.getRootElement().querySelector<HTMLElement>('#addSubtaskBtn'))?.focus();
+                }
             } else if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
                 event.preventDefault();
                 event.stopPropagation();
-                if (input.value.trim()) void this.finishInlineTitle(true);
+                if (input.value.trim()) void this.finishInlineTitle(editor, true);
             }
         });
-        input.focus();
-        input.setSelectionRange(input.value.length, input.value.length);
+        return input;
     }
 
     public finishPendingChanges(): Promise<boolean> | undefined {
-        return this.pendingSubtaskDrop ?? this.finishInlineTitle();
+        return this.pendingSubtaskDrop ?? this.finishInlineTitles();
     }
 
-    private finishInlineTitle(createNext = false): Promise<boolean> | undefined {
-        const editor = this.inlineTitle;
-        if (!editor) return;
-        return editor.pending ??= this.saveInlineTitle(editor, createNext);
+    private finishInlineTitles(): Promise<boolean> | undefined {
+        const editors = new Set(this.dirtyInlineTitles);
+        if (this.inlineTitle) editors.add(this.inlineTitle);
+        if (!editors.size) return this.pendingTitleSave;
+        return Promise.all([...editors].map(editor => this.finishInlineTitle(editor))).then(results => results.every(Boolean));
     }
 
-    private closeInlineTitle(editor: InlineSubtaskTitle, restoreFocus = false) {
-        this.inlineTitle = undefined;
-        if (editor.titleButton) {
-            editor.titleButton.textContent = editor.task.title || i18n('unnamedNote');
-            editor.input.replaceWith(editor.titleButton);
-            editor.row.draggable = editor.wasDraggable;
-        } else {
-            editor.row.remove();
-        }
-        if (restoreFocus) {
-            if (this.subtaskRenderPending) this.renderSubtasks();
-            const row = editor.task && this.getRootElement().querySelector<HTMLElement>(`[data-task-id="${CSS.escape(editor.task.id)}"] .subtasks-dialog__title`);
-            (row || this.getRootElement().querySelector<HTMLElement>('#addSubtaskBtn'))?.focus();
-        }
+    private finishInlineTitle(editor: InlineSubtaskTitle, createNext = false): Promise<boolean> {
+        if (editor.pending) return editor.pending;
+        this.dirtyInlineTitles.add(editor);
+        const save = () => this.saveInlineTitle(editor, createNext);
+        const pending = this.pendingTitleSave ? this.pendingTitleSave.then(save, save) : save();
+        editor.pending = this.pendingTitleSave = pending;
+        const clearPending = () => {
+            editor.pending = undefined;
+            if (this.pendingTitleSave === pending) this.pendingTitleSave = undefined;
+        };
+        void pending.then(clearPending, clearPending);
+        return pending;
+    }
+
+    private closeInlineTitle(editor: InlineSubtaskTitle) {
+        if (this.inlineTitle === editor) this.inlineTitle = undefined;
+        this.dirtyInlineTitles.delete(editor);
+        if (editor.task) editor.input.value = editor.task.title ?? '';
+        else editor.row.remove();
     }
 
     private async saveInlineTitle(editor: InlineSubtaskTitle, createNext: boolean): Promise<boolean> {
@@ -979,17 +988,20 @@ export class SubtasksDialog {
             try {
                 await this.writeInlineTitle(editor, title);
             } catch (error) {
-                editor.input.readOnly = false;
-                editor.pending = undefined;
                 console.error('Failed to save inline subtask title:', error);
                 showMessage(i18n(editor.task ? 'updateReminderFailed' : 'createFailed'), 3000, 'error');
                 return false;
+            } finally {
+                editor.input.readOnly = false;
             }
         }
         const continueEditing = createNext && document.activeElement === editor.input;
         const pendingRender = this.subtaskRenderPending;
         this.closeInlineTitle(editor);
-        if (changed || pendingRender) this.renderSubtasks(!pendingRender, editor.task ? undefined : editor.parentId);
+        const titleSort = changed && editor.task && this.getActiveSortCriteria().some(criterion => criterion.method === 'title');
+        if (pendingRender || (changed && !editor.task) || titleSort) {
+            this.renderSubtasks(!pendingRender, editor.task ? undefined : editor.parentId);
+        }
         if (continueEditing) this.openSubtaskDraft(editor.parentId);
         if (changed) {
             if (this.isTempMode) this.onTempSubtasksUpdate?.([...this.subtasks]);
@@ -1510,7 +1522,7 @@ export class SubtasksDialog {
 
     private async applySubtaskDrop(draggingId: string, targetId: string, position: SubtaskDropPosition): Promise<boolean> {
         try {
-            if (await this.finishInlineTitle() === false) return false;
+            if (await this.finishInlineTitles() === false) return false;
             if (position === 'inside') await this.nestSubtask(draggingId, targetId);
             else await this.reorderSubtasks(draggingId, targetId, position === 'before');
             return true;
