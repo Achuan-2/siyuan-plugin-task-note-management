@@ -7,22 +7,25 @@ const { test } = require('node:test');
 const ts = require('typescript');
 
 const root = path.resolve(__dirname, '..');
+const compilerOptions = { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS };
+const taskSort = {};
+const taskSortCode = fs.readFileSync(path.join(root, 'src/utils/taskSort.ts'), 'utf8');
+new Function('exports', ts.transpileModule(taskSortCode, { compilerOptions }).outputText)(taskSort);
 const relative = 'src/components/panel/ReminderPanel.ts';
 const content = process.env.REMINDER_PANEL_SOURCE_REF
     ? execFileSync('git', ['show', `${process.env.REMINDER_PANEL_SOURCE_REF}:${relative}`], { cwd: root, encoding: 'utf8' })
     : fs.readFileSync(path.join(root, relative), 'utf8');
 const source = ts.createSourceFile(relative, content, ts.ScriptTarget.Latest, true);
 const names = ['normalizeSortCriteria', 'getActiveSortCriteria', 'getBuiltInDefaultSortCriteria',
-    'sortReminders', 'sortByCriteria', 'compareByCriterion', 'compareByPriorityValue',
-    'compareByEndDate', 'compareByTime', 'compareByTitle', 'compareByCreatedTime',
-    'getPinnedSortRank', 'isReminderPinned', 'getReminderSortValue'];
+    'sortReminders', 'sortByCriteria', 'compareByCriterion', 'getPinnedSortRank', 'isReminderPinned', 'getReminderSortValue',
+    'compareByPriorityValue', 'compareByEndDate', 'compareByTime', 'compareByTitle', 'compareByCreatedTime'];
 const methods = source.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'ReminderPanel')
     .members.filter(node => names.includes(node.name?.getText(source)))
     .map(node => node.getText(source)).join('\n');
-const code = ts.transpileModule(`class Panel { ${methods} }`, {
-    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
-}).outputText;
-const Panel = new Function(`${code}; return Panel;`)();
+const code = ts.transpileModule(`class Panel { ${methods} }`, { compilerOptions }).outputText;
+const Panel = new Function('compareTaskFields', 'compareTaskCreatedTime', `${code}; return Panel;`)(
+    taskSort.compareTaskFields, taskSort.compareTaskCreatedTime,
+);
 
 function sorted(tasks, criteria, originalRemindersCache = {}) {
     const panel = Object.assign(new Panel(), {

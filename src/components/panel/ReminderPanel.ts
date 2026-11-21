@@ -6,6 +6,7 @@ import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, platformUti
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushErrMsg, pushMsg, sql } from "../../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../../utils/sortConfig";
+import { compareTaskCategories, compareTaskCompletedTime, compareTaskCreatedTime, compareTaskFields } from "../../utils/taskSort";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { SortMenuDialog } from "../dialog/SortMenuDialog";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
@@ -1131,73 +1132,19 @@ export class ReminderPanel {
         // console.log('Sorting complete; criteria:', criteria);
     }
 
-    // 根据单个排序条件比较两个任务
     private compareByCriterion(a: any, b: any, criterion: SortCriterion): number {
-        let result = 0;
-
         switch (criterion.method) {
-            case 'time':
-            case 'startDate':
-                // 特殊处理：按开始日期排序时，无日期任务始终排在最后
-                const hasDateA = !!(a.date || a.endDate);
-                const hasDateB = !!(b.date || b.endDate);
-
-                if (!hasDateA && !hasDateB) {
-                    // 两者都无日期时视为相同，后续由非优先级模式的 sort 兜底决定顺序
-                    result = 0;
-                } else if (!hasDateA) {
-                    result = 1;  // a 无日期，排在后面
-                } else if (!hasDateB) {
-                    result = -1; // b 无日期，排在后面
-                } else {
-                    result = this.compareByTime(a, b);
-                }
-                break;
-
-            case 'endDate':
-                // 特殊处理：按结束日期排序时，无日期任务始终排在最后
-                const hasEndDateA = !!(a.endDate || a.date);
-                const hasEndDateB = !!(b.endDate || b.date);
-
-                if (!hasEndDateA && !hasEndDateB) {
-                    result = 0;
-                } else if (!hasEndDateA) {
-                    result = 1;  // a 无日期，排在后面
-                } else if (!hasEndDateB) {
-                    result = -1; // b 无日期，排在后面
-                } else {
-                    result = this.compareByEndDate(a, b);
-                }
-                break;
-
-            case 'priority':
-                result = this.compareByPriorityValue(a, b);
-                break;
-
             case 'project':
                 return this.compareByProject(a, b, criterion.order);
-
-            case 'title':
-                result = this.compareByTitle(a, b);
-                break;
-
-            case 'created':
-                result = this.compareByCreatedTime(a, b);
-                break;
-
-            case 'category':
-                result = this.compareByCategory(a, b);
-                break;
-
+            case 'category': {
+                const diff = this.compareByCategory(a, b);
+                return criterion.order === 'desc' ? -diff : diff;
+            }
             case 'completed':
-                return this.compareByCompletedTime(a, b, criterion.order);
-
+                return compareTaskCompletedTime(a, b, this.getCompletedTime(a), this.getCompletedTime(b), criterion.order);
             default:
-                result = 0;
+                return compareTaskFields(a, b, criterion);
         }
-
-        // 应用升降序
-        return criterion.order === 'desc' ? -result : result;
     }
 
     // 按排序条件数组比较两个任务
@@ -1235,79 +1182,14 @@ export class ReminderPanel {
         }
 
         // 所有排序条件都相同时，按创建时间作为兜底排序（确保排序的稳定性）
-        return this.compareByCreatedTime(a, b);
+        return compareTaskCreatedTime(a, b);
     }
 
-    // 按创建时间比较
-    private compareByCreatedTime(a: any, b: any): number {
-        const timeA = a.createdTime ? new Date(a.createdTime).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-        const timeB = b.createdTime ? new Date(b.createdTime).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-        return timeA - timeB; // 旧到新（升序），降序会在 compareByCriterion 中取反
-    }
-
-    // 按分类比较（按照分类管理器中的排序顺序）
     private compareByCategory(a: any, b: any): number {
-        const categories = this.categoryManager.getCategories();
-        const categoryOrder = new Map<string, number>();
-
-        // 构建分类ID到排序索引的映射
-        categories.forEach((cat, index) => {
-            categoryOrder.set(cat.id, index);
-        });
-
-        // 获取任务的排序最靠前的分类ID（支持重复任务实例）
-        const getHighestPriorityCategoryId = (reminder: any): string => {
-            // 对于重复任务实例，优先使用自身的 categoryId，如果没有则从原始任务获取
-            let categoryId = reminder.categoryId;
-
-            // 如果没有 categoryId 且有 originalId，尝试从原始任务获取
-            if (!categoryId && reminder.isRepeatInstance && reminder.originalId && this.originalRemindersCache) {
-                const original = this.originalRemindersCache[reminder.originalId];
-                if (original) {
-                    categoryId = original.categoryId;
-                }
-            }
-
-            if (!categoryId) return 'none';
-            const ids = String(categoryId).split(',').map((id: string) => id.trim()).filter((id: string) => id);
-
-            if (ids.length === 0) return 'none';
-            if (ids.length === 1) return ids[0];
-
-            // 有多个分类时，返回排序最靠前的那个（在 categoryOrder 中索引最小的）
-            let bestId = ids[0];
-            let bestOrder = categoryOrder.get(bestId) ?? Number.MAX_SAFE_INTEGER;
-
-            for (let i = 1; i < ids.length; i++) {
-                const id = ids[i];
-                const order = categoryOrder.get(id) ?? Number.MAX_SAFE_INTEGER;
-                if (order < bestOrder) {
-                    bestOrder = order;
-                    bestId = id;
-                }
-            }
-
-            return bestId;
-        };
-
-        const catA = getHighestPriorityCategoryId(a);
-        const catB = getHighestPriorityCategoryId(b);
-
-        // 调试日志
-        // if (a.categoryId?.includes(',') || b.categoryId?.includes(',')) {
-        //     console.log('[CategorySort]', a.title?.substring(0, 20), `(${a.categoryId || 'none'})`, '=>', catA, 'vs', b.title?.substring(0, 20), `(${b.categoryId || 'none'})`, '=>', catB);
-        // }
-
-        // 无分类的任务排在最后
-        if (catA === 'none' && catB === 'none') return 0;
-        if (catA === 'none') return 1;
-        if (catB === 'none') return -1;
-
-        // 按照分类的排序索引比较
-        const orderA = categoryOrder.get(catA) ?? Number.MAX_SAFE_INTEGER;
-        const orderB = categoryOrder.get(catB) ?? Number.MAX_SAFE_INTEGER;
-
-        return orderA - orderB;
+        const categoryOrder = new Map(this.categoryManager.getCategories().map((category, index) => [category.id, index]));
+        const getCategoryId = (reminder: any) => reminder.categoryId
+            || (reminder.isRepeatInstance ? this.originalRemindersCache?.[reminder.originalId]?.categoryId : undefined);
+        return compareTaskCategories(getCategoryId(a), getCategoryId(b), categoryOrder);
     }
 
     // 当前排序模式下的主分组键（用于限制跨分组拖拽）
@@ -5293,50 +5175,6 @@ export class ReminderPanel {
         return this.isFutureTaskRemindedOnDate(reminder, targetDate);
     }
 
-    private compareByCompletedTime(a: any, b: any, order: 'asc' | 'desc' = 'desc'): number {
-        // 获取完成时间
-        const completedTimeA = this.getCompletedTime(a);
-        const completedTimeB = this.getCompletedTime(b);
-
-        // 如果都有完成时间，按完成时间比较
-        if (completedTimeA && completedTimeB) {
-            const timeA = new Date(completedTimeA).getTime();
-            const timeB = new Date(completedTimeB).getTime();
-            return order === 'desc' ? (timeB - timeA) : (timeA - timeB);
-        }
-
-        // 如果只有一个有完成时间，有完成时间的在前
-        if (completedTimeA && !completedTimeB) return -1;
-        if (!completedTimeA && completedTimeB) return 1;
-
-        // 如果都没有完成时间，则按以下优先级排序：
-        // 1. 有日期的任务优先于无日期的任务
-        // 2. 同等情况下，按日期时间排序
-        const hasDateA = !!(a.date);
-        const hasDateB = !!(b.date);
-
-        if (hasDateA && !hasDateB) return -1; // 有日期的排在前面
-        if (!hasDateA && hasDateB) return 1;  // 无日期的排在后面
-
-        // 都有日期或都没有日期的情况下，按日期时间排序
-        if (hasDateA && hasDateB) {
-            const dateValueA = new Date(a.date + (a.time ? `T${a.time}` : 'T00:00')).getTime();
-            const dateValueB = new Date(b.date + (b.time ? `T${b.time}` : 'T00:00')).getTime();
-            if (!isNaN(dateValueA) && !isNaN(dateValueB) && dateValueA !== dateValueB) {
-                return order === 'desc' ? (dateValueB - dateValueA) : (dateValueA - dateValueB);
-            }
-        }
-
-        // 最後兜底：按创建时间排序 (借鉴 ProjectKanbanView)
-        const timeA = a.createdTime ? new Date(a.createdTime).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-        const timeB = b.createdTime ? new Date(b.createdTime).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-        if (timeA !== timeB) {
-            return order === 'desc' ? (timeB - timeA) : (timeA - timeB);
-        }
-
-        return (a.id || '').localeCompare(b.id || '');
-    }
-
     // 新增：获取完成时间的辅助方法
     private getCompletedTime(reminder: any): string | null {
         // 如果是每日可做任务，优先获取今日完成时间
@@ -5377,99 +5215,6 @@ export class ReminderPanel {
         }
         return null;
     }
-    // 按时间（开始日期）比较（考虑跨天事件和优先级）
-    private compareByTime(a: any, b: any): number {
-        const hasDateA = !!a.date;
-        const hasDateB = !!b.date;
-
-        if (!hasDateA && !hasDateB) {
-            return 0;
-        }
-        if (!hasDateA) return 1;  // a 无日期，排在后面
-        if (!hasDateB) return -1; // b 无日期，排在后面
-
-        // 都有日期时，按日期时间排序
-        // 对于重复任务实例，a.date 已经是实例的日期，而不是原始任务的日期
-        const dateA = new Date(a.date + (a.time ? `T${a.time}` : 'T00:00'));
-        const dateB = new Date(b.date + (b.time ? `T${b.time}` : 'T00:00'));
-
-        // 如果解析失败，返回0
-        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
-            return isNaN(dateA.getTime()) ? 1 : -1;
-        }
-
-        // 首先按日期时间排序
-        const timeDiff = dateA.getTime() - dateB.getTime();
-        if (timeDiff !== 0) {
-            return timeDiff;
-        }
-
-        // 时间相同时，考虑跨天事件和全天事件的优先级
-        const isSpanningA = a.endDate && a.endDate !== a.date;
-        const isSpanningB = b.endDate && b.endDate !== b.date;
-        const isAllDayA = !a.time;
-        const isAllDayB = !b.time;
-
-        // 跨天事件 > 有时间的单日事件 > 全天事件
-        if (isSpanningA && !isSpanningB) return -1;
-        if (!isSpanningA && isSpanningB) return 1;
-
-        if (!isSpanningA && !isSpanningB) {
-            // 都不是跨天事件，有时间的优先于全天事件
-            if (!isAllDayA && isAllDayB) return -1;
-            if (isAllDayA && !isAllDayB) return 1;
-        }
-
-        // 时间相同且类型相同时，按优先级排序
-        return 0;
-    }
-
-    // 按结束日期比较（考虑跨天事件和全天事件）
-    private compareByEndDate(a: any, b: any): number {
-        const endDateStrA = a.endDate || a.date;
-        const endDateStrB = b.endDate || b.date;
-        const hasDateA = !!endDateStrA;
-        const hasDateB = !!endDateStrB;
-
-        if (!hasDateA && !hasDateB) {
-            return 0;
-        }
-        if (!hasDateA) return 1;  // a 无日期，排在后面
-        if (!hasDateB) return -1; // b 无日期，排在后面
-
-        const timeStrA = a.endDate ? (a.endTime || a.time) : a.time;
-        const timeStrB = b.endDate ? (b.endTime || b.time) : b.time;
-
-        const dateA = new Date(endDateStrA + (timeStrA ? `T${timeStrA}` : 'T00:00'));
-        const dateB = new Date(endDateStrB + (timeStrB ? `T${timeStrB}` : 'T00:00'));
-
-        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
-            if (isNaN(dateA.getTime()) && isNaN(dateB.getTime())) return 0;
-            return isNaN(dateA.getTime()) ? 1 : -1;
-        }
-
-        const timeDiff = dateA.getTime() - dateB.getTime();
-        if (timeDiff !== 0) {
-            return timeDiff;
-        }
-
-        const isSpanningA = a.endDate && a.date && a.endDate !== a.date;
-        const isSpanningB = b.endDate && b.date && b.endDate !== b.date;
-        const isAllDayA = !timeStrA;
-        const isAllDayB = !timeStrB;
-
-        if (isSpanningA && !isSpanningB) return -1;
-        if (!isSpanningA && isSpanningB) return 1;
-
-        if (!isSpanningA && !isSpanningB) {
-            if (!isAllDayA && isAllDayB) return -1;
-            if (isAllDayA && !isAllDayB) return 1;
-        }
-
-        return 0;
-    }
-
     private async refreshProjectSortMetaCache(): Promise<void> {
         try {
             const [projectDataRaw, settings, statusDataRaw, folders] = await Promise.all([
@@ -5601,21 +5346,6 @@ export class ReminderPanel {
     }
 
 
-
-    // 优先级数值比较
-    private compareByPriorityValue(a: any, b: any): number {
-        const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
-        const priorityA = priorityOrder[a.priority || 'none'] || 0;
-        const priorityB = priorityOrder[b.priority || 'none'] || 0;
-        return priorityA - priorityB; // 低到高（升序），降序会在 compareByCriterion 中取反
-    }
-
-    // 按标题比较
-    private compareByTitle(a: any, b: any): number {
-        const titleA = (a.title || '').toLowerCase();
-        const titleB = (b.title || '').toLowerCase();
-        return titleA.localeCompare(titleB, 'zh-CN');
-    }
 
     private updateReminderCompletionDom(reminderId: string, completed: boolean, completedTime?: string): void {
         const el = this.remindersContainer.querySelector(`[data-reminder-id="${reminderId}"]`) as HTMLElement | null;

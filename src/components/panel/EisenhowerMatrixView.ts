@@ -8,6 +8,9 @@ import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { ProjectManager } from "../dataManager/projectManager";
 import { CategoryManager } from "../dataManager/categoryManager";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
+import { SortMenuDialog } from "../dialog/SortMenuDialog";
+import { AVAILABLE_SORT_METHODS, getSortConfigSummary, type SortCriterion } from "../../utils/sortConfig";
+import { compareTaskCategories, compareTaskCompletedTime, compareTaskCreatedTime, compareTaskFields } from "../../utils/taskSort";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
@@ -62,6 +65,8 @@ interface Quadrant {
     tasks: QuadrantTask[];
 }
 
+const DEFAULT_MATRIX_SORT: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
+
 export class EisenhowerMatrixView {
     private container: HTMLElement;
     private plugin: any;
@@ -79,6 +84,9 @@ export class EisenhowerMatrixView {
     private viewId: string;
     private projectSortOrder: string[] = [];
     private currentProjectSortMode: 'name' | 'custom' = 'name';
+    private taskSortCriteria = DEFAULT_MATRIX_SORT;
+    private groupByProject = true;
+    private pendingSortSave = Promise.resolve();
     private kanbanStatusFilter: 'all' | 'doing' | 'todo' = 'doing'; // 任务状态筛选
     private criteriaSettings = {
         importanceThreshold: 'medium' as 'high' | 'medium' | 'low',
@@ -162,10 +170,11 @@ export class EisenhowerMatrixView {
     async initialize() {
         await this.projectManager.initialize();
         await this.categoryManager.initialize();
-        await this.loadProjectSortOrder();
+        await this.loadSortSettings();
         await this.loadCriteriaSettings();
         await this.loadFilterSettings();
         this.setupUI();
+        this.updateSortButtonTitle();
         this.updateKanbanStatusFilterButton();
         await this.loadTasks();
         this.renderMatrix();
@@ -191,7 +200,7 @@ export class EisenhowerMatrixView {
                     <svg class="dropdown-arrow" style="margin-left: 4px; width: 12px; height: 12px;"><use xlink:href="#iconDown"></use></svg>
                 </button>
                 <div class="header-v-separator"></div>
-                <button class="b3-button b3-button--outline project-sort-btn ariaLabel" aria-label="${i18n("projectSorting")}">
+                <button class="b3-button b3-button--outline task-sort-btn ariaLabel" aria-label="${i18n("sortBy")}">
                     <svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>
                 </button>
                 <button class="b3-button b3-button--outline filter-btn ariaLabel" aria-label="${i18n("eisenhowerFilter")}">
@@ -561,8 +570,9 @@ export class EisenhowerMatrixView {
                 }
 
                 let taskSort = reminder?.sort || 0;
+                let originalReminder: any;
                 if (reminder?.isRepeatInstance && reminder?.originalId) {
-                    const originalReminder = reminderData[reminder.originalId];
+                    originalReminder = reminderData[reminder.originalId];
                     if (originalReminder) {
                         taskSort = originalReminder.sort ?? reminder.sort ?? 0;
                     }
@@ -588,15 +598,15 @@ export class EisenhowerMatrixView {
                     pomodoroCount: await this.getReminderPomodoroCount(reminder.id, reminder, reminderData),
                     focusTime: await this.getReminderFocusTime(reminder.id, reminder, reminderData),
                     sort: taskSort,
-                    createdTime: reminder?.createdTime,
+                    createdTime: reminder?.createdTime || reminder?.createdAt,
                     endDate: reminder?.endDate,
-                    categoryId: reminder?.categoryId,
+                    categoryId: reminder?.categoryId || originalReminder?.categoryId,
                     repeat: reminder?.repeat,
                     isRepeatInstance: reminder?.isRepeatInstance,
                     originalId: reminder?.originalId,
                     isSubscribed: reminder?.isSubscribed,
                     customProgress: reminder?.customProgress,
-                    pinned: !!reminder?.pinned
+                    pinned: !!(reminder?.pinned || originalReminder?.pinned)
                 };
 
                 this.allTasks.push(task);
@@ -927,105 +937,64 @@ export class EisenhowerMatrixView {
                 quadrant.tasks.push(task);
             }
         });
-
-        // 在每个象限内按项目分组
-        this.quadrants.forEach(quadrant => {
-            const groupedTasks = this.groupTasksByProject(quadrant.tasks);
-            quadrant.tasks = groupedTasks;
-        });
     }
 
-    private groupTasksByProject(tasks: QuadrantTask[]): QuadrantTask[] {
-        const grouped = new Map<string, QuadrantTask[]>();
-
-        tasks.forEach(task => {
-            const projectKey = task.projectId || 'no-project';
-            if (!grouped.has(projectKey)) {
-                grouped.set(projectKey, []);
+    private getProjectOrder(tasks: QuadrantTask[]): Map<string, number> {
+        const names = new Map<string, string>();
+        for (const task of tasks) {
+            if (task.projectId && !names.has(task.projectId)) {
+                names.set(task.projectId, task.projectName || '');
             }
-            grouped.get(projectKey)!.push(task);
-        });
-
-        // 在每个项目分组内按优先级排序，同时支持手动排序
-        grouped.forEach((projectTasks) => {
-            // 按优先级排序（高到低），同优先级按sort字段排序
-            projectTasks.sort((a, b) => {
-                // 1. 置顶任务排在最前面
-                if (a.pinned !== b.pinned) {
-                    return a.pinned ? -1 : 1;
-                }
-
-                const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1, 'none': 0 };
-                const priorityA = priorityOrder[a.priority || 'none'];
-                const priorityB = priorityOrder[b.priority || 'none'];
-
-                // 优先级不同，按优先级降序排序
-                if (priorityA !== priorityB) {
-                    return priorityB - priorityA;
-                }
-
-                // 同优先级内，按手动排序值排序（升序）
-                // 使用 task.sort，它已经在创建时从 repeat.instances 中读取了正确的值
-                const sortA = a.sort || 0;
-                const sortB = b.sort || 0;
-                if (sortA !== sortB) {
-                    return sortA - sortB;
-                }
-
-                // 如果排序值相同，按创建时间排序
-                return new Date(b.createdTime || 0).getTime() - new Date(a.createdTime || 0).getTime();
-            });
-        });
-
-        // 转换为数组并保持顺序
-        const result: QuadrantTask[] = [];
-
-        // 获取所有项目ID（排除无项目）
-        const projectIds = Array.from(grouped.keys()).filter(key => key !== 'no-project');
-
-        // 根据排序模式排序项目
-        let sortedProjectIds: string[];
-
-        if (this.currentProjectSortMode === 'custom' && this.projectSortOrder.length > 0) {
-            // 使用自定义排序
-            sortedProjectIds = [...this.projectSortOrder.filter(id => projectIds.includes(id))];
-            // 添加未排序的项目
-            const unsortedProjects = projectIds.filter(id => !this.projectSortOrder.includes(id));
-            sortedProjectIds = [...sortedProjectIds, ...unsortedProjects.sort((a, b) => {
-                const nameA = grouped.get(a)?.[0]?.projectName || '';
-                const nameB = grouped.get(b)?.[0]?.projectName || '';
-                return nameA.localeCompare(nameB);
-            })];
-        } else {
-            // 使用名称排序作为默认排序
-            sortedProjectIds = projectIds.sort((a, b) => {
-                const projectA = grouped.get(a)?.[0];
-                const projectB = grouped.get(b)?.[0];
-
-                if (!projectA || !projectB) return 0;
-
-                // 按项目名称排序
-                return (projectA.projectName || '').localeCompare(projectB.projectName || '');
-            });
         }
 
-        // 按排序后的项目ID顺序添加任务
-        sortedProjectIds.forEach(projectId => {
-            const tasks = grouped.get(projectId);
-            if (tasks) {
-                result.push(...tasks);
+        const customOrder = new Map(this.currentProjectSortMode === 'custom'
+            ? this.projectSortOrder.map((id, index) => [id, index])
+            : []);
+        const ids = [...names.keys()].sort((a, b) =>
+            (customOrder.get(a) ?? Number.MAX_SAFE_INTEGER) - (customOrder.get(b) ?? Number.MAX_SAFE_INTEGER)
+            || names.get(a).localeCompare(names.get(b)));
+        return new Map(ids.map((id, index) => [id, index]));
+    }
+
+    private compareTasks(
+        a: QuadrantTask, b: QuadrantTask, projectOrder: ReadonlyMap<string, number>,
+        categoryOrder: ReadonlyMap<string, number>,
+    ): number {
+        const pinnedDiff = Number(!!b.pinned) - Number(!!a.pinned);
+        if (pinnedDiff) return pinnedDiff;
+
+        for (const criterion of this.taskSortCriteria) {
+            let result: number;
+            switch (criterion.method) {
+                case 'project':
+                    if (!a.projectId || !b.projectId) {
+                        result = Number(!a.projectId) - Number(!b.projectId);
+                    } else {
+                        const diff = projectOrder.get(a.projectId) - projectOrder.get(b.projectId);
+                        result = criterion.order === 'desc' ? -diff : diff;
+                    }
+                    break;
+                case 'category': {
+                    const diff = compareTaskCategories(a.categoryId, b.categoryId, categoryOrder);
+                    result = criterion.order === 'desc' ? -diff : diff;
+                    break;
+                }
+                case 'completed':
+                    result = compareTaskCompletedTime(a, b, a.extendedProps?.completedTime, b.extendedProps?.completedTime, criterion.order);
+                    break;
+                default:
+                    result = compareTaskFields(a, b, criterion);
             }
-        });
-
-        // 添加无项目的任务
-        if (grouped.has('no-project')) {
-            result.push(...grouped.get('no-project')!);
+            if (result) return result;
         }
-
-        return result;
+        return (a.sort || 0) - (b.sort || 0) || compareTaskCreatedTime(b, a);
     }
 
     private renderMatrix() {
+        const projectOrder = this.getProjectOrder(this.filteredTasks);
+        const categoryOrder = new Map(this.categoryManager.getCategories().map((category, index) => [category.id, index]));
+        const projectCriterion = this.taskSortCriteria.find(criterion => criterion.method === 'project');
+        const projectDirection = projectCriterion?.order === 'desc' ? -1 : 1;
         this.quadrants.forEach(quadrant => {
             const contentEl = this.container.querySelector(`[data-quadrant-content="${quadrant.key}"]`) as HTMLElement;
             if (!contentEl) return;
@@ -1040,9 +1009,14 @@ export class EisenhowerMatrixView {
                 return;
             }
 
-            // 按项目分组显示
+            const sortedTasks = [...quadrant.tasks].sort((a, b) => this.compareTasks(a, b, projectOrder, categoryOrder));
+            if (!this.groupByProject) {
+                this.renderTaskTree(sortedTasks, contentEl);
+                return;
+            }
+
             const projectGroups = new Map<string, QuadrantTask[]>();
-            quadrant.tasks.forEach(task => {
+            sortedTasks.forEach(task => {
                 const projectKey = task.projectId || 'no-project';
                 if (!projectGroups.has(projectKey)) {
                     projectGroups.set(projectKey, []);
@@ -1050,7 +1024,12 @@ export class EisenhowerMatrixView {
                 projectGroups.get(projectKey)!.push(task);
             });
 
-            projectGroups.forEach((tasks, projectKey) => {
+            const projectKeys = [...projectGroups.keys()].sort((a, b) => {
+                if (a === 'no-project' || b === 'no-project') return Number(a === 'no-project') - Number(b === 'no-project');
+                return projectDirection * (projectOrder.get(a) - projectOrder.get(b));
+            });
+            projectKeys.forEach(projectKey => {
+                const tasks = projectGroups.get(projectKey);
                 const projectGroup = document.createElement('div');
                 projectGroup.className = 'project-group';
 
@@ -1125,31 +1104,41 @@ export class EisenhowerMatrixView {
                 tasksContainer.className = 'project-tasks-container';
                 tasksContainer.style.display = isProjectCollapsed ? 'none' : 'block';
 
-                // 支持子任务的层级显示
-                const taskMap = new Map(tasks.map(t => [t.id, t]));
-                const topLevelTasks = tasks.filter(t => !t.parentId || !taskMap.has(t.parentId));
-                const renderTaskWithChildren = (task: QuadrantTask, level: number) => {
-                    // 只渲染未完成的子任务，已完成的子任务不显示但用于进度计算
-                    if (task.completed && level > 0) {
-                        return;
-                    }
-
-                    const taskEl = this.createTaskElement(task, level);
-                    tasksContainer.appendChild(taskEl);
-
-                    // 渲染子任务（只渲染未完成的）
-                    const childTasks = tasks.filter(t => t.parentId === task.id && !t.completed);
-                    if (childTasks.length > 0 && !this.collapsedTasks.has(task.id)) {
-                        childTasks.forEach(childTask => renderTaskWithChildren(childTask, level + 1));
-                    }
-                };
-
-                topLevelTasks.forEach(task => renderTaskWithChildren(task, 0));
+                this.renderTaskTree(tasks, tasksContainer);
 
                 projectGroup.appendChild(tasksContainer);
                 contentEl.appendChild(projectGroup);
             });
         });
+    }
+
+    private renderTaskTree(tasks: QuadrantTask[], container: HTMLElement): void {
+        const taskIds = new Set(tasks.map(task => task.id));
+        const childrenByParent = new Map<string, QuadrantTask[]>();
+        const roots: QuadrantTask[] = [];
+        for (const task of tasks) {
+            if (!task.parentId || !taskIds.has(task.parentId)) {
+                roots.push(task);
+            } else if (!task.completed) {
+                if (!childrenByParent.has(task.parentId)) childrenByParent.set(task.parentId, []);
+                childrenByParent.get(task.parentId).push(task);
+            }
+        }
+
+        const render = (task: QuadrantTask, level: number) => {
+            container.appendChild(this.createTaskElement(task, level));
+            if (!this.collapsedTasks.has(task.id)) {
+                childrenByParent.get(task.id)?.forEach(child => render(child, level + 1));
+            }
+        };
+        roots.forEach(task => render(task, 0));
+    }
+
+    private canReorderTasks(dragged: QuadrantTask, target: QuadrantTask): boolean {
+        return dragged.id !== target.id
+            && (dragged.projectId || '') === (target.projectId || '')
+            && this.taskSortCriteria.length === 1
+            && this.taskSortCriteria[0].method === 'priority';
     }
 
     private createTaskElement(task: QuadrantTask, level: number = 0): HTMLElement {
@@ -1244,40 +1233,19 @@ export class EisenhowerMatrixView {
                         this.draggedTaskId = null;
                     });
 
-                    // 添加拖放排序支持 - 支持跨优先级排序
                     taskEl.addEventListener('dragover', (e) => {
-                        e.preventDefault();
+                        const draggedTask = this.isDragging && this.filteredTasks.find(item => item.id === this.draggedTaskId);
+                        if (!draggedTask || draggedTask.quadrant !== t.quadrant) return;
                         e.stopPropagation();
+                        if (!this.canReorderTasks(draggedTask, t)) return;
+                        e.preventDefault();
+                        this.showDropIndicator(taskEl, e);
+                        taskEl.classList.add('drag-over');
 
-                        if (!this.isDragging || !this.draggedTaskId) {
-                            return;
-                        }
-
-                        const draggedTaskId = this.draggedTaskId;
-
-                        if (draggedTaskId && draggedTaskId !== t.id) {
-                            const draggedTask = this.filteredTasks.find(item => item.id === draggedTaskId);
-                            if (!draggedTask) {
-                                return;
-                            }
-
-                            const draggedProjectId = draggedTask.projectId || 'no-project';
-                            const draggedPriority = draggedTask.priority || 'none';
-                            const currentProjectId = t.projectId || 'no-project';
-                            const currentPriority = t.priority || 'none';
-
-                            if (draggedProjectId === currentProjectId) {
-                                this.showDropIndicator(taskEl, e);
-                                taskEl.classList.add('drag-over');
-
-                                if (draggedPriority !== currentPriority) {
-                                    taskEl.classList.add(`priority-drop-${currentPriority}`);
-                                    const indicator = taskEl.querySelector('.drop-indicator');
-                                    if (indicator) {
-                                        (indicator as HTMLElement).style.backgroundColor = this.getPriorityColor(currentPriority);
-                                    }
-                                }
-                            }
+                        if (draggedTask.priority !== t.priority) {
+                            taskEl.classList.add('priority-drop-' + t.priority);
+                            const indicator = taskEl.querySelector<HTMLElement>('.drop-indicator');
+                            if (indicator) indicator.style.backgroundColor = this.getPriorityColor(t.priority);
                         }
                     });
 
@@ -1288,30 +1256,14 @@ export class EisenhowerMatrixView {
                     });
 
                     taskEl.addEventListener('drop', (e) => {
+                        const draggedTask = this.isDragging && this.filteredTasks.find(item => item.id === this.draggedTaskId);
+                        if (!draggedTask || draggedTask.quadrant !== t.quadrant) return;
                         e.preventDefault();
                         e.stopPropagation();
-
-                        if (!this.isDragging || !this.draggedTaskId) {
-                            this.hideDropIndicators();
-                            taskEl.classList.remove('drag-over');
-                            return;
-                        }
-
-                        const draggedTaskId = this.draggedTaskId;
-
-                        if (draggedTaskId && draggedTaskId !== t.id) {
-                            const draggedTask = this.filteredTasks.find(item => item.id === draggedTaskId);
-                            if (draggedTask) {
-                                const draggedProjectId = draggedTask.projectId || 'no-project';
-                                const currentProjectId = t.projectId || 'no-project';
-
-                                if (draggedProjectId === currentProjectId) {
-                                    this.handleTaskReorder(draggedTaskId, t.id, e);
-                                }
-                            }
+                        if (this.canReorderTasks(draggedTask, t)) {
+                            void this.handleTaskReorder(draggedTask.id, t.id, e);
                         }
                         this.hideDropIndicators();
-                        taskEl.classList.remove('drag-over', 'priority-drop-high', 'priority-drop-medium', 'priority-drop-low', 'priority-drop-none');
                     });
                 }
             }
@@ -1404,13 +1356,7 @@ export class EisenhowerMatrixView {
             });
         }
 
-        // 项目排序按钮
-        const sortProjectsBtn = this.container.querySelector('.sort-projects-btn');
-        if (sortProjectsBtn) {
-            sortProjectsBtn.addEventListener('click', () => {
-                this.showProjectSortDialog();
-            });
-        }
+        this.container.querySelector('.task-sort-btn')?.addEventListener('click', () => this.showSortMenu());
 
         // 刷新按钮
         const refreshBtn = this.container.querySelector('.refresh-btn');
@@ -3961,17 +3907,78 @@ export class EisenhowerMatrixView {
         }, 0);
     }
 
-    private async loadProjectSortOrder() {
+    private async loadSortSettings() {
         try {
             const settings = await this.plugin.loadSettings();
-
-
-            this.projectSortOrder = settings.projectSortOrder || [];
-            this.currentProjectSortMode = settings.projectSortMode || 'custom'; // 默认改为custom
+            this.projectSortOrder = Array.isArray(settings.projectSortOrder) ? settings.projectSortOrder : [];
+            this.currentProjectSortMode = settings.projectSortMode === 'name' ? 'name' : 'custom';
+            this.groupByProject = settings.eisenhowerGroupByProject !== false;
+            if (Array.isArray(settings.eisenhowerSortCriteria)) {
+                const criteria: SortCriterion[] = settings.eisenhowerSortCriteria
+                    .filter(criterion => AVAILABLE_SORT_METHODS.some(method => method.key === criterion?.method))
+                    .map(criterion => ({ method: criterion.method, order: criterion.order === 'desc' ? 'desc' : 'asc' }));
+                this.taskSortCriteria = criteria.length ? criteria : DEFAULT_MATRIX_SORT;
+            }
         } catch (error) {
-            this.projectSortOrder = [];
-            this.currentProjectSortMode = 'custom'; // 默认改为custom
+            console.warn('Failed to load Eisenhower matrix sort settings:', error);
         }
+    }
+
+    private updateSortButtonTitle() {
+        const summary = getSortConfigSummary({ criteria: this.taskSortCriteria });
+        this.container.querySelector('.task-sort-btn')?.setAttribute('aria-label', `${i18n('sortAndGrouping')}<br>${summary}`);
+    }
+
+    private showSortMenu() {
+        const applySort = (criteria: SortCriterion[]) => {
+            this.taskSortCriteria = criteria.map(criterion => ({ ...criterion }));
+            this.updateSortButtonTitle();
+            this.renderMatrix();
+            return this.saveSortSettings({ eisenhowerSortCriteria: this.taskSortCriteria });
+        };
+        new SortMenuDialog({
+            plugin: this.plugin,
+            currentCriteria: this.taskSortCriteria,
+            onSave: applySort,
+            onChange: applySort,
+            grouping: {
+                value: this.groupByProject ? 'project' : 'none',
+                options: [
+                    { key: 'project', label: i18n('reminderGroupProject') },
+                    { key: 'none', label: i18n('noGroupOption') },
+                ],
+                onChange: async value => {
+                    const groupByProject = value === 'project';
+                    if (groupByProject === this.groupByProject) return;
+                    if (!await this.saveSortSettings({ eisenhowerGroupByProject: groupByProject })) return false;
+                    this.groupByProject = groupByProject;
+                    this.renderMatrix();
+                    return true;
+                },
+            },
+            secondaryAction: { label: i18n('projectSortSettings'), onClick: () => this.showProjectSortDialog() },
+        }).show();
+    }
+
+    private saveSortSettings(changes: {
+        eisenhowerSortCriteria?: SortCriterion[];
+        eisenhowerGroupByProject?: boolean;
+        projectSortOrder?: string[];
+        projectSortMode?: 'name' | 'custom';
+    }): Promise<boolean> {
+        const pending = this.pendingSortSave.then(async () => {
+            try {
+                const settings = await this.plugin.loadSettings();
+                await this.plugin.saveSettings({ ...settings, ...changes });
+                return true;
+            } catch (error) {
+                console.error('Failed to save Eisenhower matrix sort settings:', error);
+                showMessage(i18n('operationFailed'));
+                return false;
+            }
+        });
+        this.pendingSortSave = pending.then(() => {});
+        return pending;
     }
 
     private async loadCriteriaSettings() {
@@ -4037,17 +4044,6 @@ export class EisenhowerMatrixView {
             await this.plugin.saveSettings(settings);
         } catch (error) {
             console.error("Failed to save Eisenhower matrix filter settings:", error);
-        }
-    }
-
-    private async saveProjectSortOrder() {
-        try {
-            const settings = await this.plugin.loadSettings();
-            settings.projectSortOrder = this.projectSortOrder;
-            settings.projectSortMode = this.currentProjectSortMode;
-            await this.plugin.saveSettings(settings);
-        } catch (error) {
-            console.error("Failed to save project order:", error);
         }
     }
 
@@ -4169,16 +4165,17 @@ export class EisenhowerMatrixView {
         });
 
         saveBtn.addEventListener('click', async () => {
-            // 始终使用自定义排序模式
+            const items = projectSortList.querySelectorAll<HTMLElement>('.project-sort-item');
+            const projectSortOrder = Array.from(items).map(item => item.dataset.projectId).filter(Boolean);
+            saveBtn.disabled = true;
+            if (!await this.saveSortSettings({ projectSortOrder, projectSortMode: 'custom' })) {
+                saveBtn.disabled = false;
+                return;
+            }
+            this.projectSortOrder = projectSortOrder;
             this.currentProjectSortMode = 'custom';
-
-            // 获取当前排序
-            const items = projectSortList.querySelectorAll('.project-sort-item');
-            this.projectSortOrder = Array.from(items).map(item => item.getAttribute('data-project-id')).filter(Boolean) as string[];
-
-            await this.saveProjectSortOrder();
             dialog.destroy();
-            await this.refresh();
+            this.renderMatrix();
             showMessage(i18n('projectSortUpdated'));
         });
     }

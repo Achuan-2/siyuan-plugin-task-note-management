@@ -11,6 +11,7 @@ export interface SortMenuDialogOptions {
     onChange?: (criteria: SortCriterion[]) => void; // 实时变更回调
     availableMethods?: Array<{ key: string; label: () => string; icon: string }>;
     allowEmptyCriteria?: boolean;
+    secondaryAction?: { label: string; onClick: () => void };
     grouping?: {
         value: string;
         options: Array<{ key: string; label: string }>;
@@ -78,6 +79,7 @@ export class SortMenuDialog {
                 </div>
                 </section>
                 <div class="sort-menu-actions" style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px;">
+                    ${this.options.secondaryAction ? `<button class="b3-button b3-button--outline sort-menu-secondary"></button>` : ''}
                     <button class="b3-button b3-button--cancel sort-menu-cancel">${i18n("close") || "关闭"}</button>
                 </div>
             </div>`,
@@ -300,6 +302,16 @@ export class SortMenuDialog {
         cancelBtn?.addEventListener('click', () => {
             this.dialog?.destroy();
         });
+
+        const secondaryBtn = this.dialog?.element.querySelector('.sort-menu-secondary');
+        const secondaryAction = this.options.secondaryAction;
+        if (secondaryBtn && secondaryAction) {
+            secondaryBtn.textContent = secondaryAction.label;
+            secondaryBtn.addEventListener('click', () => {
+                this.dialog?.destroy();
+                secondaryAction.onClick();
+            });
+        }
 
         modeSwitch?.addEventListener('change', () => {
             this.isMultiSelect = modeSwitch.checked;
