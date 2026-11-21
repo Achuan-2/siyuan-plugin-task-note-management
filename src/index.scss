@@ -1506,6 +1506,13 @@
     -webkit-touch-callout: none;
 }
 
+.reminder-item--touch-drag-ready {
+    box-shadow: 0 0 0 1.5px var(--b3-theme-primary);
+    background-color: var(--b3-theme-primary-lightest);
+    transform: scale(1.01);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+}
+
 .reminder-item--touch-dragging {
     opacity: 0.38 !important;
 }

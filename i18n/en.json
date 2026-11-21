@@ -2081,7 +2081,7 @@
     "habitPanelTitle": "Habit Check-In",
     "panelView": "View",
     "panelViewStandard": "Standard",
-    "panelViewMini": "Mini",
+    "panelViewMini": "Minimal",
     "taskMiniTime": "Time",
     "taskMiniProgress": "Progress",
     "habitMiniDayActionHint": "Click to choose a check-in status; right-click to view or edit this date's records",

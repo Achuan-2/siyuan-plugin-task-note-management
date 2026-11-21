@@ -56,14 +56,18 @@ test('任务迷你悬浮详情避免重复同日时间并保留子元素无障�
         }`
     ) + '; return Fixture;')(key => key, () => 'daily');
 
-    const makeEl = (initialAttrs = {}) => {
+    const makeEl = (initialAttrs = {}, initialClasses = []) => {
         const attrs = new Map(Object.entries(initialAttrs));
-        const classes = new Set();
+        const classes = new Set(initialClasses);
         return {
             dataset: {},
             attrs,
             classes,
-            classList: { add: (...names) => names.forEach(name => classes.add(name)) },
+            classList: {
+                add: (...names) => names.forEach(name => classes.add(name)),
+                remove: (...names) => names.forEach(name => classes.delete(name)),
+                contains: name => classes.has(name),
+            },
             getAttribute: name => attrs.get(name) ?? null,
             setAttribute: (name, value) => attrs.set(name, String(value)),
             removeAttribute: name => attrs.delete(name),
@@ -71,9 +75,9 @@ test('任务迷你悬浮详情避免重复同日时间并保留子元素无障�
         };
     };
 
-    const titleEl = makeEl({ 'aria-label': '打开绑定块: 测试任务' });
-    const timeEl = makeEl({ 'aria-label': '今天 · 点击修改时间', title: '今天' });
-    const row = makeEl();
+    const titleEl = makeEl({ 'aria-label': '打开绑定块: 测试任务' }, ['ariaLabel']);
+    const timeEl = makeEl({ 'aria-label': '今天 · 点击修改时间', title: '今天' }, ['ariaLabel']);
+    const row = makeEl({}, ['ariaLabel']);
     row.querySelector = selector => {
         if (selector === '.reminder-item__title') return titleEl;
         if (selector === '.reminder-item__time') return timeEl;
@@ -92,12 +96,64 @@ test('任务迷你悬浮详情避免重复同日时间并保留子元素无障�
         projectCache,
     });
 
+    assert.ok(row.dataset.miniTaskTooltip.includes('task-mini-tooltip__rows'));
     assert.ok(row.dataset.miniTaskTooltip.includes('<span>2026-11-21</span>'));
     assert.ok(!row.dataset.miniTaskTooltip.includes('2026-11-21 ~ 2026-11-21'));
     assert.ok(row.dataset.miniTaskTooltip.includes('周报文档'));
+    assert.equal(row.classList.contains('ariaLabel'), false);
+    assert.equal(titleEl.classList.contains('ariaLabel'), false);
+    assert.equal(timeEl.classList.contains('ariaLabel'), false);
     assert.equal(titleEl.getAttribute('aria-label'), '打开绑定块: 测试任务');
     assert.equal(timeEl.getAttribute('aria-label'), '今天 · 点击修改时间');
     assert.equal(timeEl.getAttribute('title'), null);
+});
+
+test('任务迷你悬浮卡片优先显示在侧栏右侧并与当前行对齐，空间不足时自动翻转', () => {
+    const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
+    const { computeMiniTaskHoverPosition } = createKernelLoader()('src/components/render/miniTaskTouchTooltip.ts');
+
+    const tooltipSize = { width: 220, height: 140 };
+    const viewport = { width: 1440, height: 900 };
+
+    // 1. 左侧停靠栏：悬浮卡片出现在侧栏右侧且与当前行顶部对齐
+    const leftDockPos = computeMiniTaskHoverPosition(
+        { left: 50, top: 120, right: 300, bottom: 156, width: 250, height: 36 },
+        { left: 42, top: 0, right: 320, bottom: 900, width: 278, height: 900 },
+        tooltipSize,
+        viewport,
+        { x: 140, y: 138 }
+    );
+    assert.deepEqual(leftDockPos, { left: 328, top: 120 });
+
+    // 2. 左侧停靠栏底部任务：右侧显示且纵向贴底不溢出视口
+    const bottomRowPos = computeMiniTaskHoverPosition(
+        { left: 50, top: 820, right: 300, bottom: 856, width: 250, height: 36 },
+        { left: 42, top: 0, right: 320, bottom: 900, width: 278, height: 900 },
+        tooltipSize,
+        viewport,
+        { x: 140, y: 838 }
+    );
+    assert.deepEqual(bottomRowPos, { left: 328, top: 752 });
+
+    // 3. 右侧停靠栏：右侧空间不足，自动翻转到侧栏左侧
+    const rightDockPos = computeMiniTaskHoverPosition(
+        { left: 1140, top: 200, right: 1390, bottom: 236, width: 250, height: 36 },
+        { left: 1120, top: 0, right: 1400, bottom: 900, width: 280, height: 900 },
+        tooltipSize,
+        viewport,
+        { x: 1200, y: 218 }
+    );
+    assert.deepEqual(rightDockPos, { left: 892, top: 200 });
+
+    // 4. 宽屏面板且鼠标靠左：在鼠标右侧就近显示，不跑到屏幕最右端
+    const widePanelPos = computeMiniTaskHoverPosition(
+        { left: 40, top: 180, right: 1000, bottom: 216, width: 960, height: 36 },
+        { left: 20, top: 0, right: 1020, bottom: 900, width: 1000, height: 900 },
+        tooltipSize,
+        viewport,
+        { x: 120, y: 198 }
+    );
+    assert.deepEqual(widePanelPos, { left: 136, top: 180 });
 });
 
 test('移动端任务迷你点击在选择模式下不拦截番茄钟任务选择，且重复点击同一行可收起详情卡', () => {
@@ -470,4 +526,341 @@ test('习惯统计周/月视图日格状态：无计划显示横线、过去未�
     assert.equal(partialPomo.isPartial, true);
     assert.equal(partialPomo.percentage, 50);
     assert.deepEqual(partialPomo.displayEmojis, ['🍅']);
+});
+
+test('任务迷你视图跨天任务：未来开始显示开始日期，已开始或过去开始显示结束日期', () => {
+    const panelMethod = extractMethod('src/components/panel/ReminderPanel.ts', 'ReminderPanel', 'formatReminderTime');
+    const rendererMethod = extractMethod('src/components/render/TaskRenderer.ts', 'TaskRenderer', 'formatReminderTime');
+
+    const i18nMap = { today: '今天', tomorrow: '明天' };
+    const i18n = key => i18nMap[key] || key;
+    const compareDateStrings = (a, b) => a.localeCompare(b);
+    const getLogicalDateString = () => '2026-11-21';
+    const getRelativeDateString = offset => offset === 1 ? '2026-11-22' : '2026-11-21';
+    const getLocaleTag = () => 'zh-CN';
+    const getSolarDateLunarString = () => '';
+
+    const PanelFixture = new Function(
+        'i18n', 'compareDateStrings', 'getLogicalDateString', 'getRelativeDateString', 'getLocaleTag', 'getSolarDateLunarString',
+        compile(`class PanelFixture {
+            constructor(viewMode = 'mini') { this.viewMode = viewMode; }
+            getReminderLogicalDate(date) { return date || ''; }
+            ${panelMethod}
+        }`) + '; return PanelFixture;'
+    )(i18n, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag, getSolarDateLunarString);
+
+    const RendererFixture = new Function(
+        'i18n', 'compareDateStrings', 'getLogicalDateString', 'getRelativeDateString', 'getLocaleTag', 'getSolarDateLunarString',
+        compile(`class RendererFixture {
+            static getReminderLogicalDate(date) { return date || ''; }
+            ${rendererMethod}
+        }`) + '; return RendererFixture;'
+    )(i18n, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag, getSolarDateLunarString);
+
+    const miniPanel = new PanelFixture('mini');
+    const standardPanel = new PanelFixture('standard');
+    const fmt = date => new Date(date + 'T00:00:00').toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+
+    // 开始日期在过去/今天：mini 显示结束日期（及结束时间），当天有具体时间时省略“今天”；标准视图显示范围
+    assert.equal(miniPanel.formatReminderTime('2026-11-18', '', '2026-11-21', '2026-11-21', ''), '今天');
+    assert.equal(miniPanel.formatReminderTime('2026-11-18', '09:00', '2026-11-21', '2026-11-21', '13:00'), '13:00');
+    assert.equal(miniPanel.formatReminderTime('2026-11-18', '', '2026-11-21', '2026-11-22', ''), '明天');
+    assert.equal(miniPanel.formatReminderTime('2026-11-18', '', '2026-11-21', '2026-11-25', ''), fmt('2026-11-25'));
+    assert.equal(miniPanel.formatReminderTime('2026-11-21', '', '2026-11-21', '2026-11-25', ''), fmt('2026-11-25'));
+    assert.equal(miniPanel.formatReminderTime('2026-11-18', '09:00', '2026-11-21', '2026-11-25', '18:00'), `${fmt('2026-11-25')} 18:00`);
+    assert.equal(miniPanel.formatReminderTime('2026-11-18', '09:00', '2026-11-21', '2026-11-25', ''), fmt('2026-11-25'));
+    assert.equal(standardPanel.formatReminderTime('2026-11-18', '', '2026-11-21', '2026-11-25', ''), `${fmt('2026-11-18')} → ${fmt('2026-11-25')}`);
+
+    // 开始日期在未来：mini 显示开始日期（及开始时间）
+    assert.equal(miniPanel.formatReminderTime('2026-11-22', '', '2026-11-21', '2026-11-25', ''), '明天');
+    assert.equal(miniPanel.formatReminderTime('2026-11-23', '09:00', '2026-11-21', '2026-11-25', '18:00'), `${fmt('2026-11-23')} 09:00`);
+    assert.equal(miniPanel.formatReminderTime('2026-11-23', '', '2026-11-21', '2026-11-25', '18:00'), fmt('2026-11-23'));
+
+    // 当天任务：极简视图有具体时间仅显示时间，无时间显示“今天”；标准视图保持“今天 时间”
+    assert.equal(miniPanel.formatReminderTime('2026-11-21', '13:00', '2026-11-21'), '13:00');
+    assert.equal(miniPanel.formatReminderTime('2026-11-21', '', '2026-11-21'), '今天');
+    assert.equal(miniPanel.formatReminderTime('2026-11-21', '09:00', '2026-11-21', '2026-11-21', '11:00'), '09:00');
+    assert.equal(miniPanel.formatReminderTime('2026-11-22', '13:00', '2026-11-21'), '明天 13:00');
+    assert.equal(standardPanel.formatReminderTime('2026-11-21', '13:00', '2026-11-21'), '今天 13:00');
+
+    // TaskRenderer 默认实现与 ReminderPanel 保持一致
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-21', '13:00', '2026-11-21', undefined, undefined, undefined, { viewMode: 'mini' }),
+        '13:00'
+    );
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-21', '', '2026-11-21', undefined, undefined, undefined, { viewMode: 'mini' }),
+        '今天'
+    );
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-18', '09:00', '2026-11-21', '2026-11-21', '13:00', undefined, { viewMode: 'mini' }),
+        '13:00'
+    );
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-18', '09:00', '2026-11-21', '2026-11-25', '18:00', undefined, { viewMode: 'mini' }),
+        `${fmt('2026-11-25')} 18:00`
+    );
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-18', '09:00', '2026-11-21', '2026-11-25', '', undefined, { viewMode: 'mini' }),
+        fmt('2026-11-25')
+    );
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-23', '09:00', '2026-11-21', '2026-11-25', '18:00', undefined, { viewMode: 'mini' }),
+        `${fmt('2026-11-23')} 09:00`
+    );
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-22', '', '2026-11-21', '2026-11-25', '', undefined, { viewMode: 'mini' }),
+        '明天'
+    );
+    assert.equal(
+        RendererFixture.formatReminderTime('2026-11-18', '', '2026-11-21', '2026-11-25', '', undefined, { viewMode: 'standard' }),
+        `${fmt('2026-11-18')} → ${fmt('2026-11-25')}`
+    );
+});
+
+test('极简视图文案更新且勾选极简视图时隐藏不适用的显示设置项', () => {
+    const zh = JSON.parse(fs.readFileSync(path.join(root, 'i18n/zh_CN.json'), 'utf8'));
+    const en = JSON.parse(fs.readFileSync(path.join(root, 'i18n/en.json'), 'utf8'));
+    assert.equal(zh.panelViewMini, '极简');
+    assert.equal(en.panelViewMini, 'Minimal');
+
+    const methodText = extractMethod('src/components/panel/ReminderPanel.ts', 'ReminderPanel', 'showMoreMenu');
+    const openedMenus = [];
+    class FakeMenu {
+        constructor(id) { this.id = id; this.items = []; openedMenus.push(this); }
+        addItem(item) { this.items.push(item); }
+        addSeparator() { this.items.push({ type: 'separator' }); }
+        open() {}
+    }
+
+    const createPanelViewMenu = (mode, onChange) => ({
+        icon: 'iconEye',
+        label: 'panelView',
+        submenu: ['standard', 'mini'].map(value => ({
+            icon: mode === value ? 'iconSelect' : '',
+            label: value === 'mini' ? 'panelViewMini' : 'panelViewStandard',
+            click: () => onChange(value),
+        })),
+    });
+
+    const Fixture = new Function(
+        'Menu', 'i18n', 'createPanelViewMenu', 'PasteTaskDialog', 'CategoryManageDialog', 'VipManager', 'HTMLElement',
+        compile(`class Fixture {
+            constructor(viewMode) {
+                this.viewMode = viewMode;
+                this.showProjectKanbanStatus = true;
+                this.showCompletedSubtasks = false;
+                this.clipTitleToOneLine = false;
+                this.showTaskCardDocumentTitle = true;
+                this.isMultiSelectMode = false;
+                this.selectionOptions = { onSelectTask: async () => {} };
+                this.container = { dataset: {} };
+                this.plugin = {};
+            }
+            async savePanelSettings() {}
+            async loadReminders() {}
+            ${methodText}
+        }`) + '; return Fixture;'
+    )(FakeMenu, key => key, createPanelViewMenu, class {}, class {}, { getInstance: () => ({ isVip: () => false }) }, class {});
+
+    const event = { currentTarget: { getBoundingClientRect: () => ({ left: 10, bottom: 20 }) }, clientX: 10, clientY: 20 };
+
+    // 极简视图：隐藏显示项目看板状态、标题限制一行显示、任务卡片显示文档标题
+    new Fixture('mini').showMoreMenu(event);
+    const miniDisplayMenu = openedMenus.at(-1).items.find(item => item.label === 'displaySettings');
+    const miniLabels = miniDisplayMenu.submenu.map(item => item.label);
+    assert.deepEqual(miniLabels, ['panelView', 'showCompletedSubtasks']);
+
+    // 标准视图：完整保留全部显示设置项
+    new Fixture('standard').showMoreMenu(event);
+    const standardDisplayMenu = openedMenus.at(-1).items.find(item => item.label === 'displaySettings');
+    const standardLabels = standardDisplayMenu.submenu.map(item => item.label);
+    assert.deepEqual(standardLabels, [
+        'panelView',
+        'showProjectKanbanStatus',
+        'showCompletedSubtasks',
+        'clipTitleToOneLine',
+        'showTaskCardDocumentTitle',
+    ]);
+});
+
+test('移动端长按手势：220ms 就绪反馈后移动进入拖拽，850ms 未明显移动弹出右键菜单，且禁拖时仍可弹出菜单', () => {
+    const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
+    const timers = new Map();
+    let nextTimerId = 1;
+    let now = 1000;
+
+    const createEventTarget = () => {
+        const listeners = new Map();
+        return {
+            listeners,
+            addEventListener(type, fn) {
+                if (!listeners.has(type)) listeners.set(type, []);
+                listeners.get(type).push(fn);
+            },
+            removeEventListener(type, fn) {
+                const list = listeners.get(type);
+                if (!list) return;
+                const idx = list.indexOf(fn);
+                if (idx >= 0) list.splice(idx, 1);
+            },
+            dispatch(type, event) {
+                for (const fn of [...(listeners.get(type) || [])]) fn(event);
+            },
+        };
+    };
+
+    const fakeDoc = Object.assign(createEventTarget(), {
+        hidden: false,
+        body: { appendChild(el) { el.connected = true; } },
+        createElement: () => ({
+            className: '',
+            textContent: '',
+            style: {},
+            remove() { this.connected = false; },
+        }),
+    });
+    const fakeWindow = Object.assign(createEventTarget(), {
+        setTimeout(fn, delay) {
+            const id = nextTimerId++;
+            timers.set(id, { fn, runAt: now + delay });
+            return id;
+        },
+        clearTimeout(id) {
+            timers.delete(id);
+        },
+    });
+    const advanceBy = ms => {
+        const target = now + ms;
+        while (true) {
+            const due = [...timers.entries()]
+                .filter(([, item]) => item.runAt <= target)
+                .sort((a, b) => a[1].runAt - b[1].runAt)[0];
+            if (!due) break;
+            const [id, item] = due;
+            timers.delete(id);
+            now = item.runAt;
+            item.fn();
+        }
+        now = target;
+    };
+
+    const prevGlobals = {
+        window: global.window,
+        document: global.document,
+        requestAnimationFrame: global.requestAnimationFrame,
+        cancelAnimationFrame: global.cancelAnimationFrame,
+        performance: global.performance,
+    };
+    const origDateNow = Date.now;
+    global.window = fakeWindow;
+    global.document = fakeDoc;
+    global.requestAnimationFrame = () => 1;
+    global.cancelAnimationFrame = () => {};
+    global.performance = { now: () => now };
+    Date.now = () => now;
+
+    try {
+        const { LongPressTaskDrag } = createKernelLoader()('src/utils/longPressTaskDrag.ts');
+        const makeNode = () => {
+            const classes = new Set();
+            return Object.assign(createEventTarget(), {
+                isConnected: true,
+                scrollTop: 0,
+                classList: {
+                    add: (...names) => names.forEach(n => classes.add(n)),
+                    remove: (...names) => names.forEach(n => classes.delete(n)),
+                    contains: n => classes.has(n),
+                },
+                getBoundingClientRect: () => ({ left: 0, top: 0, right: 260, bottom: 400, width: 260, height: 400 }),
+            });
+        };
+
+        const root = makeNode();
+        const row = makeNode();
+        root.contains = node => node === root || node === row;
+
+        let draggable = true;
+        const eventsLog = [];
+        const drag = new LongPressTaskDrag(root, {
+            getSource: () => ({ element: row, task: { id: 't1' }, title: '任务1', draggable }),
+            onStart: () => eventsLog.push('drag:start'),
+            onMove: () => eventsLog.push('drag:move'),
+            onDrop: () => eventsLog.push('drag:drop'),
+            onEnd: () => eventsLog.push('drag:end'),
+            onContextMenu: (_source, point) => eventsLog.push(`menu:${point.clientX},${point.clientY}`),
+            dragDelayMs: 220,
+            contextMenuDelayMs: 850,
+        });
+
+        const touchEvent = (x, y, id = 1) => {
+            const point = { identifier: id, clientX: x, clientY: y };
+            return {
+                target: row,
+                touches: [point],
+                changedTouches: [point],
+                cancelable: true,
+                prevented: false,
+                stopped: false,
+                preventDefault() { this.prevented = true; },
+                stopImmediatePropagation() { this.stopped = true; },
+            };
+        };
+
+        // 1. 按下后 100ms 立即大幅滑动 -> 正常列表滚动，既不拖拽也不弹菜单
+        root.dispatch('touchstart', touchEvent(100, 100));
+        advanceBy(100);
+        const scrollMove = touchEvent(100, 140);
+        fakeDoc.dispatch('touchmove', scrollMove);
+        advanceBy(900);
+        assert.equal(scrollMove.prevented, false);
+        assert.deepEqual(eventsLog, []);
+
+        // 2. 按住 220ms 后出现可拖拽就绪样式，随后在 550ms 时移动仍顺利进入拖拽并取消右键菜单
+        root.dispatch('touchstart', touchEvent(100, 100));
+        advanceBy(230);
+        assert.equal(row.classList.contains('reminder-item--touch-drag-ready'), true);
+        assert.deepEqual(eventsLog, []);
+        advanceBy(320); // 550ms 仍在充足的拖拽窗口内，不会误弹菜单
+        assert.deepEqual(eventsLog, []);
+        const dragMove = touchEvent(100, 120);
+        fakeDoc.dispatch('touchmove', dragMove);
+        assert.equal(dragMove.prevented, true);
+        assert.equal(row.classList.contains('reminder-item--touch-drag-ready'), false);
+        assert.deepEqual(eventsLog, ['drag:start', 'drag:move']);
+        advanceBy(500); // 超过 850ms 也不会误弹菜单
+        assert.deepEqual(eventsLog, ['drag:start', 'drag:move']);
+        const dragEnd = { ...touchEvent(100, 160), touches: [] };
+        fakeDoc.dispatch('touchend', dragEnd);
+        assert.deepEqual(eventsLog, ['drag:start', 'drag:move', 'drag:end', 'drag:drop']);
+
+        // 3. 按住 850ms 且未明显位移（允许 <=6px 微抖）-> 清除就绪态、弹出右键菜单并吞掉后续 click
+        eventsLog.length = 0;
+        root.dispatch('touchstart', touchEvent(120, 200));
+        advanceBy(400);
+        fakeDoc.dispatch('touchmove', touchEvent(123, 202));
+        advanceBy(450);
+        assert.equal(row.classList.contains('reminder-item--touch-drag-ready'), false);
+        assert.deepEqual(eventsLog, ['menu:123,202']);
+        const strayClick = { target: row, cancelable: true, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; } };
+        fakeDoc.dispatch('click', strayClick);
+        assert.equal(strayClick.prevented, true);
+        assert.equal(strayClick.stopped, true);
+
+        // 4. 禁拖状态下（draggable=false），按住 850ms 未移动仍可弹出右键菜单
+        eventsLog.length = 0;
+        draggable = false;
+        root.dispatch('touchstart', touchEvent(80, 90));
+        advanceBy(850);
+        assert.deepEqual(eventsLog, ['menu:80,90']);
+
+        drag.dispose();
+    } finally {
+        Date.now = origDateNow;
+        global.window = prevGlobals.window;
+        global.document = prevGlobals.document;
+        global.requestAnimationFrame = prevGlobals.requestAnimationFrame;
+        global.cancelAnimationFrame = prevGlobals.cancelAnimationFrame;
+        global.performance = prevGlobals.performance;
+    }
 });

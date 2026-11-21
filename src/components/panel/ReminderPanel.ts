@@ -17,7 +17,7 @@ import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
 import { showAddTaskReminderTimeDialog } from "../dialog/AddTaskReminderTimeDialog";
 import { i18n } from "../../pluginInstance";
 import { TaskRenderer, type TaskRenderContext } from "../render/TaskRenderer";
-import { showMiniTaskTouchTooltip } from '../render/miniTaskTouchTooltip';
+import { MiniTaskHoverTooltipController, showMiniTaskTouchTooltip } from '../render/miniTaskTouchTooltip';
 import { createPanelViewMenu, normalizePanelViewMode, type PanelViewMode } from "../menu/PanelViewMenu";
 import { cleanReminderItem } from "../../utils/reminderLoadUtils";
 import { normalizeReminderGroupMode, orderRemindersByGroup, type ReminderGroup, type ReminderGroupMode } from '../../utils/reminderGrouping';
@@ -135,7 +135,7 @@ export class ReminderPanel {
     private allRemindersMap: Map<string, any> = new Map(); // 存储所有任务的完整信息，用于计算进度
     private optimisticUpdatesCache: Map<string, any> = new Map(); // 存储乐观更新缓存，避免刷新跳动
     private reminderElementStates = new WeakMap<HTMLElement, ReminderElementRenderState>();
-    private miniTaskTooltipHandler = (event: CustomEvent) => this.handleMiniTaskTooltip(event);
+    private miniTaskHoverTooltip?: MiniTaskHoverTooltipController;
     private miniTaskTouchClickHandler = (event: MouseEvent) => this.handleMiniTaskTouchClick(event);
     private miniTaskTouchTooltipClose?: () => void;
     private miniTaskTouchTooltipAnchor?: HTMLElement;
@@ -240,7 +240,11 @@ export class ReminderPanel {
                 await this.refreshReminderSkipDateContext();
                 try {
                     const settings = await this.plugin.loadSettings();
-                    this.viewMode = normalizePanelViewMode(settings.reminderPanelViewMode);
+                    const nextViewMode = normalizePanelViewMode(settings.reminderPanelViewMode);
+                    if (nextViewMode !== this.viewMode) {
+                        this.miniTaskHoverTooltip?.hide();
+                        this.viewMode = nextViewMode;
+                    }
                     const groupMode = normalizeReminderGroupMode(settings.reminderPanelGroupBy);
                     if (groupMode !== this.reminderGroupMode) {
                         this.reminderGroupMode = groupMode;
@@ -335,16 +339,13 @@ export class ReminderPanel {
         window.addEventListener('sortConfigUpdated', this.sortConfigUpdatedHandler);
         window.addEventListener('projectUpdated', this.projectUpdatedHandler);
         window.addEventListener('reminderSettingsUpdated', this.settingsUpdatedHandler);
-        this.plugin?.eventBus?.on('before-show-tooltip', this.miniTaskTooltipHandler);
+        if (!this.isMobileClient) {
+            this.miniTaskHoverTooltip = new MiniTaskHoverTooltipController(
+                this.container,
+                () => !this.disposed && this.viewMode === 'mini' && !this.isDragging
+            );
+        }
         this.container.addEventListener('click', this.miniTaskTouchClickHandler, true);
-    }
-
-    private handleMiniTaskTooltip(event: CustomEvent) {
-        const target = event.detail?.target as HTMLElement | undefined;
-        if (this.disposed || this.viewMode !== 'mini' || !target || !this.container.contains(target)) return;
-        if (!target.matches('.reminder-item--mini, .reminder-item__title, .reminder-item__time')) return;
-        const row = target.closest<HTMLElement>('.reminder-item--mini');
-        if (row?.dataset.miniTaskTooltip) event.detail.message = row.dataset.miniTaskTooltip;
     }
 
     private handleMiniTaskTouchClick(event: MouseEvent) {
@@ -407,9 +408,10 @@ export class ReminderPanel {
     public destroy() {
         if (this.disposed) return;
         this.disposed = true;
+        this.miniTaskHoverTooltip?.destroy();
+        this.miniTaskHoverTooltip = undefined;
         this.miniTaskTouchTooltipClose?.();
         this.container.removeEventListener('click', this.miniTaskTouchClickHandler, true);
-        this.plugin?.eventBus?.off('before-show-tooltip', this.miniTaskTooltipHandler);
         this.reminderLoadVersion++;
         this.pendingReminderLoad = false;
         this.pendingReminderForceLoad = false;
@@ -3227,6 +3229,7 @@ export class ReminderPanel {
         }
 
         this.reconcileReminderElements(elements);
+        this.miniTaskHoverTooltip?.sync();
 
         // 注意：这里不要覆盖 this.totalItems，因为它在外部根据全量或过滤后的总量进行计算，
         // 否则会导致分页时“总项数”显示为当前页的数量。
@@ -3384,7 +3387,10 @@ export class ReminderPanel {
             }
             state.note = note;
         }
-        if (tooltipChanged && state.tooltipContext) TaskRenderer.updateMiniTaskTooltip(element, state.reminder, state.tooltipContext);
+        if (tooltipChanged && state.tooltipContext) {
+            TaskRenderer.updateMiniTaskTooltip(element, state.reminder, state.tooltipContext);
+            this.miniTaskHoverTooltip?.refreshRow(element);
+        }
     }
 
     private createReminderElementOptimized(reminder: any, asyncDataCache: Map<string, any>, today: string, level: number = 0, allVisibleReminders: any[] = [], indexes?: ReminderRenderIndexes): HTMLElement {
@@ -3839,6 +3845,7 @@ export class ReminderPanel {
                 const cache = state.tooltipContext.projectCache;
                 cache?.set(reminder.id, { ...cache.get(reminder.id), ...cachedData });
                 TaskRenderer.updateMiniTaskTooltip(reminderEl, state.reminder, state.tooltipContext);
+                this.miniTaskHoverTooltip?.refreshRow(reminderEl);
             }
             return;
         }
@@ -5085,6 +5092,7 @@ export class ReminderPanel {
     }
 
     private renderReminders(reminderData: any) {
+        this.miniTaskHoverTooltip?.hide();
         this.miniTaskTouchTooltipClose?.();
         this.container.dataset.viewMode = this.viewMode;
         // 先移除旧的分页控件
@@ -5776,7 +5784,10 @@ export class ReminderPanel {
             el.style.opacity = '';
         }
         const state = this.reminderElementStates.get(el);
-        if (state?.tooltipContext) TaskRenderer.updateMiniTaskTooltip(el, { ...state.reminder, completed, completedTime }, state.tooltipContext);
+        if (state?.tooltipContext) {
+            TaskRenderer.updateMiniTaskTooltip(el, { ...state.reminder, completed, completedTime }, state.tooltipContext);
+            this.miniTaskHoverTooltip?.refreshRow(el);
+        }
     }
 
     private applyOptimisticCompletionForIds(reminderIds: string[], completed: boolean, completedTime?: string): void {
@@ -6057,9 +6068,13 @@ export class ReminderPanel {
 
         // 准备最终结果字符串，统一在末尾追加 reminderTimes（如果存在）
         let result = '';
+        const formatMiniDateTime = (label: string, logicalDate: string, clock?: string): string => {
+            if (!clock) return label;
+            return logicalDate === today ? clock : `${label} ${clock}`;
+        };
 
         // 处理跨天事件
-        if (this.viewMode !== 'mini' && endDate && endDate !== date) {
+        if (endDate && endDate !== date) {
             let endDateStr = '';
             if (logicalEnd === today) {
                 endDateStr = i18n("today");
@@ -6079,14 +6094,25 @@ export class ReminderPanel {
                 });
             }
 
-            // 跨天事件：显示开始日期 开始时间 - 结束日期 结束时间
-            const startTimeStr = time ? ` ${time}` : '';
-            const endTimeStr = endTime ? ` ${endTime}` : '';
-            result = `${dateStr}${startTimeStr} → ${endDateStr}${endTimeStr}`;
+            if (this.viewMode === 'mini') {
+                // 极简视图跨天任务：开始日期在未来显示开始日期，否则（已开始/已过期）显示结束日期；当天有具体时间时省略“今天”
+                if (compareDateStrings(logicalStart, today) > 0) {
+                    result = formatMiniDateTime(dateStr, logicalStart, time);
+                } else {
+                    result = formatMiniDateTime(endDateStr, logicalEnd, endTime);
+                }
+            } else {
+                // 跨天事件：显示开始日期 开始时间 - 结束日期 结束时间
+                const startTimeStr = time ? ` ${time}` : '';
+                const endTimeStr = endTime ? ` ${endTime}` : '';
+                result = `${dateStr}${startTimeStr} → ${endDateStr}${endTimeStr}`;
+            }
         } else if (this.viewMode !== 'mini' && endTime && endTime !== time) {
             // 当天时间段：显示开始时间 - 结束时间
             const startTimeStr = time || '';
             result = `${dateStr} ${startTimeStr} - ${endTime}`;
+        } else if (this.viewMode === 'mini') {
+            result = formatMiniDateTime(dateStr, logicalStart, time);
         } else {
             result = time ? `${dateStr} ${time}` : dateStr;
         }
@@ -6257,22 +6283,25 @@ export class ReminderPanel {
         }
     }
 
-    /** 移动端参照思源文档树，长按任务卡片后直接拖动，不增加额外控件。 */
+    /** 移动端任务长按手势：按住 220ms 进入可拖拽就绪态并提示，移动即拖拽；持续按住 850ms 且未明显位移弹出上下文菜单。 */
     private ensureMobileTaskDrag(): void {
         if (this.mobileTaskDrag) return;
         this.mobileTaskDrag = new LongPressTaskDrag(this.remindersContainer, {
             getSource: target => {
-                if (this.disposed || this.isMultiSelectMode || this.isDragDisabledBySortMode()) return null;
-                // 标题可长按拖动，短按仍打开绑定块；其他链接和控件保留原有操作。
+                if (this.disposed) return null;
+                // 标题可长按拖动或唤起上下文菜单，短按仍打开绑定块；其他链接和控件保留原有操作。
                 if (!target.closest || target.closest('button, input, textarea, select, [contenteditable="true"], [contenteditable=""], .reminder-item__progress-wrap')) return null;
                 const link = target.closest('a, [data-type="a"], [data-href]');
                 if (link && !link.classList.contains('reminder-item__title')) return null;
                 const element = target.closest<HTMLElement>('.reminder-item[data-reminder-id]');
                 if (!element || !this.remindersContainer.contains(element)) return null;
                 const task = this.currentRemindersCache.find(item => item.id === element.dataset.reminderId);
-                return task ? { element, task, title: task.title || '' } : null;
+                if (!task) return null;
+                const draggable = !this.isMultiSelectMode && !this.isDragDisabledBySortMode() && !this.selectionOptions;
+                return { element, task, title: task.title || '', draggable };
             },
             onStart: ({ element, task }) => {
+                this.miniTaskTouchTooltipClose?.();
                 this.isDragging = true;
                 this.draggedElement = element;
                 this.draggedReminder = task;
@@ -6292,6 +6321,20 @@ export class ReminderPanel {
                 this.draggedReminder = null;
                 this.hideDropIndicator();
             },
+            onContextMenu: ({ element, task }, point) => {
+                if (this.disposed || this.selectionOptions) return;
+                this.miniTaskTouchTooltipClose?.();
+                if (this.isMultiSelectMode) {
+                    if (!this.selectedReminderIds.has(task.id)) {
+                        this.togglePanelReminderSelection(task.id, element);
+                    }
+                    this.showPanelBatchContextMenu(point);
+                    return;
+                }
+                void this.showReminderContextMenu(point, task);
+            },
+            dragDelayMs: 220,
+            contextMenuDelayMs: 850,
         });
     }
 
@@ -10148,6 +10191,7 @@ export class ReminderPanel {
                 state.tooltipContext.allTasks = Array.from(this.allRemindersMap.values());
                 state.tooltipContext.taskHierarchy = new TaskHierarchyIndex(state.tooltipContext.allTasks);
                 TaskRenderer.updateMiniTaskTooltip(element, state.reminder, state.tooltipContext);
+                this.miniTaskHoverTooltip?.refreshRow(element);
             }
             return;
         }
@@ -11783,39 +11827,43 @@ export class ReminderPanel {
             const menu = new Menu("reminderMoreMenu");
 
             // 显示设置
-            menu.addItem({
-                icon: 'iconEye',
-                label: i18n("displaySettings") || "显示设置",
-                submenu: [
-                    createPanelViewMenu(this.viewMode, async mode => {
-                        if (mode === this.viewMode) return;
-                        this.viewMode = mode;
-                        this.container.dataset.viewMode = mode;
-                        await this.savePanelSettings({ reminderPanelViewMode: mode });
-                        if (!this.disposed) await this.loadReminders(true);
-                    }),
-                    {
-                        icon: this.showProjectKanbanStatus ? 'iconSelect' : '',
-                        label: i18n("showProjectKanbanStatus") || "显示项目看板状态",
-                        click: () => {
-                            this.showProjectKanbanStatus = !this.showProjectKanbanStatus;
-                            void this.savePanelSettings({
-                                reminderPanelShowProjectKanbanStatus: this.showProjectKanbanStatus
-                            });
-                            void this.loadReminders(true);
-                        }
-                    },
-                    {
-                        icon: this.showCompletedSubtasks ? 'iconSelect' : '',
-                        label: i18n("showCompletedSubtasks") || "显示已完成子任务",
-                        click: () => {
-                            this.showCompletedSubtasks = !this.showCompletedSubtasks;
-                            void this.savePanelSettings({
-                                showCompletedSubtasks: this.showCompletedSubtasks
-                            });
-                            void this.loadReminders(true);
-                        }
-                    },
+            const isMiniView = this.viewMode === 'mini';
+            const displaySettingsSubmenu: any[] = [
+                createPanelViewMenu(this.viewMode, async mode => {
+                    if (mode === this.viewMode) return;
+                    this.miniTaskHoverTooltip?.hide();
+                    this.viewMode = mode;
+                    this.container.dataset.viewMode = mode;
+                    await this.savePanelSettings({ reminderPanelViewMode: mode });
+                    if (!this.disposed) await this.loadReminders(true);
+                }),
+            ];
+            if (!isMiniView) {
+                displaySettingsSubmenu.push({
+                    icon: this.showProjectKanbanStatus ? 'iconSelect' : '',
+                    label: i18n("showProjectKanbanStatus") || "显示项目看板状态",
+                    click: () => {
+                        this.showProjectKanbanStatus = !this.showProjectKanbanStatus;
+                        void this.savePanelSettings({
+                            reminderPanelShowProjectKanbanStatus: this.showProjectKanbanStatus
+                        });
+                        void this.loadReminders(true);
+                    }
+                });
+            }
+            displaySettingsSubmenu.push({
+                icon: this.showCompletedSubtasks ? 'iconSelect' : '',
+                label: i18n("showCompletedSubtasks") || "显示已完成子任务",
+                click: () => {
+                    this.showCompletedSubtasks = !this.showCompletedSubtasks;
+                    void this.savePanelSettings({
+                        showCompletedSubtasks: this.showCompletedSubtasks
+                    });
+                    void this.loadReminders(true);
+                }
+            });
+            if (!isMiniView) {
+                displaySettingsSubmenu.push(
                     {
                         icon: this.clipTitleToOneLine ? 'iconSelect' : '',
                         label: i18n("clipTitleToOneLine") || "标题限制一行显示",
@@ -11838,7 +11886,12 @@ export class ReminderPanel {
                             void this.loadReminders(true);
                         }
                     }
-                ]
+                );
+            }
+            menu.addItem({
+                icon: 'iconEye',
+                label: i18n("displaySettings") || "显示设置",
+                submenu: displaySettingsSubmenu
             });
 
             // 多选模式

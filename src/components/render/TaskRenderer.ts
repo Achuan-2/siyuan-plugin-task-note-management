@@ -377,16 +377,30 @@ export class TaskRenderer {
         }
 
         let result = '';
+        const formatMiniDateTime = (label: string, logicalDate: string, clock?: string): string => {
+            if (!clock) return label;
+            return logicalDate === today ? clock : `${label} ${clock}`;
+        };
 
         // 处理跨天事件
-        if (context?.viewMode !== 'mini' && endDate && endDate !== date) {
+        if (endDate && endDate !== date) {
             const endDateStr = formatDateLabel(endDate, logicalEnd);
-            const startTimeStr = time ? ` ${time}` : '';
-            const endTimeStr = endTime ? ` ${endTime}` : '';
-            result = `${dateStr}${startTimeStr} → ${endDateStr}${endTimeStr}`;
+            if (context?.viewMode === 'mini') {
+                if (compareDateStrings(logicalStart, today) > 0) {
+                    result = formatMiniDateTime(dateStr, logicalStart, time);
+                } else {
+                    result = formatMiniDateTime(endDateStr, logicalEnd, endTime);
+                }
+            } else {
+                const startTimeStr = time ? ` ${time}` : '';
+                const endTimeStr = endTime ? ` ${endTime}` : '';
+                result = `${dateStr}${startTimeStr} → ${endDateStr}${endTimeStr}`;
+            }
         } else if (context?.viewMode !== 'mini' && endTime && endTime !== time) {
             // 当天时间段
             result = `${dateStr} ${time || ''} - ${endTime}`;
+        } else if (context?.viewMode === 'mini') {
+            result = formatMiniDateTime(dateStr, logicalStart, time);
         } else {
             result = time ? `${dateStr} ${time}` : dateStr;
         }
@@ -970,24 +984,26 @@ export class TaskRenderer {
             }
         });
 
-        // 更多按钮
-        const itemMoreBtn = document.createElement('button');
-        itemMoreBtn.type = 'button';
-        itemMoreBtn.className = 'b3-button b3-button--text reminder-item__more-button';
-        itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        itemMoreBtn.classList.add('ariaLabel');
-        itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
-        itemMoreBtn.addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-        });
-        itemMoreBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (callbacks.onMoreClick) {
-                callbacks.onMoreClick(task, itemMoreBtn, e);
-            }
-        });
-        taskEl.appendChild(itemMoreBtn);
+        // 更多按钮（极简模式不显示，桌面端右键、移动端长按 500ms 弹出菜单）
+        if (!isMini) {
+            const itemMoreBtn = document.createElement('button');
+            itemMoreBtn.type = 'button';
+            itemMoreBtn.className = 'b3-button b3-button--text reminder-item__more-button';
+            itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+            itemMoreBtn.classList.add('ariaLabel');
+            itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
+            itemMoreBtn.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+            });
+            itemMoreBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (callbacks.onMoreClick) {
+                    callbacks.onMoreClick(task, itemMoreBtn, e);
+                }
+            });
+            taskEl.appendChild(itemMoreBtn);
+        }
 
         // 主体内容容器
         const contentEl = document.createElement('div');
@@ -1205,6 +1221,13 @@ export class TaskRenderer {
             const timeText = this.formatReminderTime(displayDate, displayTime, today, task.endDate, task.endTime, task, context);
             const hasNoDate = !task.date && !task.endDate;
             if (isMini) {
+                const isMiniSpanningEndDate = !!(
+                    task.date && task.endDate && task.endDate !== task.date
+                    && compareDateStrings(this.getReminderLogicalDate(task.date, task.time, context.plugin), today) <= 0
+                );
+                if (isMiniSpanningEndDate) {
+                    timeEl.classList.add('reminder-item__time--end-date');
+                }
                 const reminderIndex = timeText.indexOf('⏰');
                 const label = document.createElement('span');
                 label.className = 'reminder-item__time-text';
@@ -1833,17 +1856,20 @@ export class TaskRenderer {
         const escape = (value: string) => value.replace(/[&<>"']/g, character => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
         })[character]);
+        const rowsHtml = rows.length
+            ? `<div class="task-mini-tooltip__rows">${rows.map(([label, value]) => `<div class="task-mini-tooltip__row"><span>${escape(label)}</span><span>${escape(value)}</span></div>`).join('')}</div>`
+            : '';
         element.dataset.miniTaskTooltip = `<div class="task-mini-tooltip"><div class="task-mini-tooltip__title">${escape(title)}</div>`
-            + rows.map(([label, value]) => `<div class="task-mini-tooltip__row"><span>${escape(label)}</span><span>${escape(value)}</span></div>`).join('')
+            + rowsHtml
             + (note ? `<div class="task-mini-tooltip__note">${escape(note)}</div>` : '') + '</div>';
         const plain = [title, ...rows.map(([label, value]) => `${label}: ${value}`), note ? `${i18n('note')}: ${note}` : ''].filter(Boolean).join('\n');
-        element.classList.add('ariaLabel');
+        element.classList?.remove?.('ariaLabel');
         element.setAttribute('aria-label', title);
         element.setAttribute('aria-description', plain);
         element.removeAttribute('title');
         [element.querySelector('.reminder-item__title'), element.querySelector('.reminder-item__time')].forEach(target => {
             if (!target) return;
-            target.classList.add('ariaLabel');
+            target.classList?.remove?.('ariaLabel');
             if (!target.getAttribute('aria-label')) target.setAttribute('aria-label', title);
             target.setAttribute('aria-description', plain);
             target.removeAttribute('title');
