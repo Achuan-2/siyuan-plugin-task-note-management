@@ -878,11 +878,21 @@ export class SubtasksDialog {
         }
 
         const row = document.createElement('div');
-        row.className = 'subtasks-dialog__draft';
+        row.className = 'reminder-item subtasks-dialog__draft';
         row.style.marginLeft = `${level * 20}px`;
-        row.innerHTML = '<div class="reminder-item__left-controls"><input type="checkbox" class="reminder-task-checkbox" disabled aria-hidden="true"></div>';
+        row.innerHTML = `
+            <div class="reminder-item__content">
+                <div class="reminder-item__left-controls">
+                    <input type="checkbox" class="reminder-task-checkbox" disabled aria-hidden="true">
+                </div>
+                <div class="reminder-item__info">
+                    <div class="reminder-item__title-container">
+                        <div class="reminder-item__title-row"></div>
+                    </div>
+                </div>
+            </div>`;
         const input = this.createInlineTitle(row, parentId, undefined, afterRow ? afterTaskId : undefined);
-        row.appendChild(input);
+        row.querySelector('.reminder-item__title-row')!.appendChild(input);
         list.insertBefore(row, nextRow);
         input.focus();
     }

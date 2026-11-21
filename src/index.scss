@@ -2777,11 +2777,7 @@
     }
 
     &__draft {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 32px 8px 8px;
-        border-bottom: 1px solid var(--b3-theme-surface-lighter);
+        cursor: default;
 
         .subtasks-dialog__title {
             flex: 1;
