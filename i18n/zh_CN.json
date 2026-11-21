@@ -768,7 +768,7 @@
     "singleDateDefaultRoleStart": "开始日期",
     "quickReminderTitlePasteAutoDetect": "任务编辑弹窗标题粘贴自动识别日期",
     "quickReminderTitlePasteAutoDetectDesc": "开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭。",
-    "createQuickReminder": "创建快速任务",
+    "createQuickReminder": "创建任务",
     "bindToBlock": "绑定到块",
     "unboundReminder": "未绑定任务",
     "bindReminderToBlock": "绑定任务到块",
