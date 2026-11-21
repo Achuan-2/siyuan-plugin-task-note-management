@@ -17,8 +17,11 @@ function fixture() {
     };
     const remote = new Map();
     const writes = [];
+    const deletes = [];
+    const deleteStatuses = new Map();
     const blockUpdates = [];
     let local = {};
+    let localReminders = {};
     let nextWriteStatus = 200;
     let createdSortOrder;
 
@@ -27,6 +30,14 @@ function fixture() {
         if (endpoint === '/project') return Response.json(subscription.didaSelectedProjects);
         if (endpoint === '/project/list/data') return Response.json({ tasks: [...remote.values()] });
         if (endpoint === '/task/completed') return Response.json([]);
+        if (method === 'DELETE') {
+            const [, projectId, taskId] = endpoint.match(/^\/project\/([^/]+)\/task\/([^/]+)$/);
+            deletes.push([projectId, taskId]);
+            const status = deleteStatuses.get(taskId);
+            if (status) return Response.json({ errorMessage: 'Delete failed' }, { status });
+            remote.delete(taskId);
+            return new Response(null, { status: 204 });
+        }
         assert.equal(method, 'POST');
         const payload = JSON.parse(body);
         writes.push(payload);
@@ -49,8 +60,11 @@ function fixture() {
             },
         },
         '../pluginInstance': { i18n: () => '' },
+        '../components/dataManager/repeatUtils': { parseReminderInstanceId: () => null },
         './icsImport': { resolveDefaultKanbanStatus: async () => 'todo' },
         './caldavSubscription': {},
+        './repeatTaskDeletion': {},
+        './taskActionUndo': {},
         './taskNoteStorage': {
             getTaskNotePreviewText: task => task.noteSummary || '',
             loadTaskNote: async () => '完整的任务备注',
@@ -80,12 +94,13 @@ function fixture() {
     const plugin = {
         loadSubscriptionData: async () => ({ subscriptions: { [subscription.id]: subscription } }),
         loadSubscriptionTasks: async () => structuredClone(local),
-        loadReminderData: async () => ({}),
-        saveReminderData: async () => {},
+        loadReminderData: async () => structuredClone(localReminders),
+        saveReminderData: async value => { localReminders = structuredClone(value); },
         loadProjectData: async () => ({}),
     };
     return {
-        remote, writes, blockUpdates, subscription,
+        remote, writes, deletes, deleteStatuses, blockUpdates, subscription, plugin, api,
+        collectTaskDeletionIds: load('./taskTreeDeletion').collectTaskDeletionIds,
         sync: async () => assert.equal((await api.syncSubscription(plugin, subscription)).success, true),
         get: id => Object.values(local).find(task => task.didaTaskId === id),
         save: task => api.saveReminders(plugin, { [task.id]: task }),
@@ -108,6 +123,132 @@ test('绑定任务创建、换绑和解绑只更新滴答详情里的思源链�
     await f.sync();
     assert.equal(f.get('remote-1').blockId, null);
     assert.equal(f.writes.length, 3);
+});
+
+function boardDeleteFixture(f, tasks, selectedIds) {
+    const file = fs.readFileSync(path.join(__dirname, '../src/components/panel/ProjectKanbanView.ts'), 'utf8');
+    const ast = ts.createSourceFile('kanban.ts', file, ts.ScriptTarget.Latest, true);
+    const methods = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'ProjectKanbanView')
+        .members.filter(method => ['batchDelete', 'deleteTasksByIds'].includes(method.name?.getText(ast)));
+    const code = ts.transpileModule(`class Board { ${methods.map(method => method.getText(ast)).join('\n')} }`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    const state = { messages: [], notifications: [], undo: [], confirmations: [] };
+    const dependencies = {
+        ...f.api,
+        collectTaskDeletionIds: f.collectTaskDeletionIds,
+        updateBindBlockAtrrs: async () => {},
+        i18n: (key, vars) => [key, vars].filter(Boolean),
+        showMessage: message => state.messages.push(message),
+        confirm: (_title, message, callback) => state.confirmations.push({ message, callback }),
+        TaskActionUndo: class {
+            constructor(plugin, before) { this.plugin = plugin; this.before = before; }
+            async save(after) {
+                const deleted = Object.values(this.before).filter(task => !after[task.id]);
+                assert.ok(deleted.every(task => !task.isSubscribed));
+                await this.plugin.saveReminderData(Object.fromEntries(Object.entries(after).filter(([, task]) => !task.isSubscribed)));
+            }
+            show(message) { state.undo.push(message); }
+        },
+    };
+    const Board = new Function(...Object.keys(dependencies), `${code}; return Board;`)(...Object.values(dependencies));
+    const board = Object.assign(new Board(), {
+        plugin: { ...f.plugin, cancelMobileNotification: async id => state.notifications.push(id) },
+        tasks,
+        selectedTaskIds: new Set(selectedIds),
+        updateBatchToolbar() {},
+        dispatchReminderUpdate() {},
+        queueLoadTasks: async () => {},
+    });
+    const confirmDelete = async () => {
+        board.batchDelete();
+        await state.confirmations.at(-1).callback();
+    };
+    return { board, state, confirmDelete };
+}
+
+test('项目看板混合批删本地和滴答任务，未渲染的滴答子任务也走远端删除', async () => {
+    const f = fixture();
+    await f.plugin.saveReminderData({ native: { id: 'native' }, keep: { id: 'keep' } });
+    f.remote.set('parent', { id: 'parent', projectId: 'list', title: '滴答父任务' });
+    f.remote.set('child', { id: 'child', projectId: 'list', parentId: 'parent', title: '滴答子任务' });
+    f.remote.set('keep', { id: 'keep', projectId: 'list', title: '另一个滴答任务' });
+    await f.sync();
+    const all = await f.api.getAllReminders(f.plugin);
+    const parentId = f.get('parent').id;
+    const childId = f.get('child').id;
+    const { board, state, confirmDelete } = boardDeleteFixture(f, [all.native, all[parentId]], ['native', parentId]);
+
+    await confirmDelete();
+
+    assert.deepEqual(f.deletes, [['list', 'child'], ['list', 'parent']]);
+    assert.deepEqual([...board.selectedTaskIds], []);
+    assert.deepEqual(state.notifications, ['native', childId, parentId]);
+    assert.equal(state.undo[0][0], 'batchDeleteLocalUndo');
+    assert.deepEqual(Object.keys(await f.plugin.loadReminderData()), ['keep']);
+    await f.sync();
+    assert.equal(f.get('parent'), undefined);
+    assert.equal(f.get('child'), undefined);
+    assert.ok(f.get('keep'));
+});
+
+test('批量滴答删除限流时只移除成功项，保留其余选中项供重试', async () => {
+    const f = fixture();
+    for (const id of ['first', 'limited', 'last']) f.remote.set(id, { id, projectId: 'list', title: id });
+    f.deleteStatuses.set('limited', 429);
+    await f.sync();
+    const tasks = Object.values(await f.api.getAllReminders(f.plugin));
+    const { board, state, confirmDelete } = boardDeleteFixture(f, tasks, tasks.map(task => task.id));
+
+    await confirmDelete();
+
+    assert.deepEqual(f.deletes.map(([, id]) => id), ['first', 'limited']);
+    assert.deepEqual([...board.selectedTaskIds], [f.get('limited').id, f.get('last').id]);
+    assert.equal(f.get('first'), undefined);
+    assert.equal(state.messages.at(-1)[0], 'batchDeletePartial');
+    assert.deepEqual(state.undo, []);
+
+    f.deleteStatuses.clear();
+    await confirmDelete();
+    assert.deepEqual(f.deletes.map(([, id]) => id), ['first', 'limited', 'limited', 'last']);
+    assert.equal(board.selectedTaskIds.size, 0);
+    assert.equal(f.remote.size, 0);
+});
+
+test('滴答重复实例按系列确认删除，订阅禁止删除时保留任务', async () => {
+    const f = fixture();
+    f.subscription.caldavDeletable = false;
+    f.remote.set('series', { id: 'series', projectId: 'list', title: '滴答重复任务' });
+    await f.sync();
+    const series = (await f.api.getAllReminders(f.plugin))[f.get('series').id];
+    const instance = { ...series, id: `${series.id}_2026-11-21`, originalId: series.id, isRepeatInstance: true };
+    const { board, state, confirmDelete } = boardDeleteFixture(f, [instance], [instance.id]);
+
+    await confirmDelete();
+
+    assert.match(state.confirmations[0].message, /confirmBatchDeleteDidaSeries/);
+    assert.deepEqual(f.deletes, []);
+    assert.ok(board.selectedTaskIds.has(instance.id));
+    assert.equal(state.messages.at(-1)[0], 'batchDeleteFailed');
+
+    f.subscription.caldavDeletable = true;
+    await confirmDelete();
+    assert.deepEqual(f.deletes, [['list', 'series']]);
+    assert.equal(board.selectedTaskIds.size, 0);
+});
+
+test('子任务删除失败时，不删除可能级联移除它的滴答父任务', async () => {
+    const f = fixture();
+    f.remote.set('parent', { id: 'parent', projectId: 'list', title: '父任务' });
+    f.remote.set('child', { id: 'child', projectId: 'list', parentId: 'parent', title: '子任务' });
+    f.deleteStatuses.set('child', 403);
+    await f.sync();
+    const all = Object.values(await f.api.getAllReminders(f.plugin));
+
+    assert.deepEqual(await f.api.deleteDidaSubscriptionTasks(f.plugin, all), new Set());
+    assert.deepEqual(f.deletes, [['list', 'child']]);
+    assert.ok(f.get('parent'));
+    assert.ok(f.get('child'));
 });
 
 test('拉回时从详情或整个链接标题恢复绑定，普通的思源链接保留在备注', async () => {

@@ -48,7 +48,8 @@ import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
 import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
 import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
-import { getAllReminders, getEditableSubscriptionProjectIds, isWritableSubscriptionType, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../../utils/icsSubscription';
+import { getAllReminders, getEditableSubscriptionProjectIds, isWritableSubscriptionType, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask, deleteDidaSubscriptionTasks } from '../../utils/icsSubscription';
+import { collectTaskDeletionIds } from '../../utils/taskTreeDeletion';
 import { VipManager } from "../vip/vip";
 
 import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
@@ -205,6 +206,7 @@ export class ProjectKanbanView {
 
     // 多选模式状态
     private isMultiSelectMode: boolean = false;
+    private isBatchDeletingTasks = false;
     // 选中的任务ID集合
     public selectedTaskIds: Set<string> = new Set();
     // 批量操作工具栏元素
@@ -17252,21 +17254,30 @@ export class ProjectKanbanView {
      */
     private batchDelete(): void {
         const selectedIds = Array.from(this.selectedTaskIds);
-        if (selectedIds.length === 0) return;
+        if (selectedIds.length === 0 || this.isBatchDeletingTasks) return;
+
+        const visibleTasks = new Map(this.tasks.map(task => [task.id, task]));
+        const taskIds = selectedIds.map(id => {
+            const task = visibleTasks.get(id);
+            return task?.subscriptionType === 'dida' && task.isRepeatInstance && task.originalId ? task.originalId : id;
+        });
+        const message = i18n('confirmKanbanBatchDeleteMessage', { count: String(selectedIds.length) });
+        const includesDidaSeries = taskIds.some((id, index) => id !== selectedIds[index]);
 
         // 确认对话框 - 思源 confirm 使用回调方式
         confirm(
-            i18n('confirmBatchDelete') || '确认批量删除',
-            i18n('confirmBatchDeleteMessage', { count: String(selectedIds.length) }) || `确定要删除选中的 ${selectedIds.length} 个任务吗？`,
+            i18n('confirmBatchDelete'),
+            includesDidaSeries ? `${message}<br>${i18n('confirmBatchDeleteDidaSeries')}` : message,
             async () => {
+                if (this.isBatchDeletingTasks) return;
+                this.isBatchDeletingTasks = true;
                 try {
-                    await this.deleteTasksByIds(selectedIds);
-
-                    // 清空选择
-                    this.selectedTaskIds.clear();
+                    await this.deleteTasksByIds(taskIds);
                 } catch (error) {
                     console.error("Batch deletion failed:", error);
-                    showMessage(i18n('batchDeleteFailed') || '批量删除失败');
+                    showMessage(i18n('batchDeleteFailed'));
+                } finally {
+                    this.isBatchDeletingTasks = false;
                 }
             }
         );
@@ -17277,60 +17288,68 @@ export class ProjectKanbanView {
      * 批量删除任务
      */
     private async deleteTasksByIds(taskIds: string[]): Promise<void> {
-        let reminderData = await this.getReminders();
-        const undo = new TaskActionUndo(this.plugin, reminderData);
-        const boundIds: string[] = [];
+        const reminderData = await getAllReminders(this.plugin, undefined, true, 'none', { strict: true });
+        const targetIds = collectTaskDeletionIds(reminderData, taskIds.filter(id => reminderData[id]));
+        const localIds = Array.from(targetIds).filter(id => !reminderData[id].isSubscribed);
+        const didaTasks = Array.from(targetIds, id => reminderData[id])
+            .filter(task => task.isSubscribed && task.subscriptionType === 'dida');
 
-        // 收集所有要删除的任务ID，包括子任务
-        const allTaskIdsToDelete = new Set<string>();
-
-        const collectTasksToDelete = (ids: string[]) => {
-            for (const id of ids) {
-                if (allTaskIdsToDelete.has(id)) continue;
-                allTaskIdsToDelete.add(id);
-
-                // 递归收集子任务
-                const children = this.tasks.filter(t => t.parentId === id);
-                collectTasksToDelete(children.map(t => t.id));
-            }
-        };
-
-        collectTasksToDelete(taskIds);
-
-        // 从提醒数据中删除，并收集绑定块ID
-        for (const taskId of allTaskIdsToDelete) {
-            if (reminderData[taskId]) {
-                const boundId = reminderData[taskId].blockId || reminderData[taskId].docId;
-                if (boundId) {
-                    boundIds.push(boundId);
-                }
-                // 取消移动端通知
-                await this.plugin.cancelMobileNotification(taskId);
-                delete reminderData[taskId];
-            }
+        let undo: TaskActionUndo | undefined;
+        if (localIds.length > 0) {
+            const nextReminders = { ...reminderData };
+            for (const id of localIds) delete nextReminders[id];
+            undo = new TaskActionUndo(this.plugin, reminderData);
+            await undo.save(nextReminders);
         }
 
-        // 保存更新后的提醒数据
-        await undo.save(reminderData);
+        const deletedIds = new Set(localIds);
+        try {
+            for (const id of await deleteDidaSubscriptionTasks(this.plugin, didaTasks)) deletedIds.add(id);
+        } catch (error) {
+            console.warn('Failed to delete the selected Dida365 tasks:', error);
+        }
+        if (deletedIds.size === 0) {
+            showMessage(i18n('batchDeleteFailed'));
+            return;
+        }
 
-
-
-        // 从 this.tasks 中移除
-        this.tasks = this.tasks.filter(t => !allTaskIdsToDelete.has(t.id));
-        this.queueLoadTasks();
-
-        // 触发更新事件
+        const boundIds = new Set<string>();
+        for (const id of deletedIds) {
+            const task = reminderData[id];
+            if (task.blockId || task.docId) boundIds.add(task.blockId || task.docId);
+            for (const state of Object.values(task.repeat?.instances || {}) as any[]) {
+                if (state?.blockId || state?.docId) boundIds.add(state.blockId || state.docId);
+            }
+            this.selectedTaskIds.delete(id);
+        }
+        this.tasks = this.tasks.filter(task => {
+            if (!deletedIds.has(task.id) && !deletedIds.has(task.originalId)) return true;
+            this.selectedTaskIds.delete(task.id);
+            return false;
+        });
+        this.reminderData = null;
+        this.updateBatchToolbar();
         this.dispatchReminderUpdate(true);
+        void this.queueLoadTasks();
 
-        // 更新绑定块属性
-        for (const boundId of boundIds) {
-            try {
-                await updateBindBlockAtrrs(boundId, this.plugin);
-            } catch (e) {
-                /* ignore */
-            }
+        const counts = { count: String(deletedIds.size), local: String(localIds.length) };
+        if (undo) {
+            undo.show(i18n(deletedIds.size === localIds.length ? 'reminderDeleted' : 'batchDeleteLocalUndo', counts));
+        } else if (deletedIds.size === targetIds.size) {
+            showMessage(i18n('batchDeleteSuccess', counts));
         }
-        undo.show(i18n("reminderDeleted"));
+        if (deletedIds.size < targetIds.size) {
+            showMessage(i18n('batchDeletePartial', { ...counts, remaining: String(targetIds.size - deletedIds.size) }));
+        }
+
+        const effects = [
+            ...Array.from(deletedIds, id => () => this.plugin.cancelMobileNotification?.(id)),
+            ...Array.from(boundIds, id => () => updateBindBlockAtrrs(id, this.plugin)),
+        ];
+        const results = await Promise.allSettled(effects.map(effect => Promise.resolve().then(effect)));
+        for (const result of results) {
+            if (result.status === 'rejected') console.warn('Failed to refresh a deleted task:', result.reason);
+        }
     }
 
     private async refreshRecurringMobileNotifications(reminderData: any, originalIds: Iterable<string>): Promise<void> {

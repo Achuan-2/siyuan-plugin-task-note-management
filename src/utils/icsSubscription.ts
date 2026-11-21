@@ -12,6 +12,7 @@ import {
 } from './didaSubscription';
 import { i18n } from "../pluginInstance";
 import { getTaskBoundBlockId } from './taskTitleLinks';
+import { TaskHierarchyIndex } from './taskHierarchy';
 
 export interface IcsSubscription {
     id: string;
@@ -720,6 +721,64 @@ export async function deleteSubscriptionReminderTask(plugin: any, reminder: any)
         delete currentTasks[reminder.id];
         await saveSubscriptionTasks(plugin, reminder.subscriptionId, currentTasks);
     }
+}
+
+/** Delete the selected Dida tasks and persist only the confirmed removals. */
+export async function deleteDidaSubscriptionTasks(plugin: any, reminders: readonly { id: string; subscriptionId?: string }[]): Promise<Set<string>> {
+    const deletedIds = new Set<string>();
+    if (reminders.length === 0) return deletedIds;
+
+    const { subscriptions } = await loadSubscriptions(plugin);
+    const idsBySubscription = new Map<string, Set<string>>();
+    for (const { id, subscriptionId } of reminders) {
+        if (!subscriptionId) continue;
+        const subscription = subscriptions?.[subscriptionId];
+        if (subscription?.type !== 'dida' || !isSubscriptionDeletable(subscription)) continue;
+        if (!idsBySubscription.has(subscriptionId)) idsBySubscription.set(subscriptionId, new Set());
+        idsBySubscription.get(subscriptionId)!.add(id);
+    }
+
+    for (const [subscriptionId, ids] of idsBySubscription) {
+        const subscription = subscriptions[subscriptionId];
+        const removed = new Set<string>();
+        let rateLimited = false;
+        try {
+            const current = await loadSubscriptionTasks(plugin, subscriptionId);
+            const hierarchy = new TaskHierarchyIndex(Array.from(ids, id => current?.[id]).filter(task => task && !task.manualDelete));
+            const orderedTasks = hierarchy.tasks.sort((a, b) => hierarchy.maxDescendantDepth(a.id) - hierarchy.maxDescendantDepth(b.id));
+            for (const task of orderedTasks) {
+                const id = task.id;
+                // Keep a selected parent if removing it could also remove a child whose request failed.
+                if (hierarchy.children(id).some(child => !removed.has(child.id))) continue;
+                try {
+                    if (task.didaTaskId) {
+                        if (!task.didaProjectId || !subscription.didaToken?.trim()) {
+                            throw new Error('Missing Dida365 task metadata for deletion');
+                        }
+                        await deleteDidaTask(subscription, task);
+                    }
+                    removed.add(id);
+                } catch (error: any) {
+                    console.warn('Failed to delete Dida365 task:', id, error);
+                    if (error?.status === 429) {
+                        rateLimited = true;
+                        break;
+                    }
+                }
+            }
+            if (removed.size > 0) {
+                // A task in this subscription may have changed while the remote requests were in flight.
+                const latest = { ...await loadSubscriptionTasks(plugin, subscriptionId) };
+                for (const id of removed) delete latest[id];
+                await saveSubscriptionTasks(plugin, subscriptionId, latest);
+                for (const id of removed) deletedIds.add(id);
+            }
+        } catch (error) {
+            console.warn('Failed to save Dida365 task deletions:', subscriptionId, error);
+        }
+        if (rateLimited) break;
+    }
+    return deletedIds;
 }
 
 export async function saveReminders(plugin: any, allReminders: any): Promise<void> {
