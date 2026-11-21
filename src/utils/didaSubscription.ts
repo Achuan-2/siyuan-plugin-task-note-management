@@ -684,6 +684,27 @@ function buildDidaTaskPayloadFields(task: any): Record<string, any> {
     return payload;
 }
 
+export function hasDidaRemoteTaskChanged(currentTask: any, nextTask: any): boolean {
+    if (!currentTask || !nextTask) return true;
+    const normStr = (v: any) => String(v ?? '');
+    const currentNote = normStr(currentTask.note ?? getTaskNotePreviewText(currentTask) ?? '');
+    const nextNote = normStr(nextTask.note ?? getTaskNotePreviewText(nextTask) ?? '');
+    if (normStr(currentTask.title) !== normStr(nextTask.title)) return true;
+    if (currentNote !== nextNote) return true;
+    if (normStr(currentTask.date) !== normStr(nextTask.date)) return true;
+    if (normStr(currentTask.time) !== normStr(nextTask.time)) return true;
+    if (normStr(currentTask.endDate) !== normStr(nextTask.endDate)) return true;
+    if (normStr(currentTask.endTime) !== normStr(nextTask.endTime)) return true;
+    if (normStr(currentTask.priority || 'none') !== normStr(nextTask.priority || 'none')) return true;
+    if (Boolean(currentTask.completed) !== Boolean(nextTask.completed)) return true;
+
+    const currentListId = extractDidaListIdFromGroupId(currentTask.customGroupId) || currentTask.didaListId || '';
+    const nextListId = extractDidaListIdFromGroupId(nextTask.customGroupId) || nextTask.didaListId || '';
+    if (currentListId !== nextListId) return true;
+
+    return false;
+}
+
 export async function createDidaTask(
     subscription: IcsSubscription,
     task: any,

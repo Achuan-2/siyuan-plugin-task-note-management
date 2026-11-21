@@ -1101,6 +1101,21 @@ async function getTaskHref(subscription: IcsSubscription, task: any): Promise<st
     return new URL(`${uid}.ics`, calendarUrl).toString();
 }
 
+export function hasCalDavRemoteTaskChanged(currentTask: any, nextTask: any): boolean {
+    if (!currentTask || !nextTask) return true;
+    const normStr = (v: any) => String(v ?? '');
+    const currentDesc = normStr(currentTask.note || getTaskNotePreviewText(currentTask) || currentTask.description || '');
+    const nextDesc = normStr(nextTask.note || getTaskNotePreviewText(nextTask) || nextTask.description || '');
+    if (normStr(currentTask.title) !== normStr(nextTask.title)) return true;
+    if (currentDesc !== nextDesc) return true;
+    if (normStr(currentTask.date) !== normStr(nextTask.date)) return true;
+    if (normStr(currentTask.time) !== normStr(nextTask.time)) return true;
+    if (normStr(currentTask.endDate) !== normStr(nextTask.endDate)) return true;
+    if (normStr(currentTask.endTime) !== normStr(nextTask.endTime)) return true;
+    if (Boolean(currentTask.completed) !== Boolean(nextTask.completed)) return true;
+    return false;
+}
+
 export async function putCalDavTask(
     subscription: IcsSubscription,
     task: any

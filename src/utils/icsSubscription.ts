@@ -1,10 +1,11 @@
 import { pushErrMsg, pushMsg, putFile, getFile, removeFile, forwardProxy } from '../api';
 import { ParsedIcsEvent, parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
-import { deleteCalDavTask, fetchCalDavEvents, putCalDavTask } from './caldavSubscription';
+import { deleteCalDavTask, fetchCalDavEvents, hasCalDavRemoteTaskChanged, putCalDavTask } from './caldavSubscription';
 import {
     createDidaTask,
     deleteDidaTask,
     fetchDidaTasks,
+    hasDidaRemoteTaskChanged,
     syncDidaProjectGroups,
     updateDidaTask,
     type DidaSelectedProject,
@@ -413,7 +414,8 @@ function normalizeSubscriptionTasksForCompare(tasks: any): any {
 async function syncCalDavTaskChanges(
     subscription: IcsSubscription,
     currentTasks: any,
-    nextTasks: any
+    nextTasks: any,
+    touchedIds?: Set<string>
 ): Promise<any> {
     const caps = getProviderCapabilities(subscription);
     const syncedTasks = { ...(nextTasks || {}) };
@@ -444,16 +446,17 @@ async function syncCalDavTaskChanges(
         }
     }
 
-    // Handle creates and updates
-    for (const [id, nextTask] of Object.entries(syncedTasks) as [string, any][]) {
-        if (nextTask.manualDelete) continue; // skip soft-deleted tasks
+    // Handle creates and updates (only inspect tasks present in the incoming change payload)
+    const candidateEntries = (Object.entries(syncedTasks) as [string, any][])
+        .filter(([id, nextTask]) => !nextTask?.manualDelete && (!touchedIds || touchedIds.has(id)));
+    candidateEntries.sort(([, a], [, b]) => Number(Boolean(a.caldavHref)) - Number(Boolean(b.caldavHref)));
 
+    for (const [id, nextTask] of candidateEntries) {
         const currentTask = currentTasks?.[id];
         const isNew = !nextTask.caldavHref; // no href means not yet on server
 
-        if (!isNew && currentTask &&
-            isSameReminderPayload(stripRuntimeSubscriptionFields(currentTask), nextTask)) {
-            continue; // no changes
+        if (!isNew && currentTask && !hasCalDavRemoteTaskChanged(currentTask, nextTask)) {
+            continue; // no remote-relevant changes
         }
 
         const shouldPut = isNew ? caps.canCreate : caps.canUpdate;
@@ -473,6 +476,10 @@ async function syncCalDavTaskChanges(
             };
         } catch (e: any) {
             console.warn(`[CalDAV] PUT failed for task ${id}, keeping local state:`, e?.message || e);
+            if (e?.status === 429) {
+                console.warn('[CalDAV] Rate limited (HTTP 429), aborting remaining remote writes in this batch.');
+                break;
+            }
         }
     }
 
@@ -482,7 +489,8 @@ async function syncCalDavTaskChanges(
 async function syncDidaTaskChanges(
     subscription: IcsSubscription,
     currentTasks: any,
-    nextTasks: any
+    nextTasks: any,
+    touchedIds?: Set<string>
 ): Promise<any> {
     const canEdit = isSubscriptionEditable(subscription);
     const canDelete = isSubscriptionDeletable(subscription);
@@ -505,19 +513,27 @@ async function syncDidaTaskChanges(
                 await deleteDidaTask(subscription, currentTask);
             } catch (e: any) {
                 console.warn(`[Dida365] DELETE failed for task ${id}, skipping:`, e?.message || e);
+                if (e?.status === 429) {
+                    console.warn('[Dida365] Rate limited (HTTP 429), aborting remaining remote deletes in this batch.');
+                    break;
+                }
             }
         } else {
             syncedTasks[id] = { ...currentTask, manualDelete: true };
         }
     }
 
-    // Handle creates and updates
-    for (const [id, nextTask] of Object.entries(syncedTasks) as [string, any][]) {
-        if (nextTask.manualDelete) continue;
+    // Handle creates and updates: only inspect tasks in the incoming change payload,
+    // and process newly created tasks before updates.
+    const candidateEntries = (Object.entries(syncedTasks) as [string, any][])
+        .filter(([id, nextTask]) => !nextTask?.manualDelete && (!touchedIds || touchedIds.has(id)));
+    candidateEntries.sort(([, a], [, b]) => Number(Boolean(a.didaTaskId)) - Number(Boolean(b.didaTaskId)));
+
+    for (const [id, nextTask] of candidateEntries) {
         const currentTask = currentTasks?.[id];
         const isNew = !nextTask.didaTaskId;
 
-        if (!isNew && currentTask && isSameReminderPayload(stripRuntimeSubscriptionFields(currentTask), nextTask)) {
+        if (!isNew && currentTask && !hasDidaRemoteTaskChanged(currentTask, nextTask)) {
             continue;
         }
 
@@ -542,6 +558,10 @@ async function syncDidaTaskChanges(
                 };
             } catch (e: any) {
                 console.warn(`[Dida365] CREATE failed for task ${id}, keeping local state:`, e?.message || e);
+                if (e?.status === 429) {
+                    console.warn('[Dida365] Rate limited (HTTP 429), aborting remaining remote writes in this batch.');
+                    break;
+                }
             }
             continue;
         }
@@ -557,6 +577,10 @@ async function syncDidaTaskChanges(
             };
         } catch (e: any) {
             console.warn(`[Dida365] UPDATE failed for task ${id}, keeping local state:`, e?.message || e);
+            if (e?.status === 429) {
+                console.warn('[Dida365] Rate limited (HTTP 429), aborting remaining remote writes in this batch.');
+                break;
+            }
         }
     }
 
@@ -569,6 +593,7 @@ async function saveSubscriptionReminderTasks(
     nextTasks: any
 ): Promise<void> {
     const currentTasks = await loadSubscriptionTasks(plugin, subscription.id);
+    const touchedIds = new Set<string>(Object.keys(nextTasks || {}));
     
     // Merge the incoming updates (nextTasks) into the full list of current tasks
     const mergedTasks = { ...(currentTasks || {}) };
@@ -579,9 +604,9 @@ async function saveSubscriptionReminderTasks(
     let tasksToSave = mergedTasks;
 
     if (isCalDavSubscription(subscription)) {
-        tasksToSave = await syncCalDavTaskChanges(subscription, currentTasks, tasksToSave);
+        tasksToSave = await syncCalDavTaskChanges(subscription, currentTasks, tasksToSave, touchedIds);
     } else if (isDidaSubscription(subscription)) {
-        tasksToSave = await syncDidaTaskChanges(subscription, currentTasks, tasksToSave);
+        tasksToSave = await syncDidaTaskChanges(subscription, currentTasks, tasksToSave, touchedIds);
     }
 
     if (
