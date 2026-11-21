@@ -1272,7 +1272,7 @@
     "enableCalendarTopBarDesc": "Show a button in the top toolbar to open the calendar view",
     "enablePomodoroTopBar": "Show pomodoro shortcut",
     "enablePomodoroTopBarDesc": "On desktop, show a toolbar button to show or hide the standalone timer without stopping it. On mobile, add a SiYuan menu entry to open or reveal the in-app floating timer. When no window exists, open a timer ready to start",
-    "togglePomodoroWindow": "Show/hide standalone pomodoro window",
+    "togglePomodoroWindow": "Show/hide pomodoro window",
     "showPomodoroFloatingWindow": "Open floating pomodoro timer",
     "pomodoroWindowInOtherView": "The current timer is open in another view. Please use that view.",
     "pomodoroSelectTask": "Choose a task",
