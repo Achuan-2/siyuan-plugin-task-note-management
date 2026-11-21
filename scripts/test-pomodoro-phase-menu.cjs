@@ -14,7 +14,7 @@ const names = ['showNativeSwitchMenuPopup', 'openPomodoroSettings', 'callMethod'
     'setBrowserWindowFullscreen', 'setupBrowserWindowFullscreen', 'exitFullscreen', 'getMiniWindowStyle',
     'getCurrentState', 'updateBrowserWindowContent', 'formatTime',
     'toggleBrowserWindowMiniMode', 'toggleBrowserWindowDock',
-    'toggleRandomRest', 'applyRandomRestSettings', 'ensureRandomRestAudioInitialized', 'startRandomRestTimer',
+    'toggleRandomRest', 'persistRandomRestEnabled', 'applyRandomRestSettings', 'ensureRandomRestAudioInitialized', 'startRandomRestTimer',
     'stopRandomRestTimer', 'calculateNextRandomRestTime', 'checkRandomRestTrigger',
     'updateSwitchMenuContent', 'updateRandomRestToggleButton', 'updateSettings', 'shouldUseGlobalPomodoroWindow'];
 const methods = timerClass.members.filter(node => names.includes(node.name?.getText(ast)))
@@ -32,6 +32,8 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
     const menus = [];
     const actions = [];
     const messages = [];
+    const savedSettings = [];
+    const dispatchedEvents = [];
     const mainWindowCalls = [];
     let volumeClosed = 0;
     let fullscreen = false;
@@ -83,6 +85,7 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
     const mockWindow = {
         require: () => remote,
         focus: () => mainWindowCalls.push('domFocus'),
+        dispatchEvent: event => { dispatchedEvents.push(event); return true; },
         setInterval: (fn, delay) => {
             const id = nextIntervalId++;
             activeIntervals.set(id, { fn, delay });
@@ -115,7 +118,11 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         initRandomRestEndSound: async () => { actions.push('initRandomRestEndSound'); },
         closeRandomRestWindow: () => { randomRestWindowClosed++; },
         scheduleAllMobileNotifications: async () => { actions.push('scheduleAllMobileNotifications'); },
-        plugin: { openSetting: key => actions.push(['openSetting', key]) }
+        plugin: {
+            settings: { randomRestEnabled, pomodoroWorkDuration: 25 },
+            saveSettings: async next => { savedSettings.push(next); },
+            openSetting: key => actions.push(['openSetting', key])
+        }
     });
     Timer.browserWindowTimer = timer;
     timer.setupBrowserWindowFullscreen(owner);
@@ -132,7 +139,7 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         // 子窗口无需 remote 或 HTML 菜单，普通和迷你模式均通过 IPC 打开完整原生菜单。
     });
     vm.runInContext(rendererCode, context);
-    return { menus, actions, messages, owner, timer, mainWindowCalls, windowCalls, rendererScripts, Timer,
+    return { menus, actions, messages, savedSettings, dispatchedEvents, owner, timer, mainWindowCalls, windowCalls, rendererScripts, Timer,
         activeIntervals, activeTimeouts,
         get volumeClosed() { return volumeClosed; },
         get displayUpdates() { return displayUpdates; },
@@ -459,6 +466,34 @@ test('updateSettings 在窗口布局未变化时只同步显示，不重载独�
     });
     assert.equal(displaySynced, 1);
     assert.equal(view.actions.includes('loadURL'), false);
+});
+
+test('更多菜单切换随机微休息同步持久化到全局插件设置并广播设置更新事件', async () => {
+    const view = fixture({ randomRestEnabled: true, isRunning: true, isPaused: false, isWorkPhase: true });
+    view.open('more').items[1].click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(view.timer.randomRestEnabled, false);
+    assert.equal(view.timer.settings.randomRestEnabled, false);
+    assert.equal(view.timer.plugin.settings.randomRestEnabled, false);
+    assert.equal(view.timer.plugin.settings.pomodoroWorkDuration, 25);
+    assert.equal(view.savedSettings.length, 1);
+    assert.equal(view.savedSettings[0].randomRestEnabled, false);
+    assert.equal(view.savedSettings[0].pomodoroWorkDuration, 25);
+    assert.equal(view.dispatchedEvents.length, 1);
+    assert.equal(view.dispatchedEvents[0].type, 'reminderSettingsUpdated');
+    assert.equal(view.dispatchedEvents[0].detail.fromPomodoroRandomRestToggle, true);
+
+    view.open('more').items[1].click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(view.timer.randomRestEnabled, true);
+    assert.equal(view.timer.plugin.settings.randomRestEnabled, true);
+    assert.equal(view.savedSettings.length, 2);
+    assert.equal(view.savedSettings[1].randomRestEnabled, true);
+    assert.equal(view.dispatchedEvents.length, 2);
 });
 
 test('退出全屏恢复圆环比例，横条和极简保持自由比例且不改窗口大小', () => {

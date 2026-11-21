@@ -1292,8 +1292,36 @@ export class PomodoroTimer {
         }
     }
 
+    private persistRandomRestEnabled(enabled: boolean) {
+        try {
+            const pluginAny = this.plugin as any;
+            if (!pluginAny?.saveSettings) return;
+            const nextSettings = {
+                ...(pluginAny.settings || {}),
+                randomRestEnabled: enabled,
+            };
+            pluginAny.settings = nextSettings;
+            void Promise.resolve(pluginAny.saveSettings(nextSettings)).then(() => {
+                if (this.randomRestEnabled !== enabled) return;
+                if (typeof window !== 'undefined' && typeof CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+                    window.dispatchEvent(new CustomEvent('reminderSettingsUpdated', {
+                        detail: { fromPomodoroRandomRestToggle: true }
+                    }));
+                }
+            }).catch((error: any) => {
+                console.warn("[PomodoroTimer] Failed to save random microbreak setting:", error);
+            });
+        } catch (error) {
+            console.warn("[PomodoroTimer] Failed to save random microbreak setting:", error);
+        }
+    }
+
     private toggleRandomRest() {
         this.randomRestEnabled = !this.randomRestEnabled;
+        this.settings = {
+            ...this.settings,
+            randomRestEnabled: this.randomRestEnabled,
+        };
 
         if (this.randomRestEnabled) {
             this.ensureRandomRestAudioInitialized();
@@ -1310,6 +1338,7 @@ export class PomodoroTimer {
             void this.scheduleAllMobileNotifications();
         }
 
+        this.persistRandomRestEnabled(this.randomRestEnabled);
         this.updateSwitchMenuContent();
         this.updateDisplay();
 

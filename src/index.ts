@@ -1693,8 +1693,36 @@ export default class ReminderPlugin extends Plugin {
 
 
         // 监听设置变更，动态显示/隐藏侧边停靠栏
-        const onSettingsUpdated = async () => {
+        const onSettingsUpdated = async (event?: Event) => {
             try {
+                if ((event as CustomEvent)?.detail?.fromPomodoroRandomRestToggle) {
+                    const pomodoroSettings = await this.getPomodoroSettings();
+                    if (this.storageDisposed) return;
+                    this.lastPomodoroSettings = pomodoroSettings;
+                    const currentPomodoro = PomodoroManager.getInstance().getCurrentPomodoroTimer();
+                    if (currentPomodoro && typeof currentPomodoro.applyRandomRestSettings === 'function') {
+                        if (typeof currentPomodoro.isWindowActive === 'function' && !currentPomodoro.isWindowActive()) {
+                            PomodoroManager.getInstance().cleanupInactiveTimer();
+                        } else {
+                            try {
+                                currentPomodoro.applyRandomRestSettings(pomodoroSettings, { syncEnabled: true });
+                            } catch (e) {
+                                console.warn("Failed to sync random microbreak setting to standalone pomodoro window:", e);
+                            }
+                        }
+                    }
+                    for (const [, view] of this.tabViews) {
+                        if (view && typeof view.applyRandomRestSettings === 'function') {
+                            try {
+                                if (typeof view.isWindowActive === 'function' && !view.isWindowActive()) continue;
+                                view.applyRandomRestSettings(pomodoroSettings, { syncEnabled: true });
+                            } catch (e) {
+                                console.warn("Failed to sync random microbreak setting to tab pomodoro:", e);
+                            }
+                        }
+                    }
+                    return;
+                }
                 const settings = await this.loadSettings();
                 if (this.storageDisposed) return;
                 const isMobile = getFrontend().endsWith('mobile');
