@@ -66,6 +66,7 @@ export class SubtasksDialog {
     private dirtyInlineTitles = new Set<InlineSubtaskTitle>();
     private pendingTitleSave?: Promise<boolean>;
     private subtaskRenderPending = false;
+    private movingInlineDraft = false;
 
     constructor(
         parentId: string,
@@ -153,20 +154,22 @@ export class SubtasksDialog {
     private renderContent(showCloseButton: boolean): string {
         return `
                 <div class="subtasks-dialog" style="${showCloseButton ? 'padding: 16px;' : ''} display: flex; flex-direction: column; gap: 16px; max-height: ${showCloseButton ? '80vh' : '100%'};">
-                    <div class="subtasks-header" style="display: flex; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--b3-border-color); flex-wrap: wrap;">
+                    <div class="subtasks-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--b3-border-color); flex-wrap: wrap;">
                         <button id="sortBtn" class="b3-button b3-button--outline">
                             <svg class="b3-button__icon"><use xlink:href="#iconSort"></use></svg>
                             ${i18n("sort") || "排序"}
                         </button>
                         ${this.readOnly ? '' : `
-                        <button type="button" id="addSubtaskTopBtn" class="b3-button b3-button--primary">
-                            <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
-                            ${i18n("createSubtask")}
-                        </button>
-                        <button id="pasteSubtaskBtn" class="b3-button b3-button--outline">
-                            <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
-                            ${i18n("pasteSubtasks") || "粘贴新建"}
-                        </button>
+                        <div class="subtasks-header__actions" style="display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap;">
+                            <button type="button" id="addSubtaskTopBtn" class="b3-button b3-button--primary">
+                                <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                                ${i18n("createSubtask")}
+                            </button>
+                            <button id="pasteSubtaskBtn" class="b3-button b3-button--outline">
+                                <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
+                                ${i18n("pasteSubtasks") || "粘贴新建"}
+                            </button>
+                        </div>
                         `}
                     </div>
                     <div id="subtasksList" class="subtasks-dialog__list"></div>
@@ -943,23 +946,33 @@ export class SubtasksDialog {
         if (await this.finishPendingChanges() !== false && !this.inlineTitle) this.openSubtaskDraft(parentId);
     }
 
+    private positionSubtaskDraft(row: HTMLElement, parentId: string, afterTaskId?: string): string | undefined {
+        const list = this.getRootElement().querySelector<HTMLElement>('#subtasksList');
+        if (!list?.isConnected) return undefined;
+        const rows = Array.from(list.children).filter((el): el is HTMLElement => el !== row);
+        const parentRow = rows.find(item => item.dataset.taskId === parentId);
+        const afterRow = afterTaskId ? rows.find(item => item.dataset.taskId === afterTaskId) : undefined;
+        const level = parentRow ? Number(parentRow.getAttribute('data-level')) + 1 : 0;
+        const firstOutsideLevel = afterRow ? level + 1 : level;
+        let nextRow = (afterRow || parentRow)?.nextElementSibling ?? null;
+        while (nextRow === row || (nextRow && Number(nextRow.getAttribute('data-level')) >= firstOutsideLevel)) {
+            nextRow = nextRow.nextElementSibling;
+        }
+        row.setAttribute('data-level', String(level));
+        row.style.marginLeft = `${level * 20}px`;
+        if (row.parentElement !== list || row.nextElementSibling !== nextRow) {
+            list.insertBefore(row, nextRow);
+        }
+        return afterRow ? afterTaskId : undefined;
+    }
+
     private openSubtaskDraft(parentId: string, afterTaskId?: string) {
         const list = this.getRootElement().querySelector<HTMLElement>('#subtasksList');
         if (!list?.isConnected) return;
         if (this.collapsedSubtaskIds.delete(parentId)) this.renderSubtasks();
-        const rows = Array.from(list.children) as HTMLElement[];
-        const parentRow = rows.find(row => row.dataset.taskId === parentId);
-        const afterRow = afterTaskId ? rows.find(row => row.dataset.taskId === afterTaskId) : undefined;
-        const level = parentRow ? Number(parentRow.getAttribute('data-level')) + 1 : 0;
-        const firstOutsideLevel = afterRow ? level + 1 : level;
-        let nextRow = (afterRow || parentRow)?.nextElementSibling ?? null;
-        while (nextRow && Number(nextRow.getAttribute('data-level')) >= firstOutsideLevel) {
-            nextRow = nextRow.nextElementSibling;
-        }
 
         const row = document.createElement('div');
         row.className = 'reminder-item subtasks-dialog__draft';
-        row.style.marginLeft = `${level * 20}px`;
         row.innerHTML = `
             <div class="reminder-item__content">
                 <div class="reminder-item__left-controls">
@@ -971,9 +984,9 @@ export class SubtasksDialog {
                     </div>
                 </div>
             </div>`;
-        const input = this.createInlineTitle(row, parentId, undefined, afterRow ? afterTaskId : undefined);
+        const resolvedAfterTaskId = this.positionSubtaskDraft(row, parentId, afterTaskId);
+        const input = this.createInlineTitle(row, parentId, undefined, resolvedAfterTaskId);
         row.querySelector('.reminder-item__title-row')!.appendChild(input);
-        list.insertBefore(row, nextRow);
         input.focus();
     }
 
@@ -1001,6 +1014,7 @@ export class SubtasksDialog {
             this.dirtyInlineTitles.add(editor);
         });
         input.addEventListener('blur', () => {
+            if (this.movingInlineDraft) return;
             row.draggable = editor.wasDraggable;
             if (this.inlineTitle === editor || this.dirtyInlineTitles.has(editor)) void this.finishInlineTitle(editor);
         });
@@ -1023,9 +1037,167 @@ export class SubtasksDialog {
                 event.preventDefault();
                 event.stopPropagation();
                 if (input.value.trim()) void this.finishInlineTitle(editor, true);
+            } else if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                event.preventDefault();
+                event.stopPropagation();
+                void this.handleInlineTitleTab(editor, event.shiftKey);
             }
         });
         return input;
+    }
+
+    private findPreviousSiblingTask(task: any): any | undefined {
+        const parentId = this.getRenderedParentId(task);
+        const siblings = this.subtasks
+            .filter(item => this.getRenderedParentId(item) === parentId)
+            .sort((a, b) => this.compareSubtasks(a, b));
+        const index = siblings.findIndex(item => item.id === task.id);
+        return index > 0 ? siblings[index - 1] : undefined;
+    }
+
+    private findPreviousSiblingForDraft(editor: InlineSubtaskTitle): any | undefined {
+        const siblings = this.subtasks
+            .filter(item => this.getRenderedParentId(item) === editor.parentId)
+            .sort((a, b) => this.compareSubtasks(a, b));
+        if (!siblings.length) return undefined;
+        if (editor.afterTaskId) {
+            const afterIndex = siblings.findIndex(item => item.id === editor.afterTaskId);
+            if (afterIndex >= 0) return siblings[afterIndex];
+        }
+        return siblings[siblings.length - 1];
+    }
+
+    private getOutdentTarget(task: any): { currentParent: any; targetParentId: string } | undefined {
+        if (this.readOnly || !task?.id || task.isSubscribed || (task.isRepeatInstance && task.originalId)) return undefined;
+        const rootParentId = this.getRenderedParentId(null);
+        const currentParentId = this.getRenderedParentId(task);
+        if (currentParentId === rootParentId) return undefined;
+        const currentParent = this.subtasks.find(item => item.id === currentParentId);
+        if (!currentParent) return undefined;
+        const targetParentId = this.getRenderedParentId(currentParent);
+        if (targetParentId !== rootParentId) {
+            const targetParent = this.subtasks.find(item => item.id === targetParentId);
+            if (!targetParent || targetParent.isSubscribed) return undefined;
+            if (this.wouldCreateSubtaskCycle(task.id, targetParentId, id => this.subtasks.find(item => item.id === id)?.parentId)) {
+                return undefined;
+            }
+        }
+        return { currentParent, targetParentId };
+    }
+
+    private focusSubtaskTitle(taskId: string, selectionStart?: number | null, selectionEnd?: number | null) {
+        const input = this.getRootElement().querySelector<HTMLTextAreaElement>(
+            `[data-task-id="${CSS.escape(taskId)}"] .subtasks-dialog__title`
+        );
+        if (!input) return;
+        input.focus();
+        if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
+            const max = input.value.length;
+            input.setSelectionRange(Math.min(selectionStart, max), Math.min(selectionEnd, max));
+        }
+    }
+
+    private async handleInlineTitleTab(editor: InlineSubtaskTitle, outdent: boolean) {
+        if (this.readOnly || this.closed || editor.pending || this.pendingSubtaskDrop || this.pendingSubtaskDeletion) return;
+
+        const selectionStart = editor.input.selectionStart;
+        const selectionEnd = editor.input.selectionEnd;
+
+        if (!editor.task) {
+            if (outdent) {
+                const rootParentId = this.getRenderedParentId(null);
+                if (editor.parentId === rootParentId) return;
+                const currentParent = this.subtasks.find(item => item.id === editor.parentId);
+                if (!currentParent) return;
+                const newParentId = this.getRenderedParentId(currentParent);
+                editor.parentId = newParentId;
+                this.movingInlineDraft = true;
+                try {
+                    editor.afterTaskId = this.positionSubtaskDraft(editor.row, newParentId, currentParent.id);
+                    editor.input.focus();
+                    if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
+                        editor.input.setSelectionRange(selectionStart, selectionEnd);
+                    }
+                } finally {
+                    this.movingInlineDraft = false;
+                }
+                return;
+            }
+
+            const targetParent = this.findPreviousSiblingForDraft(editor);
+            if (!targetParent || targetParent.isSubscribed) return;
+
+            if (this.collapsedSubtaskIds.has(targetParent.id)) {
+                const value = editor.input.value;
+                const wasDirty = this.dirtyInlineTitles.has(editor);
+                this.collapsedSubtaskIds.delete(targetParent.id);
+                this.movingInlineDraft = true;
+                try {
+                    this.closeInlineTitle(editor);
+                    this.renderSubtasks();
+                    this.openSubtaskDraft(targetParent.id);
+                    if (this.inlineTitle) {
+                        this.inlineTitle.input.value = value;
+                        if (wasDirty) this.dirtyInlineTitles.add(this.inlineTitle);
+                        if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
+                            this.inlineTitle.input.setSelectionRange(selectionStart, selectionEnd);
+                        }
+                    }
+                } finally {
+                    this.movingInlineDraft = false;
+                }
+                return;
+            }
+
+            editor.parentId = targetParent.id;
+            editor.afterTaskId = undefined;
+            this.movingInlineDraft = true;
+            try {
+                this.positionSubtaskDraft(editor.row, targetParent.id);
+                editor.input.focus();
+                if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
+                    editor.input.setSelectionRange(selectionStart, selectionEnd);
+                }
+            } finally {
+                this.movingInlineDraft = false;
+            }
+            return;
+        }
+
+        const task = this.subtasks.find(item => item.id === editor.task.id) || editor.task;
+        const previousSibling = outdent ? undefined : this.findPreviousSiblingTask(task);
+        if (outdent) {
+            if (!this.getOutdentTarget(task)) return;
+        } else if (!this.canNestSubtaskDrop(task, previousSibling)) {
+            return;
+        }
+
+        const taskId = task.id;
+        const run = async (): Promise<boolean> => {
+            try {
+                if (await this.finishInlineTitles() === false || this.closed) return false;
+                if (outdent) {
+                    await this.outdentSubtask(taskId);
+                } else {
+                    await this.nestSubtask(taskId, previousSibling.id);
+                }
+                if (!this.closed) {
+                    this.focusSubtaskTitle(taskId, selectionStart, selectionEnd);
+                }
+                return true;
+            } catch (error) {
+                console.error('Failed to change subtask level:', error);
+                showMessage(i18n('operationFailed'), 3000, 'error');
+                return false;
+            }
+        };
+
+        this.pendingSubtaskDrop = run();
+        try {
+            await this.pendingSubtaskDrop;
+        } finally {
+            this.pendingSubtaskDrop = undefined;
+        }
     }
 
     public finishPendingChanges(): Promise<boolean> | undefined {
@@ -1699,6 +1871,79 @@ export class SubtasksDialog {
             window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: {} }));
         }
         this.collapsedSubtaskIds.delete(targetId);
+        this.renderSubtasks();
+        this.onUpdate?.();
+    }
+
+    private async outdentSubtask(taskId: string) {
+        const task = this.subtasks.find(item => item.id === taskId);
+        const target = this.getOutdentTarget(task);
+        if (!task || !target) return;
+
+        const { currentParent, targetParentId } = target;
+        const rootParentId = this.getRenderedParentId(null);
+        const lastChildSort = (tasks: any[]) => tasks.reduce((max, item) =>
+            item?.id !== taskId && item?.parentId === targetParentId ? Math.max(max, this.getReminderSortValue(item)) : max, 0);
+
+        if (this.isTempMode) {
+            const moved = { ...task, parentId: targetParentId, sort: lastChildSort(this.subtasks) + 10 };
+            const sortChanges = this.placeInlineSubtask(moved, currentParent.id);
+            this.applyInlineSortChanges(sortChanges);
+            task.parentId = targetParentId;
+            task.sort = moved.sort;
+            this.onTempSubtasksUpdate?.([...this.subtasks]);
+        } else {
+            const data = await this.plugin.loadReminderData(true) || {};
+            const source = data[taskId];
+            if (!source || source.isSubscribed) throw new Error('Subtask is no longer available');
+
+            if (targetParentId === rootParentId) {
+                const { targetParentId: baseRootId } = this.parseInstanceParentId(rootParentId);
+                if (!data[rootParentId] && !data[baseRootId]) throw new Error('The parent task no longer exists');
+            } else {
+                const targetTask = this.subtasks.find(item => item.id === targetParentId);
+                const ghostTarget = !data[targetParentId] && targetTask?.isRepeatInstance && targetTask.originalId;
+                const targetRecord = ghostTarget ? data[targetTask.originalId] : data[targetParentId];
+                if (!targetRecord || targetRecord.isSubscribed) throw new Error('The target parent is no longer available');
+                if (ghostTarget) {
+                    const { instanceDate } = this.parseInstanceParentId(targetParentId);
+                    if (!instanceDate || targetRecord.repeat?.excludeDates?.includes(instanceDate) || getRepeatInstanceState(targetRecord, instanceDate)?.deleted) {
+                        throw new Error('The target instance is no longer available');
+                    }
+                }
+                const getSavedParentId = (id: string): string | undefined => {
+                    if (data[id]) return data[id].parentId;
+                    const templateId = this.parseInstanceParentId(id).targetParentId;
+                    return templateId === taskId ? taskId : data[templateId]?.parentId;
+                };
+                if (this.wouldCreateSubtaskCycle(taskId, targetParentId, getSavedParentId)) throw new Error('Circular subtask relationship');
+            }
+
+            const moved = {
+                ...source,
+                parentId: targetParentId,
+                sort: Math.max(lastChildSort(this.subtasks), lastChildSort(Object.values(data))) + 10,
+            };
+            const sortChanges = this.placeInlineSubtask(moved, currentParent.id, data);
+            const nextData: Record<string, any> = { ...data, [taskId]: moved };
+            for (const [siblingId, sort] of sortChanges) {
+                if (siblingId === taskId) continue;
+                if (nextData[siblingId]) {
+                    nextData[siblingId] = { ...nextData[siblingId], sort };
+                } else {
+                    const { targetParentId: templateId, instanceDate } = this.parseInstanceParentId(siblingId);
+                    const template = nextData[templateId] ? structuredClone(nextData[templateId]) : undefined;
+                    if (template && instanceDate) {
+                        patchRepeatInstanceState(template, instanceDate, { sort });
+                        nextData[templateId] = template;
+                    }
+                }
+            }
+            await this.plugin.saveReminderData(nextData);
+            await this.loadSubtasks();
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: {} }));
+        }
+
         this.renderSubtasks();
         this.onUpdate?.();
     }
