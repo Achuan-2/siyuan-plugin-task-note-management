@@ -36,6 +36,7 @@ function fixture() {
         data: { task: clone(original), child: { id: 'child', parentId: 'task', blockId: 'child-block', projectId: 'old-project' } },
         writes: [], callbacks: [], messages: [], errors: [], refreshed: [], closed: false,
         notification: async () => {}, beforeWrite: async () => {}, fail: false,
+        subscription: null, subscriptionTasks: {}, remoteSort: undefined,
     };
     const projectManager = {
         getProjectCustomGroups: async () => [{ id: 'new-group', name: '新分组' }],
@@ -48,6 +49,17 @@ function fixture() {
         i18n: key => key, showMessage: message => state.messages.push(message),
         getLogicalDateString: () => '2026-11-17', compareDateStrings: (a, b) => a.localeCompare(b),
         getBlockByID: async () => ({ id: 'block', root_id: 'doc' }),
+        getEditableSubscriptionByProjectId: async (_plugin, id) => state.subscription?.projectId === id ? state.subscription : null,
+        isSubscriptionDeletable: () => true,
+        saveReminders: async (_plugin, data) => {
+            state.writes.push(clone(data));
+            const task = Object.values(data).find(item => item.subscriptionId === state.subscription.id);
+            if (task) state.subscriptionTasks[task.id] = { ...task, sort: state.remoteSort };
+        },
+        loadSubscriptionTasks: async (_plugin, id) => {
+            assert.equal(id, state.subscription.id);
+            return clone(state.subscriptionTasks);
+        },
         updateBindBlockAtrrs: async id => {
             assert.ok(state.writes.length > 0, '块属性只能在任务保存成功后更新');
             state.refreshed.push(id);
@@ -206,6 +218,22 @@ test('新建绑定任务首次写入就包含 docId，无需再写整份任务�
     assert.equal(created.blockId, 'block');
     assert.equal(created.docId, 'doc');
     assert.equal(f.state.writes.length, 1);
+});
+
+test('新建滴答任务后回调使用服务端确认的 sort，供看板立即定位', async () => {
+    const f = fixture();
+    f.dialog.mode = 'quick';
+    f.dialog.reminder = undefined;
+    f.dialog.defaultSort = 10000;
+    f.state.subscription = { id: 'subscription', projectId: 'new-project', type: 'dida' };
+    f.state.remoteSort = 1099511627776;
+
+    await f.dialog.saveReminder();
+
+    assert.deepEqual(f.state.errors, []);
+    assert.equal(f.state.writes.length, 1);
+    assert.equal(f.state.callbacks[0].sort, f.state.remoteSort);
+    assert.equal(f.state.closed, true);
 });
 
 test('项目切换尚未加载完成时，保存入口不读取半填充的表单', async () => {

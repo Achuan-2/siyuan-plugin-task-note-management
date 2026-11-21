@@ -758,6 +758,11 @@
                 color: existingProj.color || '#4f46e5',
                 updatedTime: new Date().toISOString(),
                 sort: sort,
+                ...(isNew && type === 'dida' ? {
+                    sortRule: 'manual',
+                    sortOrder: 'desc',
+                    sortCriteria: [{ method: 'manual', order: 'desc' }],
+                } : {}),
             };
             if (isNew) {
                 project.createdTime = project.updatedTime;

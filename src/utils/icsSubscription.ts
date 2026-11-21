@@ -565,6 +565,7 @@ async function syncDidaTaskChanges(
                     didaProjectId: created.didaProjectId,
                     didaListId: created.didaListId,
                     didaEtag: created.didaEtag,
+                    sort: created.sort ?? nextTask.sort,
                     customGroupId: nextTask.customGroupId || created.customGroupId,
                     url: nextTask.url || created.url,
                     subscriptionType: 'dida',
@@ -940,6 +941,7 @@ async function buildTasksFromSubscriptionEvents(
                 ...(event.didaKind !== undefined ? { didaKind: event.didaKind } : {}),
                 ...(event.didaItems !== undefined ? { didaItems: event.didaItems } : {}),
                 ...(event.didaTags !== undefined ? { didaTags: event.didaTags } : {}),
+                ...(isDida && event.sort !== undefined ? { sort: event.sort } : {}),
                 ...(isDida ? { didaNoteFields: event.didaNoteFields } : {}),
                 completed: isCompleted,
                 completedAt: isDida

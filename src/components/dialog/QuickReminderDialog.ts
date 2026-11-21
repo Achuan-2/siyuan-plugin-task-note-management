@@ -22,6 +22,7 @@ import {
     getEditableSubscriptionByProjectId,
     isSubscriptionDeletable,
     isWritableSubscriptionType,
+    loadSubscriptionTasks,
     saveReminders,
 } from "../../utils/icsSubscription";
 import { showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
@@ -7508,6 +7509,10 @@ export class QuickReminderDialog {
                 : null;
             if (reminder.isSubscribed || targetWritableSub) {
                 await saveReminders(this.plugin, reminderData);
+                if ((this.mode === 'quick' || this.mode === 'block') && reminder.subscriptionType === 'dida') {
+                    const syncedTasks = await loadSubscriptionTasks(this.plugin, reminder.subscriptionId);
+                    reminder.sort = syncedTasks[reminderId]?.sort ?? reminder.sort;
+                }
             } else {
                 await this.plugin.saveReminderData(reminderData);
             }

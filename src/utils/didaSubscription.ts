@@ -103,6 +103,7 @@ export interface DidaRemoteTaskEvent {
     priority?: 'high' | 'medium' | 'low' | 'none';
     repeat?: any;
     createdAt?: string;
+    sort?: number;
     customGroupId: string;
     didaTaskId: string;
     didaProjectId: string;
@@ -269,6 +270,11 @@ function mapLocalPriorityToDida(priority?: string): 0 | 1 | 3 | 5 {
     return 0;
 }
 
+function getLocalDidaTaskSort(sortOrder?: number): number | undefined {
+    // Dida puts smaller values first. The kanban's default manual descending order needs larger values first.
+    return Number.isFinite(sortOrder) ? 0 - sortOrder : undefined;
+}
+
 function parseDidaTimestamp(value?: string): Date | null {
     if (!value) return null;
     const normalized = value.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
@@ -388,6 +394,7 @@ function convertDidaTaskToEvent(
         priority,
         repeat: parseDidaRepeatFlag(task.repeatFlag),
         createdAt: createdDt?.toISOString(),
+        sort: getLocalDidaTaskSort(task.sortOrder),
         customGroupId: getDidaGroupId(listId),
         didaTaskId: task.id,
         didaProjectId: task.projectId,
@@ -756,6 +763,7 @@ export async function createDidaTask(
     didaProjectId: string;
     didaListId: string;
     didaEtag?: string;
+    sort?: number;
     customGroupId: string;
     url: string;
 }> {
@@ -819,6 +827,7 @@ export async function createDidaTask(
         didaProjectId: resolvedProjectId,
         didaListId: listId,
         didaEtag: created.etag,
+        sort: getLocalDidaTaskSort(created.sortOrder),
         customGroupId: getDidaGroupId(listId),
         url: `https://dida365.com/webapp/#p/${resolvedProjectId}/tasks/${created.id}`,
     };
