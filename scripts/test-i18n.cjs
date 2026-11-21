@@ -149,6 +149,32 @@ function loadDeclarations(relative, names, dependencies, methods = false) {
     return new Function('module', 'exports', ...Object.keys(dependencies), `${code}\nreturn ${result};`)(module, module.exports, ...Object.values(dependencies));
 }
 
+test('子任务删除确认框使用本地化标题，正文显示实际任务名', async () => {
+    const cases = [
+        { id: 'task', isTempMode: true, messageKey: 'deleteTemporarySubtaskConfirm' },
+        { id: 'task', messageKey: 'confirmDeleteTask' },
+        { id: 'task_2026-11-21', isInstanceEdit: true, messageKey: 'hideSubtaskInstanceConfirm' },
+        { id: 'task_2026-11-21', isInstanceEdit: true, isModifyAllInstances: true, messageKey: 'deleteSubtaskTemplateConfirm' },
+    ];
+    const task = { id: 'task', title: 'Example task' };
+    for (const [language, expectedTitle] of [['zh_CN', '确认删除'], ['en', 'Confirm delete']]) {
+        const { i18n } = loadI18n(language);
+        let confirmation;
+        const { Fixture } = loadDeclarations('src/components/dialog/SubtasksDialog.ts', ['deleteSubtask'], {
+            i18n, confirm: (title, message) => { confirmation = { title, message }; },
+        }, true);
+        for (const { id, messageKey, ...mode } of cases) {
+            confirmation = undefined;
+            const dialog = Object.assign(new Fixture(), mode, {
+                subtasks: [task], plugin: { loadReminderData: async () => ({ task }) },
+            });
+            await dialog.deleteSubtask(id);
+            assert.deepEqual(confirmation, { title: expectedTitle, message: i18n(messageKey, { title: task.title }) });
+            assert.ok(confirmation.message.includes(task.title));
+        }
+    }
+});
+
 test('节假日 ICS 的中文补班及英文假日分类不随界面语言改变', async () => {
     const events = [
         { date: '2026-10-10', title: '国庆节补班' },

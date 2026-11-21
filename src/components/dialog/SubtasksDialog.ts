@@ -1046,13 +1046,15 @@ export class SubtasksDialog {
     }
 
     private async deleteSubtask(id: string) {
+        const confirmTitle = i18n("confirmDeleteTitle") || "确认删除";
+
         // 临时模式：仅从本地列表删除
         if (this.isTempMode) {
             const index = this.subtasks.findIndex(t => t.id === id);
             if (index !== -1) {
                 const taskTitle = this.subtasks[index].title || i18n("untitledTask");
                 confirm(
-                    i18n("confirmDelete") || "确认删除",
+                    confirmTitle,
                     i18n("deleteTemporarySubtaskConfirm", { title: String(taskTitle) }),
                     async () => {
                         this.subtasks.splice(index, 1);
@@ -1133,7 +1135,7 @@ export class SubtasksDialog {
                 // 编辑单个实例：将此 ghost 子任务在当前日期标记为隐藏
                 // 而不是删除整个模板
                 confirm(
-                    i18n("confirmDelete") || "确认删除",
+                    confirmTitle,
                     i18n("hideSubtaskInstanceConfirm", { title: String(task.title) }),
                     async () => {
                         reminderData = await this.plugin.loadReminderData() || {};
@@ -1163,7 +1165,7 @@ export class SubtasksDialog {
                 // 编辑所有实例：删除整个模板任务
                 const ghostConfirmMsg = i18n("deleteSubtaskTemplateConfirm", { title: String(task.title) });
                 confirm(
-                    i18n("confirmDelete") || "确认删除",
+                    confirmTitle,
                     ghostConfirmMsg,
                     async () => {
                         await doDelete();
@@ -1182,7 +1184,7 @@ export class SubtasksDialog {
 
         // Use siyuan confirm
         confirm(
-            i18n("confirmDelete") || "确认删除",
+            confirmTitle,
             confirmMsg,
             async () => {
                 await doDelete();
