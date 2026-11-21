@@ -4,7 +4,7 @@ import { getLastStatsMode } from "../stats/statsMode";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
 
 // 添加四象限面板常量
-import { getBlockByID, openBlock } from "../../api";
+import { openBlock } from "../../api";
 import { PROJECT_KANBAN_TAB_TYPE } from "../../index";
 import { ProjectManager } from "../dataManager/projectManager";
 import { compareDateStrings, getLogicalDateString, getLocaleTag } from "../../utils/dateUtils";
@@ -50,11 +50,11 @@ export function normalizeProjectPanelSortCriteria(
 ): SortCriterion[] {
     const normalized = Array.isArray(criteriaRaw)
         ? criteriaRaw
-            .map((criterion: any) => ({
+            .map((criterion: any): SortCriterion => ({
                 method: String(criterion?.method || ''),
                 order: criterion?.order === 'desc' ? 'desc' : 'asc'
             }))
-            .filter((criterion: SortCriterion) => PROJECT_PANEL_SORT_METHODS.has(criterion.method))
+            .filter(criterion => PROJECT_PANEL_SORT_METHODS.has(criterion.method))
         : [];
 
     if (normalized.length > 0) {
@@ -248,8 +248,6 @@ export class ProjectPanel {
     private plugin: any;
     private currentTab: string = 'all';
     private selectedCategories: string[] = [];
-    private currentSort: string = 'priority';
-    private currentSortOrder: 'asc' | 'desc' = 'desc';
     private currentSortCriteria: SortCriterion[] = [{ method: 'priority', order: 'desc' }];
     private currentSearchQuery: string = '';
     private categoryManager: CategoryManager;
@@ -631,12 +629,6 @@ export class ProjectPanel {
         return this.normalizeSortCriteria(this.currentSortCriteria);
     }
 
-    private syncLegacySortStateFromCriteria() {
-        const primary = this.getActiveSortCriteria()[0] || { method: 'priority', order: 'desc' as const };
-        this.currentSort = primary.method;
-        this.currentSortOrder = primary.order;
-    }
-
     private isDragDisabledBySortMode(): boolean {
         const primary = this.getActiveSortCriteria()?.[0]?.method;
         return primary === 'created' || primary === 'title';
@@ -698,7 +690,6 @@ export class ProjectPanel {
                 onSave: async (criteria) => {
                     try {
                         this.currentSortCriteria = this.normalizeSortCriteria(criteria);
-                        this.syncLegacySortStateFromCriteria();
                         this.updateSortButtonTitle();
                         await this.savePanelSettings();
                         this.loadProjects();
@@ -709,7 +700,6 @@ export class ProjectPanel {
                 onChange: async (criteria) => {
                     try {
                         this.currentSortCriteria = this.normalizeSortCriteria(criteria);
-                        this.syncLegacySortStateFromCriteria();
                         this.updateSortButtonTitle();
                         await this.savePanelSettings();
                         this.loadProjects();
@@ -1029,62 +1019,6 @@ export class ProjectPanel {
                 progressBarInner.style.width = `0%`;
                 progressText.textContent = `0%`;
             }
-        }
-    }
-
-    /**
-     * 计算给定项目的顶级任务在 kanbanStatus 上的数量（只计顶级，即没有 parentId）
-     * 使用 ProjectKanbanView 的静态方法，确保统计逻辑一致（包括日期自动归档到进行中的逻辑）
-     */
-    private async countTopLevelKanbanStatus(projectId: string, reminderData: any): Promise<{ doing: number; short_term: number; long_term: number; done: number }> {
-        try {
-            const projectManager = ProjectManager.getInstance(this.plugin);
-            const statuses = await projectManager.getProjectKanbanStatuses(projectId);
-            const settings = await this.plugin?.loadSettings?.() || this.plugin?.settings || {};
-            const holidayData = await this.plugin?.loadHolidayData?.() || {};
-            const result = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, statuses, settings, holidayData);
-
-            // Map dynamic status counts to the legacy four labels for display
-            const countsMap = result.counts || {};
-            const nonCompletedIds = Object.keys(countsMap).filter(k => k !== 'completed');
-
-            // Preferred mapping keys
-            const prefer = ['doing', 'short_term', 'long_term'];
-            const mapped: any = { doing: 0, short_term: 0, long_term: 0, done: result.completed || 0 };
-
-            const used: Set<string> = new Set();
-            // First try to pick by key names if exist
-            prefer.forEach((key) => {
-                if (countsMap.hasOwnProperty(key)) {
-                    mapped[key] = countsMap[key];
-                    used.add(key);
-                }
-            });
-
-            // Fill remaining prefer slots from available non-completed statuses
-            for (const key of prefer) {
-                if (mapped[key] === 0) {
-                    const next = nonCompletedIds.find(id => !used.has(id));
-                    if (next) {
-                        mapped[key] = countsMap[next] || 0;
-                        used.add(next);
-                    }
-                }
-            }
-
-            return { doing: mapped.doing || 0, short_term: mapped.short_term || 0, long_term: mapped.long_term || 0, done: mapped.done || 0 };
-        } catch (error) {
-            console.error('countTopLevelKanbanStatus error:', error);
-            // Fallback to legacy call if something fails
-            const settings = await this.plugin?.loadSettings?.() || this.plugin?.settings || {};
-            const holidayData = await this.plugin?.loadHolidayData?.() || {};
-            const legacy = ProjectKanbanView.countTopLevelTasksByStatus(projectId, reminderData, undefined, settings, holidayData);
-            // legacy may return { counts, completed } or old shape; handle both
-            if ((legacy as any).counts) {
-                const c = (legacy as any).counts;
-                return { doing: c.doing || 0, short_term: c.short_term || 0, long_term: c.long_term || 0, done: (legacy as any).completed || 0 };
-            }
-            return { doing: (legacy as any).doing || 0, short_term: (legacy as any).short_term || 0, long_term: (legacy as any).long_term || 0, done: (legacy as any).completed || 0 };
         }
     }
 
@@ -2526,7 +2460,7 @@ export class ProjectPanel {
         dialog.show();
     }
 
-    private showBindToBlockDialog(project: any, mode: string = 'bind') {
+    private showBindToBlockDialog(project: any, mode: 'bind' | 'document' | 'heading' = 'bind') {
         const blockBindingDialog = new BlockBindingDialog(this.plugin, async (blockId: string) => {
             try {
                 await this.bindProjectToBlock(project, blockId);
@@ -2756,7 +2690,6 @@ export class ProjectPanel {
                     : [{ method: settings.projectPanelSort || 'priority', order: settings.projectPanelSortOrder || 'desc' }]
             );
             this.currentSortCriteria = savedCriteria;
-            this.syncLegacySortStateFromCriteria();
             this.selectedCategories = settings.projectPanelSelectedCategories || [];
             this.showDates = settings.projectPanelShowDates !== false;
             this.showTaskCounts = settings.projectPanelShowTaskCounts === true;

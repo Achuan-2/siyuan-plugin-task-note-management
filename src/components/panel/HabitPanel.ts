@@ -1,9 +1,9 @@
 import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMetadataIcons";
-import { showMessage, Dialog, Menu, confirm, getBackend, getFrontend } from "siyuan";
+import { showMessage, Dialog, Menu, confirm } from "siyuan";
 import { openBlock, pushMsg } from "../../api";
 import { getLocalDateString, getLocalDateTimeString, getLogicalDateString, getRelativeDateString } from "../../utils/dateUtils";
 import { HabitGroupManager } from "../dataManager/habitGroupManager";
-import { i18n } from "../../pluginInstance";
+import { getPluginInstance, i18n } from "../../pluginInstance";
 import { HabitEditDialog } from "../dialog/HabitEditDialog";
 import { HabitStatsDialog } from "../stats/HabitStatsDialog";
 import { HabitGroupManageDialog } from "../dialog/HabitGroupManageDialog";

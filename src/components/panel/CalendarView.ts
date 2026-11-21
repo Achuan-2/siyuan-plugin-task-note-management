@@ -13,13 +13,13 @@ import listPlugin from '@fullcalendar/list';
 import interactionPlugin from '@fullcalendar/interaction';
 import { colorWithOpacity } from "../../utils/uiUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
-import { showMessage, confirm, openTab, Menu, Dialog, Constants, platformUtils, getFrontend } from "siyuan";
+import { showMessage, confirm, Menu, Dialog, Constants, platformUtils, getFrontend } from "siyuan";
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushMsg, sql } from "../../api";
 import { getLocalDateString, getLocalDateTime, getLocalDateTimeString, compareDateStrings, getLogicalDateString, getRelativeDateString, getDayStartAdjustedDate, getLocaleTag } from "../../utils/dateUtils";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
-import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
+import { buildQuickDateMenuItems } from "../menu/QuickDateMenu";
 import { ProjectSelectorPopup } from "../dialog/ProjectSelectorPopup";
-import { CategoryManager, Category } from "../dataManager/categoryManager";
+import { CategoryManager } from "../dataManager/categoryManager";
 import { confirmDialog } from "../../libs/dialog";
 import { createCompletedInstanceReminders, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { showAddTaskReminderTimeDialog } from "../dialog/AddTaskReminderTimeDialog";
@@ -29,12 +29,13 @@ import { CategoryManageDialog } from "../dialog/CategoryManageDialog";
 import { ProjectColorDialog } from "../dialog/ProjectColorDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { i18n } from "../../pluginInstance";
-import { generateRepeatInstances, RepeatInstance, getDaysDifference, addDaysToDate, resolveRepeatReminderTimes, getMonthlyWeekdayDate, getMonthlyWeekRules, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
+import { generateRepeatInstances, getDaysDifference, addDaysToDate, resolveRepeatReminderTimes, getMonthlyWeekdayDate, getMonthlyWeekRules, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../../utils/icsSubscription";
+import type { ReminderItem } from "../../types/reminder";
 import { CalendarConfigManager, CALENDAR_CONFIG_UPDATED_EVENT } from "../dataManager/calendarConfigManager";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
-import { getNextLunarMonthlyDate, getNextLunarYearlyDate, getSolarDateLunarString } from "../../utils/lunarUtils";
+import { getNextLunarMonthlyDate, getNextLunarYearlyDate } from "../../utils/lunarUtils";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
 import { PomodoroRecordManager, type PomodoroSession } from "../dataManager/pomodoroRecord";
 import { Solar } from 'lunar-typescript';
@@ -144,7 +145,6 @@ export class CalendarView {
         isLocked?: boolean;
     } | null = null;
     private allDayDragListener: ((e: MouseEvent | TouchEvent) => void) | null = null;
-    private isAllDayReordering: boolean = false; // 标记是否正在处理全天重排序
     private allDayReorderPromise: Promise<void> | null = null; // 串行化全天重排序与 eventDrop 保存
     private calendarEventElMap: WeakMap<HTMLElement, any> = new WeakMap();
     private mobileEventContextTimer: number = 0;
@@ -169,7 +169,6 @@ export class CalendarView {
     private isCollapseTimeRangeTemp: boolean = true; // 缓存临时的折叠状态，支持在界面上手动展开/折叠
     private isTopCollapseTemp: boolean = true; // 缓存顶部临时的折叠状态
     private isBottomCollapseTemp: boolean = true; // 缓存底部临时的折叠状态
-    private isMiddleCollapseTemp: boolean = true; // 缓存中间临时的折叠状态（折叠区间位于一天中间）
     private dragHandleEl: HTMLElement | null = null; // 缓存拖拽手柄元素
     private isDraggingCollapseEnd: boolean = false; // 标记当前是否在拖拽手柄
     private justDraggedCollapseEnd: boolean = false; // 标记是否刚刚结束拖拽手柄调整
@@ -314,7 +313,6 @@ export class CalendarView {
             this.isCollapseTimeRangeTemp = settings.calendarCollapseTimeRange === true;
             this.isTopCollapseTemp = settings.calendarCollapseTimeRange === true;
             this.isBottomCollapseTemp = settings.calendarCollapseTimeRange === true;
-            this.isMiddleCollapseTemp = settings.calendarCollapseTimeRange === true;
             this.lastCalendarCollapseTimeRangeSetting = settings.calendarCollapseTimeRange;
         }
         const collapseStart = settings.calendarCollapseStartTime || '00:00';
@@ -747,7 +745,6 @@ export class CalendarView {
         this.isCollapseTimeRangeTemp = settings.calendarCollapseTimeRange === true;
         this.isTopCollapseTemp = settings.calendarCollapseTimeRange === true;
         this.isBottomCollapseTemp = settings.calendarCollapseTimeRange === true;
-        this.isMiddleCollapseTemp = settings.calendarCollapseTimeRange === true;
         const collapseStart = settings.calendarCollapseStartTime || '00:00';
         const collapseEnd = settings.calendarCollapseEndTime || '08:00';
         const hiddenTimeRanges = this.computeHiddenTimeRanges(
@@ -1165,12 +1162,16 @@ export class CalendarView {
             menu.addItem({
                 icon: 'iconTNProject',
                 label: i18n("calendarFilterProjects"),
-                click: () => this.lifecycle.frame(() => this.positionDropdown(projectDropdown, filterButton, 260))
+                click: () => {
+                    this.lifecycle.frame(() => this.positionDropdown(projectDropdown, filterButton, 260));
+                }
             });
             menu.addItem({
                 icon: 'iconTags',
                 label: i18n("calendarFilterCategories"),
-                click: () => this.lifecycle.frame(() => this.positionDropdown(categoryDropdown, filterButton, 220))
+                click: () => {
+                    this.lifecycle.frame(() => this.positionDropdown(categoryDropdown, filterButton, 220));
+                }
             });
             const rect = filterButton.getBoundingClientRect();
             menu.open({ x: rect.left, y: rect.bottom + 4 });
@@ -2636,7 +2637,6 @@ export class CalendarView {
 
         // 配合 mouseout 处理离开灰色区域时的清理
         calendarEl.addEventListener('mouseout', (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
             const relatedTarget = e.relatedTarget as HTMLElement;
             if (!relatedTarget || !relatedTarget.closest('.calendar-collapse-axis-grey')) {
                 const allGreyCells = calendarEl.querySelectorAll('.calendar-collapse-axis-grey');
@@ -2678,7 +2678,7 @@ export class CalendarView {
             }
         });
 
-        calendarEl.addEventListener('dragleave', (e: DragEvent) => {
+        calendarEl.addEventListener('dragleave', () => {
             // 隐藏指示器（当拖出日历区域）
             this.hideDropIndicator();
         });
@@ -4938,24 +4938,13 @@ export class CalendarView {
     }
 
     private createQuickDateContextMenuItems(calendarEvent: any, onlyThisInstance: boolean = false): any[] {
-        const items: any[] = [];
-        const todayStr = getLogicalDateString();
-        const tomorrowStr = getRelativeDateString(1);
-        const dayAfterStr = getRelativeDateString(2);
-
         const props = calendarEvent.extendedProps;
         const startDateStr = props.date || props.originalDate;
-        const endDateStr = props.endDate || props.originalEndDate || startDateStr;
-        const isSpanningTask = !!(startDateStr && endDateStr && endDateStr !== startDateStr);
-        const removeIcon = "❌";
-        const editIcon = "✏️";
 
         const getOriginalInstanceDate = () => {
             const parsedInstance = props.isRepeated ? parseReminderInstanceId(calendarEvent.id) : null;
             return parsedInstance?.instanceDate || startDateStr;
         };
-
-        const cleanDateStr = (str?: string) => str ? str.split(' ')[0].split('T')[0] : undefined;
 
         const applyStartDate = async (newDate: string | null) => {
             try {
@@ -5002,7 +4991,7 @@ export class CalendarView {
             eventSource: 'calendar',
             onApplyStartDate: applyStartDate,
             onApplyEndDate: applyEndDate,
-            onSaved: async (savedReminder) => {
+            onSaved: async () => {
                 await this.refreshEvents();
                 window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: 'calendar' } }));
             }
@@ -6569,7 +6558,6 @@ export class CalendarView {
         }
 
         // 4. 执行异步重排序
-        this.isAllDayReordering = true;
         const reorderPromise = this.handleAllDayReorder(stateToProcess);
         this.allDayReorderPromise = reorderPromise;
         try {
@@ -6578,7 +6566,6 @@ export class CalendarView {
             if (this.allDayReorderPromise === reorderPromise) {
                 this.allDayReorderPromise = null;
             }
-            this.isAllDayReordering = false;
             this.allDayDragState = null;
             this.isDragging = false;
             if (this.refreshPendingDuringDrag) {
@@ -9216,10 +9203,6 @@ export class CalendarView {
         };
     }
 
-    private isHabitCompletedOnDate(habit: any, date: string): boolean {
-        return this.getHabitProgressInfoOnDate(habit, date).completed;
-    }
-
     private getHabitCheckInEmojisOnDate(habit: any, date: string): string[] {
         const checkIn = habit?.checkIns?.[date];
         if (!checkIn) return [];
@@ -11701,7 +11684,6 @@ export class CalendarView {
      */
     private async splitRecurringEvent(calendarEvent: any) {
         try {
-            const reminder = calendarEvent.extendedProps;
             const reminderData = await getAllReminders(this.plugin);
             const originalReminder = reminderData[calendarEvent.id];
 
@@ -11784,7 +11766,6 @@ export class CalendarView {
             delete newReminder.repeat.instances;
 
             // 生成新的提醒ID
-            const blockId = originalReminder.blockId || originalReminder.id;
             const newId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             newReminder.id = newId;
 
@@ -12589,21 +12570,6 @@ export class CalendarView {
     }
 
     /**
-     * 若字符串恰好是同一子串重复两次（如 "ABCABC"），则返回单份子串。
-     * 用于兜底 FullCalendar 标题偶发的重叠渲染。
-     */
-    private dedupeRepeatedString(str: string): string {
-        if (!str || str.length < 2 || str.length % 2 !== 0) {
-            return str;
-        }
-        const half = str.slice(0, str.length / 2);
-        if (half === str.slice(str.length / 2)) {
-            return half;
-        }
-        return str;
-    }
-
-    /**
      * 自定义日历工具栏标题格式
      */
     private formatCalendarTitle(arg: any): string {
@@ -13024,7 +12990,6 @@ export class CalendarView {
                 e.preventDefault();
                 this.isDraggingCollapseEnd = true;
 
-                const startY = e.clientY;
                 // 获取当前网格所有带时间轴标签行的 top 与高度数据
                 const rows = Array.from(this.container.querySelectorAll('.fc-timegrid-slots tbody tr:not(.fc-timegrid-slot-hidden)')) as HTMLElement[];
                 const rowCoords = rows.map(r => {
@@ -13272,15 +13237,6 @@ export class CalendarView {
         }
     }
 
-    private escapeHtml2(unsafe: string): string {
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
     private async showCreateSubtaskDialog(calendarEvent: any) {
         // 获取父任务ID
         let parentId = calendarEvent.extendedProps?.originalId || calendarEvent.id;
@@ -13328,7 +13284,7 @@ export class CalendarView {
         }
 
         // 计算最大排序值，以便将新任务放在末尾
-        const allReminders = Object.values(reminderData);
+        const allReminders = Object.values<Pick<ReminderItem, 'sort'>>(reminderData);
         const maxSort = allReminders.reduce((max, r) => Math.max(max, r.sort || 0), 0);
         const defaultSort = maxSort + 10000;
 

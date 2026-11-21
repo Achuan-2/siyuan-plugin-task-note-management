@@ -2,14 +2,14 @@ import { renderTaskMetadataIcon, renderTaskMetadataText } from "../render/taskMe
 import { saveExcludedTaskInstance } from "../../utils/taskInstanceActions";
 import { TaskActionUndo, getTaskStatusUndoMessage } from "../../utils/taskActionUndo";
 import { duplicateTaskTree } from "../../utils/taskDuplication";
-import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, getBackend, platformUtils } from "siyuan";
+import { showMessage, confirm, Dialog, Menu, Constants, getFrontend, platformUtils } from "siyuan";
 import { refreshSql, getBlockByID, updateBindBlockAtrrs, openBlock, pushErrMsg, pushMsg, sql } from "../../api";
 import { getLocalDateString, compareDateStrings, getLocalDateTimeString, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { loadSortConfig, saveSortConfig, getSortCriterionName, SortCriterion, loadFilterConfig, saveFilterConfig } from "../../utils/sortConfig";
 import { getLuteInstance } from "../../utils/luteSingleton";
 import { SortMenuDialog } from "../dialog/SortMenuDialog";
 import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
-import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
+import { buildQuickDateMenuItems } from "../menu/QuickDateMenu";
 import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { CategoryManager } from "../dataManager/categoryManager";
 import { CategoryManageDialog } from "../dialog/CategoryManageDialog";
@@ -27,19 +27,18 @@ import { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 import { CompletedSubtaskCollapseState } from '../../utils/completedSubtaskCollapse';
 import { createTaskCompletedTimeElement } from '../render/taskCompletedTimeElement';
 import { LongPressTaskDrag, type TaskDragPoint } from '../../utils/longPressTaskDrag';
-import { generateRepeatInstances, generateRepeatInstancesWithFutureGuarantee, getRepeatDescription, getDaysDifference, addDaysToDate, generateSubtreeInstances, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, removeRepeatInstance, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
+import { generateRepeatInstancesWithFutureGuarantee, getDaysDifference, addDaysToDate, generateSubtreeInstances, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { getLastStatsMode } from "../stats/statsMode";
 import { showStatsDialog } from "../stats/ShowStatsDialog";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
-import { getSolarDateLunarString, getNextLunarMonthlyDate, getNextLunarYearlyDate } from "../../utils/lunarUtils";
+import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { isEventPast } from "../../utils/icsImport";
 import { uploadIcsToCloud } from "../../utils/icsExport";
 import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
-import LoadingDialog from '../dialog/LoadingDialog.svelte';
 import { VipManager } from '../vip/vip';
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { buildProjectCategoryOrderMap, buildProjectStatusOrderMap, compareProjectsByPanelSort, normalizeProjectPanelSortCriteria } from "./ProjectPanel";
@@ -141,7 +140,6 @@ export class ReminderPanel {
     private miniTaskTouchTooltipAnchor?: HTMLElement;
     private reminderSharedRenderSignature: string | undefined;
     private reminderSharedRenderVersion: number = 0;
-    private loadingDialog: Dialog | null = null;
     private isLoading: boolean = false;
     private reminderLoadVersion: number = 0;
     private pendingReminderLoad: boolean = false;
@@ -176,12 +174,11 @@ export class ReminderPanel {
     private isPaginationEnabled: boolean = true; // 是否启用分页
     private totalPages: number = 1;
     private totalItems: number = 0;
-    private lastTruncatedTotal: number = 0;
     // 文档标题缓存：按 tab -> (docId -> title)
     private docTitleCache: Map<string, Map<string, string>> = new Map();
     private lute: any;
 
-    constructor(container: HTMLElement, plugin?: any, closeCallback?: () => void,
+    constructor(container: HTMLElement, plugin?: any, _closeCallback?: () => void,
         selectionOptions?: { onSelectTask: (task: any) => Promise<void> }) {
         this.container = container;
         this.plugin = plugin;
@@ -630,7 +627,7 @@ export class ReminderPanel {
         this.sortButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            void this.showSortMenu(e);
+            void this.showSortMenu();
         });
         actionContainer.appendChild(this.sortButton);
 
@@ -854,11 +851,11 @@ export class ReminderPanel {
         }
 
         const normalized = criteria
-            .map((criterion: any) => ({
+            .map((criterion: any): SortCriterion => ({
                 method: typeof criterion?.method === 'string' ? criterion.method : '',
                 order: criterion?.order === 'desc' ? 'desc' : 'asc',
             }))
-            .filter((criterion: SortCriterion) => availableMethods.has(criterion.method));
+            .filter(criterion => availableMethods.has(criterion.method));
 
         return normalized.length > 0 ? normalized : [{ method: 'time', order: 'asc' }];
     }
@@ -1398,15 +1395,6 @@ export class ReminderPanel {
 
 
     private createQuickDateContextMenuItems(targetReminder: any, onlyThisInstance: boolean = false): any[] {
-        const items: any[] = [];
-        const todayStr = getLogicalDateString();
-        const tomorrowStr = getRelativeDateString(1);
-        const dayAfterStr = getRelativeDateString(2);
-        const nextWeekStr = getRelativeDateString(7);
-        const isSpanningTask = !!(targetReminder.date && targetReminder.endDate && targetReminder.endDate !== targetReminder.date);
-        const removeIcon = "❌";
-        const editIcon = "✏️";
-
         const getOriginalInstanceDate = () => {
             const parsedInstance = targetReminder.isRepeatInstance ? parseReminderInstanceId(targetReminder.id) : null;
             return parsedInstance?.instanceDate || targetReminder.date;
@@ -1758,139 +1746,6 @@ export class ReminderPanel {
         }
     }
 
-    /**
-     * 异步添加文档标题显示
-     * @param container 标题容器元素
-     * @param docId 文档ID
-     */
-    private async addDocumentTitle(container: HTMLElement, docId: string) {
-        if (this.viewMode === 'mini') return;
-        try {
-            // 如果容器已经有文档标题，避免重复插入
-            if (container.querySelector('.reminder-item__doc-title')) return;
-
-            const tab = this.currentTab || 'default';
-            let tabCache = this.docTitleCache.get(tab);
-            if (!tabCache) {
-                tabCache = new Map<string, string>();
-                this.docTitleCache.set(tab, tabCache);
-            }
-
-            // 优先使用缓存（仅使用当前 tab 的缓存）
-            if (tabCache.has(docId)) {
-                const cachedTitle = tabCache.get(docId)!;
-                const docTitleEl = document.createElement('div');
-                docTitleEl.className = 'reminder-item__doc-title';
-                docTitleEl.style.cssText = `
-                    font-size: 11px;
-                    color: var(--b3-theme-on-background);
-                    margin-bottom: 2px;
-                    opacity: 1;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                `;
-
-                const docIcon = document.createElement('span');
-                docIcon.innerHTML = '📄';
-                docIcon.style.fontSize = '10px';
-
-                const docTitleLink = document.createElement('span');
-                docTitleLink.setAttribute('data-type', 'a');
-                docTitleLink.setAttribute('data-href', `siyuan://blocks/${docId}`);
-                docTitleLink.textContent = cachedTitle;
-                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', i18n("documentTitleTooltip", { title: String(cachedTitle) }));
-                docTitleLink.style.cssText = `
-                    cursor: pointer;
-                    color: var(--b3-theme-on-background);
-                    text-decoration: underline;
-                    text-decoration-style: dotted;
-                `;
-
-                docTitleEl.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.openBlockTab(docId);
-                });
-                docTitleLink.addEventListener('mouseenter', () => {
-                    docTitleLink.style.color = 'var(--b3-theme-primary)';
-                });
-                docTitleLink.addEventListener('mouseleave', () => {
-                    docTitleLink.style.color = 'var(--b3-theme-on-background)';
-                });
-
-                docTitleEl.appendChild(docIcon);
-                docTitleEl.appendChild(docTitleLink);
-                container.insertBefore(docTitleEl, container.firstChild);
-
-                return;
-            }
-
-            // 缓存中没有时再异步获取并缓存
-            const docBlock = await getBlockByID(docId);
-            if (docBlock && docBlock.content) {
-                const title = docBlock.content;
-                tabCache.set(docId, title);
-
-                // 创建文档标题元素并插入
-                const docTitleEl = document.createElement('div');
-                docTitleEl.className = 'reminder-item__doc-title';
-                docTitleEl.style.cssText = `
-                    font-size: 11px;
-                    color: var(--b3-theme-on-background);
-                    margin-bottom: 2px;
-                    opacity: 1;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                `;
-
-                const docIcon = document.createElement('span');
-                docIcon.innerHTML = '📄';
-                docIcon.style.fontSize = '10px';
-
-                const docTitleLink = document.createElement('span');
-                docTitleLink.setAttribute('data-type', 'a');
-                docTitleLink.setAttribute('data-href', `siyuan://blocks/${docId}`);
-                docTitleLink.textContent = title;
-                docTitleLink.classList.add('ariaLabel'); docTitleLink.setAttribute('aria-label', i18n("documentTitleTooltip", { title: String(title) }));
-                docTitleLink.style.cssText = `
-                    cursor: pointer;
-                    color: var(--b3-theme-on-background);
-                    text-decoration: underline;
-                    text-decoration-style: dotted;
-                `;
-
-                docTitleEl.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.openBlockTab(docId);
-                });
-                docTitleLink.addEventListener('mouseenter', () => {
-                    docTitleLink.style.color = 'var(--b3-theme-primary)';
-                });
-                docTitleLink.addEventListener('mouseleave', () => {
-                    docTitleLink.style.color = 'var(--b3-theme-on-background)';
-                });
-
-                docTitleEl.appendChild(docIcon);
-                docTitleEl.appendChild(docTitleLink);
-                container.insertBefore(docTitleEl, container.firstChild);
-
-                // 恢复滚动位置以防止异步插入引起跳动
-                const currentScrollTop = this.remindersContainer.scrollTop;
-                const currentScrollLeft = this.remindersContainer.scrollLeft;
-                setTimeout(() => {
-                    this.remindersContainer.scrollTop = currentScrollTop;
-                    this.remindersContainer.scrollLeft = currentScrollLeft;
-                }, 0);
-            }
-        } catch (error) {
-            console.warn("Failed to get document title:", error);
-            // 静默失败，不影响主要功能
-        }
-    }
-
 
 
 
@@ -2000,7 +1855,7 @@ export class ReminderPanel {
     }
 
     // 显示排序菜单对话框（支持多选和拖拽排序）
-    private async showSortMenu(event: MouseEvent) {
+    private async showSortMenu() {
         try {
             if (this.isCurrentFilterUsingCustomSort()) {
                 const currentFilterName = this.filterSelect?.selectedOptions?.[0]?.textContent || this.currentTab;
@@ -2329,7 +2184,6 @@ export class ReminderPanel {
                                 const totalLine = (totalCount > 0 || focusTimeMinutes > 0) ? `<span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTotalTooltip', { count: String(totalCount) })}">${renderTaskMetadataIcon('tomato')} ${totalCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTotalTooltip', { minutes: String(focusTimeMinutes) })}" style="margin-left:8px; opacity:0.9;">${totalFocusText}</span>` : '';
                                 const todayLine = (todayCount > 0 || todayFocusMinutes > 0 || totalCount > 0) ? `<div style="margin-top:6px; font-size:12px; opacity:0.95;"><span class="ariaLabel" aria-label="${i18n('pomodoroCompletedTodayTooltip', { count: String(todayCount) })}">${i18n("todayPomodoroWithIcon").replace("🍅", renderTaskMetadataIcon("tomato"))}${todayCount}</span><span class="ariaLabel" aria-label="${i18n('pomodoroFocusTodayTooltip', { minutes: String(todayFocusMinutes) })}" style="margin-left:8px">${todayFocusText}</span></div>` : '';
 
-                                const focusTimeText = focusTimeMinutes > 0 ? ` ${renderTaskMetadataIcon('duration')} ${formatMinutesToString(focusTimeMinutes)}` : '';
                                 pomEl.innerHTML = `${totalLine}${todayLine}`;
                             }
                         }
@@ -3443,7 +3297,7 @@ export class ReminderPanel {
         };
 
         const callbacks = {
-            onCheckboxClick: (r: any, checked: boolean, e: Event) => {
+            onCheckboxClick: (r: any, checked: boolean) => {
                 const today = getLogicalDateString();
                 const checkboxAction = this.plugin?.settings?.checkboxActionForSpanningAndDessert || 'global';
                 if (this.isDailyDessertTaskForDate(r, today) && checkboxAction === 'today') {
@@ -3527,7 +3381,7 @@ export class ReminderPanel {
                     }
                 }
             },
-            onCollapseClick: async (r: any, collapsed: boolean, e: MouseEvent) => {
+            onCollapseClick: async (r: any, collapsed: boolean) => {
                 this.completedSubtaskCollapse.setExpanded(r, !collapsed);
                 const targetReminder = this.currentRemindersCache.find(rem => rem.id === r.id);
                 if (!collapsed) {
@@ -3630,7 +3484,7 @@ export class ReminderPanel {
                 }
                 this.openBlockTab(docId);
             },
-            onNoteClick: (r: any, e: Event) => {
+            onNoteClick: (r: any) => {
                 const isRepeatInstance = r.isRepeatInstance;
                 const originalId = r.originalId;
                 const isInstanceEdit = isRepeatInstance && !!originalId;
@@ -3660,15 +3514,15 @@ export class ReminderPanel {
                     }
                 ).show();
             },
-            onProjectClick: (r: any, e: Event) => {
+            onProjectClick: (r: any) => {
                 this.openProjectKanban(r.projectId);
             },
-            onHabitClick: (r: any, e: Event) => {
+            onHabitClick: (r: any) => {
                 if (r.linkedHabitId) {
                     void this.openHabitStatsDialog(r.linkedHabitId);
                 }
             },
-            onTimeClick: (r: any, e: Event) => {
+            onTimeClick: (r: any) => {
                 const isEditable = !r.isSubscribed || (r.subscriptionType === 'caldav' && r.caldavEditable);
                 if (isEditable) {
                     this.showTimeEditDialog(r);
@@ -6263,7 +6117,7 @@ export class ReminderPanel {
 
                 // 局部移除DOM、缓存、分页
                 if (deletedIds.length > 0) {
-                    this.removeReminderFromDOM(deletedIds[0], deletedIds);
+                    this.removeReminderFromDOM(deletedIds);
                 }
 
                 undo.show(i18n("deletedRelatedReminders", { count: deletedCount.toString() }));
@@ -6313,7 +6167,7 @@ export class ReminderPanel {
             },
             onDrop: (task, point) => {
                 const target = this.getMobileTaskDropTarget(task, point);
-                if (target) void this.handleDrop(target.source, target.reminder, point, target.dropType);
+                if (target) void this.handleDrop(target.source, target.reminder, target.dropType);
             },
             onEnd: () => {
                 this.isDragging = false;
@@ -6461,7 +6315,7 @@ export class ReminderPanel {
                 const isSetParent = dropType === 'set-parent';
 
                 if (this.canDropHere(this.draggedReminder, targetReminder, isSetParent)) {
-                    this.handleDrop(this.draggedReminder, targetReminder, e, dropType);
+                    this.handleDrop(this.draggedReminder, targetReminder, dropType);
                 }
             }
             this.hideDropIndicator();
@@ -6950,7 +6804,7 @@ export class ReminderPanel {
                 }
             }
             if (!title) {
-                const textEl = tabEl.querySelector('.item__text, .b3-list-item__text') || tabEl;
+                const textEl = tabEl.querySelector<HTMLElement>('.item__text, .b3-list-item__text') || tabEl;
                 title = (textEl.textContent || textEl.innerText || '').replace(/\s+/g, ' ').trim() || null;
             }
         }
@@ -7057,7 +6911,7 @@ export class ReminderPanel {
             if (targetEl.classList.contains('protyle-title') || targetEl.getAttribute('data-type') === 'NodeDocument') {
                 const clone = targetEl.cloneNode(true) as HTMLElement;
                 clone.querySelectorAll('.protyle-attr, .protyle-action, button, svg').forEach(el => el.remove());
-                const titleInput = clone.querySelector('.title-input, [contenteditable="true"]') || clone;
+                const titleInput = clone.querySelector<HTMLElement>('.title-input, [contenteditable="true"]') || clone;
                 title = (titleInput.textContent || titleInput.innerText || '').replace(/\s+/g, ' ').trim();
                 if (!docId) docId = blockId;
             } else if (targetEl.classList.contains('b3-list-item')) {
@@ -7074,7 +6928,7 @@ export class ReminderPanel {
             } else {
                 const clone = targetEl.cloneNode(true) as HTMLElement;
                 clone.querySelectorAll('.protyle-attr, .protyle-action, .block-pomodoro-summary, .block-bind-reminders-btn, .block-bind-reminder-date, .block-project-btn, button, svg').forEach(el => el.remove());
-                const editableEl = clone.querySelector('[contenteditable="true"]') || clone;
+                const editableEl = clone.querySelector<HTMLElement>('[contenteditable="true"]') || clone;
                 if (!title) title = (editableEl.textContent || editableEl.innerText || '').replace(/\s+/g, ' ').trim();
 
                 const protyle = targetEl.closest('.protyle');
@@ -7158,7 +7012,7 @@ export class ReminderPanel {
             if (targetEl.classList.contains('protyle-title') || targetEl.getAttribute('data-type') === 'NodeDocument') {
                 const clone = targetEl.cloneNode(true) as HTMLElement;
                 clone.querySelectorAll('.protyle-attr, .protyle-action, button, svg').forEach(el => el.remove());
-                const titleInput = clone.querySelector('.title-input, [contenteditable="true"]') || clone;
+                const titleInput = clone.querySelector<HTMLElement>('.title-input, [contenteditable="true"]') || clone;
                 title = (titleInput.textContent || titleInput.innerText || '').replace(/\s+/g, ' ').trim();
                 if (!docId) docId = blockId;
             } else if (targetEl.classList.contains('b3-list-item')) {
@@ -7176,7 +7030,7 @@ export class ReminderPanel {
                 // 普通编辑器块：复制节点并清除所有 .protyle-attr 属性栏与挂载按钮，防止把番茄钟/日期属性等误提取为标题
                 const clone = targetEl.cloneNode(true) as HTMLElement;
                 clone.querySelectorAll('.protyle-attr, .protyle-action, .block-pomodoro-summary, .block-bind-reminders-btn, .block-bind-reminder-date, .block-project-btn, button, svg').forEach(el => el.remove());
-                const editableEl = clone.querySelector('[contenteditable="true"]') || clone;
+                const editableEl = clone.querySelector<HTMLElement>('[contenteditable="true"]') || clone;
                 if (!title) title = (editableEl.textContent || editableEl.innerText || '').replace(/\s+/g, ' ').trim();
 
                 const protyle = targetEl.closest('.protyle');
@@ -7356,31 +7210,6 @@ export class ReminderPanel {
         }
     }
 
-    private showLoadingDialog(message: string) {
-        if (this.loadingDialog) {
-            this.loadingDialog.destroy();
-        }
-        this.loadingDialog = new Dialog({
-            title: "",
-            content: `<div id="loadingDialogContent"></div>`,
-            width: "350px",
-            height: "auto",
-            disableClose: true,
-            destroyCallback: null
-        });
-        new LoadingDialog({
-            target: this.loadingDialog.element.querySelector('#loadingDialogContent'),
-            props: { message }
-        });
-    }
-
-    private closeLoadingDialog() {
-        if (this.loadingDialog) {
-            this.loadingDialog.destroy();
-            this.loadingDialog = null;
-        }
-    }
-
     /** 多选日期按首个有效条件填充；“全部日期”与筛选逻辑一样优先。 */
     private getNewTaskDateAttributes(): { defaultDate: string; defaultEndDate: string } {
         const builtInTypes: Record<string, string> = {
@@ -7545,7 +7374,7 @@ export class ReminderPanel {
     }
 
     // 新增:移除父子关系
-    private async removeParentRelation(childReminder: any, silent: boolean = false) {
+    private async removeParentRelation(childReminder: any) {
         try {
             const reminderData = await getAllReminders(this.plugin, undefined, false, 'sidebar');
 
@@ -7605,142 +7434,6 @@ export class ReminderPanel {
         }
     }
 
-    // 新增：创建提醒倒计时元素 - 改进以支持过期显示
-    private createReminderCountdownElement(reminder: any, today: string): HTMLElement | null {
-        // 判断提醒的目标日期
-        let targetDate: string;
-        let isOverdueEvent = false;
-        let isStartedOnlyEvent = false;
-
-        const startLogical = this.getReminderLogicalDate(reminder.date || reminder.endDate, reminder.time || reminder.endTime);
-        const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
-        const hasStartDate = !!reminder.date;
-        const hasEndDate = !!reminder.endDate;
-        const isOnlyEndDate = !hasStartDate && hasEndDate;
-        const isOnlyStartDate = hasStartDate && !hasEndDate;
-        const treatsOnlyStartAsDeadline = isOnlyStartDate && this.shouldTreatOnlyStartDateAsDeadline(reminder);
-        const isSpanningRealEvent = !!(hasStartDate && hasEndDate && reminder.endDate !== reminder.date);
-
-        if (isSpanningRealEvent) {
-            // 跨天事件：检查今天是否在事件范围内（使用逻辑日期）
-            const isInRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-
-            if (isInRange) {
-                // 今天在事件范围内，显示到结束日期的倒计时
-                targetDate = endLogical;
-            } else if (compareDateStrings(startLogical, today) > 0) {
-                // 事件还未开始，显示到开始日期的倒计时
-                targetDate = startLogical;
-            } else {
-                // 事件已结束，显示过期天数（仅对未完成事件）
-                if (!reminder.completed) {
-                    targetDate = endLogical;
-                    isOverdueEvent = true;
-                } else {
-                    return null;
-                }
-            }
-        } else {
-            // 单日事件（使用逻辑起始日期判断）
-            if (compareDateStrings(startLogical, today) > 0) {
-                // 未来日期，显示倒计时
-                targetDate = startLogical;
-            } else if (compareDateStrings(startLogical, today) < 0) {
-                // 过去日期：仅开始日期显示已开始天数；截止/单日结束日期显示过期天数
-                if (!reminder.completed) {
-                    targetDate = startLogical;
-                    if (isOnlyStartDate && !treatsOnlyStartAsDeadline) {
-                        isStartedOnlyEvent = true;
-                    } else {
-                        isOverdueEvent = true;
-                    }
-                } else {
-                    return null;
-                }
-            } else {
-                // 今天的事件，不显示倒计时
-                return null;
-            }
-        }
-
-        const daysDiff = this.calculateReminderDaysDifference(targetDate, today);
-
-        // 对于未来事件，daysDiff > 0；对于过期事件，daysDiff < 0
-        // 特殊情况：跨天事件且目标日期为结束日期，且结束日期为今天时，应显示"还剩0天"
-        const isTargetEndForSpanning = isSpanningRealEvent && targetDate === endLogical;
-        const isInRangeForSpanning = isSpanningRealEvent && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-
-        if (daysDiff === 0 && !(isTargetEndForSpanning && isInRangeForSpanning)) {
-            // 对于非跨天结束日的 0 天，仍然不显示倒计时（今天事件）
-            return null;
-        }
-
-        const countdownEl = document.createElement('div');
-        countdownEl.className = 'reminder-countdown';
-
-        const applyCountdownStyle = (colorVar: string, backgroundVar: string) => {
-            countdownEl.style.cssText = `
-                color: var(${colorVar});
-                font-size: 12px;
-                font-weight: 500;
-                background: var(${backgroundVar});
-                border: 1px solid var(${colorVar});
-                border-radius: 4px;
-                padding: 2px 6px;
-                flex-shrink: 0;
-            `;
-        };
-
-        // 根据是否过期设置不同的样式和文本
-        if (isStartedOnlyEvent && daysDiff < 0) {
-            applyCountdownStyle('--b3-card-success-color', '--b3-card-success-background');
-            countdownEl.textContent = i18n("startedDays", { days: Math.abs(daysDiff).toString() });
-        } else if (isOverdueEvent || daysDiff < 0) {
-            // 过期事件：红色样式
-            applyCountdownStyle('--b3-font-color1', '--b3-font-background1');
-
-            const overdueDays = Math.abs(daysDiff);
-            countdownEl.textContent = overdueDays === 1 ?
-                i18n("overdueBySingleDay") :
-                i18n("overdueByDays", { days: overdueDays.toString() });
-        } else {
-            // 未来事件：根据“未开始/还剩”显示不同样式
-            applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
-
-            // 根据是否为跨天事件显示不同的文案
-            if (isSpanningRealEvent) {
-                const isInRange = compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
-
-                if (isInRange) {
-                    applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
-                    countdownEl.textContent = daysDiff === 1 ?
-                        i18n("spanningDaysLeftSingle") :
-                        i18n("spanningDaysLeftPlural", { days: daysDiff.toString() });
-                } else {
-                    applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
-                    countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
-                }
-            } else if (isOnlyEndDate) {
-                applyCountdownStyle('--b3-font-color2', '--b3-font-background2');
-                countdownEl.textContent = i18n("endsInNDays", { days: daysDiff.toString() });
-            } else {
-                applyCountdownStyle('--b3-font-color4', '--b3-font-background4');
-                countdownEl.textContent = i18n("startInDays", { days: daysDiff.toString() });
-            }
-        }
-
-        return countdownEl;
-    }
-
-    // 新增：计算提醒日期差值 - 改进以支持负值（过期天数）
-    private calculateReminderDaysDifference(targetDate: string, today: string): number {
-        const target = new Date(targetDate + 'T00:00:00');
-        const todayDate = new Date(today + 'T00:00:00');
-        const diffTime = target.getTime() - todayDate.getTime();
-        // 返回实际天数差值，负数表示过期，正数表示未来
-        return Math.round(diffTime / (1000 * 60 * 60 * 24));
-    }
-
 
     // 新增：从元素获取提醒数据
     private getReminderFromElement(element: HTMLElement): any {
@@ -7772,26 +7465,12 @@ export class ReminderPanel {
             return false;
         }
 
-        // 检查循环任务限制：循环任务不能有父任务或子任务
-        const draggedIsRecurring = draggedReminder.isRepeatInstance || draggedReminder.isSpanningTodayCompletedInstance || (draggedReminder.repeat && draggedReminder.repeat.enabled);
-        const targetIsRecurring = targetReminder.isRepeatInstance || targetReminder.isSpanningTodayCompletedInstance || (targetReminder.repeat && targetReminder.repeat.enabled);
-
         if (isSetParent) {
             // 设置父子关系时的额外检查
             // 订阅任务不支持设置父子关系
             if (draggedReminder.isSubscribed || targetReminder.isSubscribed) {
                 return false;
             }
-
-            // 循环任务限制 - 现已支持循环任务设置父子关系
-            /*
-            if (draggedIsRecurring) {
-                return false; // 循环任务不能成为子任务
-            }
-            if (targetIsRecurring) {
-                return false; // 循环任务不能成为父任务
-            }
-            */
 
             // 检查是否会造成循环引用
             if (this.wouldCreateCycle(draggedReminder.id, targetReminder.id)) {
@@ -7947,7 +7626,7 @@ export class ReminderPanel {
     }
 
     // 新增：处理拖放
-    private async handleDrop(draggedReminder: any, targetReminder: any, event: Pick<DragEvent, 'clientY'>, dropType: 'before' | 'after' | 'set-parent') {
+    private async handleDrop(draggedReminder: any, targetReminder: any, dropType: 'before' | 'after' | 'set-parent') {
         try {
             if (dropType === 'set-parent') {
                 // 设置父子关系
@@ -7976,7 +7655,7 @@ export class ReminderPanel {
                         }
                     } else if (draggedReminder.parentId) {
                         // 拖到根任务上下方：自动移除父子关系
-                        await this.removeParentRelation(draggedReminder, true);
+                        await this.removeParentRelation(draggedReminder);
                     }
                 }
 
@@ -8144,10 +7823,6 @@ export class ReminderPanel {
                 ? (targetReminder.originalId || targetParsed?.originalId || targetReminder.id)
                 : targetReminder.id;
 
-            // 获取原始实例日期（从 ID 中提取，因为 date 可能已被修改）
-            const draggedOriginalInstanceDate = isDraggedInstance ? draggedParsed?.instanceDate : undefined;
-            const targetOriginalInstanceDate = isTargetInstance ? targetParsed?.instanceDate : undefined;
-
             const oldPriority = draggedReminder.priority || 'none';
             const newPriority = targetReminder.priority || 'none';
 
@@ -8172,10 +7847,7 @@ export class ReminderPanel {
                 await this.reorderSortGroup(
                     reminderData,
                     draggedOriginalId,
-                    isDraggedInstance,
-                    draggedOriginalInstanceDate,
                     targetOriginalId,
-                    targetOriginalInstanceDate,
                     insertBefore,
                     draggedReminder,
                     targetReminder
@@ -8211,11 +7883,11 @@ export class ReminderPanel {
                 }
 
                 // 重新排序两个优先级分组
-                await this.reorderPriorityGroup(reminderData, oldPriority, draggedOriginalId, isDraggedInstance, draggedOriginalInstanceDate);
-                await this.reorderPriorityGroup(reminderData, newPriority, draggedOriginalId, isDraggedInstance, draggedOriginalInstanceDate, targetOriginalId, targetOriginalInstanceDate, insertBefore);
+                await this.reorderPriorityGroup(reminderData, oldPriority, draggedOriginalId);
+                await this.reorderPriorityGroup(reminderData, newPriority, draggedOriginalId, targetOriginalId, insertBefore);
             } else {
                 // 同优先级排序
-                await this.reorderPriorityGroup(reminderData, oldPriority, draggedOriginalId, isDraggedInstance, draggedOriginalInstanceDate, targetOriginalId, targetOriginalInstanceDate, insertBefore, draggedReminder, targetReminder);
+                await this.reorderPriorityGroup(reminderData, oldPriority, draggedOriginalId, targetOriginalId, insertBefore, draggedReminder, targetReminder);
             }
 
             if (!skipSaveAndLoad) {
@@ -8235,10 +7907,7 @@ export class ReminderPanel {
     private async reorderSortGroup(
         reminderData: any,
         draggedOriginalId: string,
-        isDraggedInstance: boolean,
-        draggedInstanceDate?: string,
         targetOriginalId?: string,
-        targetInstanceDate?: string,
         insertBefore?: boolean,
         draggedReminder?: any,
         targetReminder?: any
@@ -8329,10 +7998,7 @@ export class ReminderPanel {
         reminderData: any,
         priority: string,
         draggedOriginalId: string,
-        isDraggedInstance: boolean,
-        draggedInstanceDate?: string,
         targetOriginalId?: string,
-        targetInstanceDate?: string,
         insertBefore?: boolean,
         draggedReminder?: any,
         targetReminder?: any
@@ -8570,15 +8236,11 @@ export class ReminderPanel {
 
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
 
-        // 判断是否为重复/循环任务或重复实例
-        const isRecurring = reminder.isRepeatInstance || (reminder.repeat && reminder.repeat.enabled);
         const isPinned = this.isReminderPinned(reminder);
 
         // 计算逻辑起止日期并检查是否为跨天事件
         const startLogical = this.getReminderLogicalDate(reminder.date, reminder.time);
         const endLogical = this.getReminderLogicalDate(reminder.endDate || reminder.date, reminder.endTime || reminder.time);
-        // 如果在任务期内或逾期，则不将其视为每日可做（Dessert）
-        const isInOrAfterPeriod = reminder.date && compareDateStrings(startLogical, today) <= 0;
         const isDessert = this.isDailyDessertTaskForDate(reminder, today);
         const isSpanningInToday = isSpanningDays && compareDateStrings(startLogical, today) <= 0 && compareDateStrings(today, endLogical) <= 0;
         const isFutureReminderInToday = this.isFutureTaskRemindedOnDate(reminder, today);
@@ -8833,71 +8495,6 @@ export class ReminderPanel {
             });
 
             return menuItems;
-        };
-
-
-
-        // Helper: quick date submenu items
-        const createQuickDateMenuItems = (targetReminder: any, onlyThisInstance: boolean = false) => {
-            const items: any[] = [];
-            const todayStr = getLogicalDateString();
-            const tomorrowStr = getRelativeDateString(1);
-            const dayAfterStr = getRelativeDateString(2);
-            const nextWeekStr = getRelativeDateString(7);
-
-            const apply = async (newDate: string | null) => {
-                try {
-                    if (targetReminder.isRepeatInstance && onlyThisInstance) {
-                        // 使用原始实例日期作为键（如果实例曾被移动，reminder.date 可能已改变，应该使用 id 中的原始生成日期）
-                        const originalInstanceDate = getRepeatInstanceOriginalKey(targetReminder) || targetReminder.date;
-                        await this.setInstanceDate(targetReminder.originalId, originalInstanceDate, newDate);
-                    } else {
-                        const targetId = targetReminder.isRepeatInstance ? targetReminder.originalId : targetReminder.id;
-                        await this.setReminderBaseDate(targetId, newDate);
-                    }
-                } catch (err) {
-                    console.error("Failed to quickly adjust date:", err);
-                    showMessage(i18n("operationFailed"));
-                }
-            };
-
-            items.push({ icon: "iconTNToday", label: i18n("moveToToday") || "移至今天", click: () => apply(todayStr) });
-            items.push({ icon: "iconTNTomorrow", label: i18n("moveToTomorrow") || "移至明天", click: () => apply(tomorrowStr) });
-            items.push({ icon: "iconCalendar", label: i18n("moveToDayAfterTomorrow") || "移至后天", click: () => apply(dayAfterStr) });
-            items.push({ icon: "iconTNPostponeWeek", label: i18n("postponeSevenDays") || "推迟7天", click: () => apply(addDaysToDate(targetReminder.date || targetReminder.endDate || todayStr, 7)) });
-            items.push({ icon: "iconClose", label: i18n("clearDate") || "清除日期", click: () => apply(null) });
-            items.push({
-                icon: "iconEdit", label: i18n("editDate") || "编辑日期", click: () => {
-                    const isInstanceEdit = targetReminder.isRepeatInstance && onlyThisInstance;
-                    const parsedInstance = targetReminder.isRepeatInstance ? parseReminderInstanceId(targetReminder.id) : null;
-                    const originalInstanceDate = parsedInstance?.instanceDate || targetReminder.date;
-                    const dlg = new QuickReminderDialog(
-                        undefined, undefined, undefined, undefined,
-                        {
-                            mode: 'edit',
-                            reminder: isInstanceEdit ? {
-                                ...targetReminder,
-                                isInstance: true,
-                                originalId: targetReminder.originalId,
-                                instanceDate: originalInstanceDate
-                            } : targetReminder,
-                            isInstanceEdit: isInstanceEdit,
-                            plugin: this.plugin,
-                            dateOnly: true,
-                            onSaved: async (savedReminder) => {
-                                if (savedReminder && savedReminder.id) {
-                                    await this.handleOptimisticSavedReminder(savedReminder);
-                                } else {
-                                    await this.loadReminders();
-                                }
-                                window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { source: this.panelId } }));
-                            }
-                        }
-                    );
-                    dlg.show();
-                }
-            });
-            return items;
         };
 
         if (reminder.isRepeatInstance) {
@@ -9379,10 +8976,6 @@ export class ReminderPanel {
                     console.error("Failed to pause current pomodoro timer");
                 }
 
-                const timeDisplay = currentState.isWorkPhase ?
-                    i18n("pomodoroWorkElapsed", { minutes: String(Math.floor(currentState.timeElapsed / 60)), seconds: String((currentState.timeElapsed % 60).toString().padStart(2, '0')) }) :
-                    i18n("pomodoroBreakRemaining", { minutes: String(Math.floor(currentState.timeLeft / 60)), seconds: String((currentState.timeLeft % 60).toString().padStart(2, '0')) });
-
                 confirmMessage += i18n('pomodoroSwitchProgressHint');
             }
 
@@ -9668,270 +9261,6 @@ export class ReminderPanel {
         }
     }
 
-
-
-
-    /**
-     * [NEW] Calculates the next occurrence date based on the repeat settings.
-     * @param startDateStr The starting date string (YYYY-MM-DD).
-     * @param repeat The repeat configuration object from RepeatConfig.
-     * @returns A Date object for the next occurrence.
-     */
-    private calculateNextDate(startDateStr: string, repeat: any): Date {
-        const startDate = new Date(startDateStr + 'T12:00:00');
-        if (isNaN(startDate.getTime())) {
-            console.error("Invalid start date for cycle calculation:", startDateStr);
-            return null;
-        }
-
-        if (!repeat || !repeat.enabled) {
-            return null;
-        }
-
-        switch (repeat.type) {
-            case 'daily':
-                return this.calculateDailyNext(startDate, repeat.interval || 1);
-
-            case 'weekly':
-                return this.calculateWeeklyNext(startDate, repeat.interval || 1);
-
-            case 'monthly':
-                if (repeat.monthDays && repeat.monthDays.length > 0) {
-                    return this.calculateNextMonthday(startDate, repeat.monthDays, repeat.interval || 1);
-                }
-                return this.calculateMonthlyNext(startDate, repeat.interval || 1);
-
-            case 'yearly':
-                return this.calculateYearlyNext(startDate, repeat.interval || 1);
-
-            case 'lunar-monthly':
-                return this.calculateLunarMonthlyNext(startDateStr, repeat);
-
-            case 'lunar-yearly':
-                return this.calculateLunarYearlyNext(startDateStr, repeat);
-
-            case 'custom':
-                return this.calculateCustomNext(startDate, repeat);
-
-            case 'ebbinghaus':
-                return this.calculateEbbinghausNext(startDate, repeat.ebbinghausPattern || [1, 2, 4, 7, 15]);
-
-            default:
-                console.error("Unknown repeat type:", repeat.type);
-                return null;
-        }
-    }
-
-    /**
-     * Calculate next daily occurrence
-     */
-    private calculateDailyNext(startDate: Date, interval: number): Date {
-        const nextDate = new Date(startDate);
-        nextDate.setDate(nextDate.getDate() + interval);
-        return nextDate;
-    }
-
-    /**
-     * Calculate next weekly occurrence
-     */
-    private calculateWeeklyNext(startDate: Date, interval: number): Date {
-        const nextDate = new Date(startDate);
-        nextDate.setDate(nextDate.getDate() + (7 * interval));
-        return nextDate;
-    }
-
-    /**
-     * Calculate next monthly occurrence
-     */
-    private calculateMonthlyNext(startDate: Date, interval: number): Date {
-        const nextDate = new Date(startDate);
-        nextDate.setMonth(nextDate.getMonth() + interval);
-
-        // Handle month overflow (e.g., Jan 31 + 1 month should be Feb 28/29, not Mar 3)
-        if (nextDate.getDate() !== startDate.getDate()) {
-            nextDate.setDate(0); // Set to last day of previous month
-        }
-
-        return nextDate;
-    }
-
-    /**
-     * Calculate next yearly occurrence
-     */
-    private calculateYearlyNext(startDate: Date, interval: number): Date {
-        const nextDate = new Date(startDate);
-        nextDate.setFullYear(nextDate.getFullYear() + interval);
-
-        // Handle leap year edge case (Feb 29 -> Feb 28)
-        if (nextDate.getDate() !== startDate.getDate()) {
-            nextDate.setDate(0); // Set to last day of previous month
-        }
-
-        return nextDate;
-    }
-
-    /**
-     * Calculate next custom occurrence
-     */
-    private calculateCustomNext(startDate: Date, repeat: any): Date {
-        // For custom repeats, use the first available option
-        // Priority: weekDays > monthDays > months
-
-        if (repeat.weekDays && repeat.weekDays.length > 0) {
-            return this.calculateNextWeekday(startDate, repeat.weekDays);
-        }
-
-        if (repeat.monthDays && repeat.monthDays.length > 0) {
-            return this.calculateNextMonthday(startDate, repeat.monthDays);
-        }
-
-        if (repeat.months && repeat.months.length > 0) {
-            return this.calculateNextMonth(startDate, repeat.months);
-        }
-
-        // Fallback to daily if no custom options
-        return this.calculateDailyNext(startDate, 1);
-    }
-
-    /**
-     * Calculate next occurrence based on weekdays
-     */
-    private calculateNextWeekday(startDate: Date, weekDays: number[]): Date {
-        const nextDate = new Date(startDate);
-        const currentWeekday = nextDate.getDay();
-
-        // Sort weekdays and find next one
-        const sortedWeekdays = [...weekDays].sort((a, b) => a - b);
-
-        // Find next weekday in the same week
-        let nextWeekday = sortedWeekdays.find(day => day > currentWeekday);
-
-        if (nextWeekday !== undefined) {
-            // Next occurrence is this week
-            const daysToAdd = nextWeekday - currentWeekday;
-            nextDate.setDate(nextDate.getDate() + daysToAdd);
-        } else {
-            // Next occurrence is next week, use first weekday
-            const daysToAdd = 7 - currentWeekday + sortedWeekdays[0];
-            nextDate.setDate(nextDate.getDate() + daysToAdd);
-        }
-
-        return nextDate;
-    }
-
-    /**
-     * Calculate next occurrence based on month days
-     */
-    private calculateNextMonthday(startDate: Date, monthDays: number[], interval: number = 1): Date {
-        const nextDate = new Date(startDate);
-        const currentDay = nextDate.getDate();
-
-        const getEffectiveDays = (date: Date): number[] => {
-            const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-            return Array.from(new Set(monthDays.map(day => Math.min(day, lastDayOfMonth)))).sort((a, b) => a - b);
-        };
-
-        // Sort month days and find next one
-        const sortedDays = getEffectiveDays(nextDate);
-
-        // Find next day in the same month
-        let nextDay = sortedDays.find(day => day > currentDay);
-
-        if (nextDay !== undefined) {
-            nextDate.setDate(nextDay);
-            return nextDate;
-        }
-
-        // Next occurrence is in the next eligible month, use the first effective day there.
-        nextDate.setMonth(nextDate.getMonth() + interval);
-        const targetMonthDays = getEffectiveDays(nextDate);
-        nextDate.setDate(targetMonthDays[0]);
-
-        return nextDate;
-    }
-
-    /**
-     * Calculate next occurrence based on months
-     */
-    private calculateNextMonth(startDate: Date, months: number[]): Date {
-        const nextDate = new Date(startDate);
-        const currentMonth = nextDate.getMonth() + 1; // Convert to 1-based
-
-        // Sort months and find next one
-        const sortedMonths = [...months].sort((a, b) => a - b);
-
-        // Find next month in the same year
-        let nextMonth = sortedMonths.find(month => month > currentMonth);
-
-        if (nextMonth !== undefined) {
-            // Next occurrence is this year
-            nextDate.setMonth(nextMonth - 1); // Convert back to 0-based
-        } else {
-            // Next occurrence is next year, use first month
-            nextDate.setFullYear(nextDate.getFullYear() + 1);
-            nextDate.setMonth(sortedMonths[0] - 1); // Convert back to 0-based
-        }
-
-        // Handle day overflow for months with fewer days
-        const lastDayOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-        if (nextDate.getDate() > lastDayOfMonth) {
-            nextDate.setDate(lastDayOfMonth);
-        }
-
-        return nextDate;
-    }
-
-    /**
-     * Calculate next ebbinghaus occurrence
-     */
-    private calculateEbbinghausNext(startDate: Date, pattern: number[]): Date {
-        // For ebbinghaus, we need to track which step we're on
-        // This is a simplified version - in practice, you'd need to track state
-        const nextDate = new Date(startDate);
-
-        // Use the first interval in the pattern as default
-        const firstInterval = pattern[0] || 1;
-        nextDate.setDate(nextDate.getDate() + firstInterval);
-
-        return nextDate;
-    }
-
-    /**
-     * Calculate next lunar monthly occurrence
-     */
-    private calculateLunarMonthlyNext(startDateStr: string, repeat: any): Date {
-        try {
-            const nextDateStr = getNextLunarMonthlyDate(startDateStr, repeat.lunarDay);
-            if (nextDateStr) {
-                return new Date(nextDateStr + 'T12:00:00');
-            }
-        } catch (error) {
-            console.error('Failed to calculate lunar monthly next:', error);
-        }
-        // Fallback: add 30 days
-        const fallbackDate = new Date(startDateStr + 'T12:00:00');
-        fallbackDate.setDate(fallbackDate.getDate() + 30);
-        return fallbackDate;
-    }
-
-    /**
-     * Calculate next lunar yearly occurrence
-     */
-    private calculateLunarYearlyNext(startDateStr: string, repeat: any): Date {
-        try {
-            const nextDateStr = getNextLunarYearlyDate(startDateStr, repeat.lunarMonth, repeat.lunarDay);
-            if (nextDateStr) {
-                return new Date(nextDateStr + 'T12:00:00');
-            }
-        } catch (error) {
-            console.error('Failed to calculate lunar yearly next:', error);
-        }
-        // Fallback: add 365 days
-        const fallbackDate = new Date(startDateStr + 'T12:00:00');
-        fallbackDate.setDate(fallbackDate.getDate() + 365);
-        return fallbackDate;
-    }
-
     private async deleteReminder(reminder: any) {
         if (reminder.isRepeatInstance || reminder.repeat?.enabled) {
             await this.deleteOriginalReminder(reminder.isRepeatInstance ? reminder.originalId : reminder.id);
@@ -10154,7 +9483,7 @@ export class ReminderPanel {
                 if (keepCompletedInstances) {
                     await this.loadReminders(true);
                 } else {
-                    this.removeReminderFromDOM(reminderId, Array.from(toDelete));
+                    this.removeReminderFromDOM(Array.from(toDelete));
                 }
 
                 // 如果有父任务且在当前视图中，局部更新父任务进度条
@@ -10223,10 +9552,9 @@ export class ReminderPanel {
 
     /**
      * 从DOM中移除提醒及其所有子任务
-     * @param reminderId 主任务ID
      * @param allIdsToRemove 所有要移除的ID集合（包括主任务和所有后代）
      */
-    private removeReminderFromDOM(reminderId: string, allIdsToRemove: string[]) {
+    private removeReminderFromDOM(allIdsToRemove: string[]) {
         try {
             let removedCount = 0;
             const idsToRemove = new Set(allIdsToRemove);
@@ -10795,7 +10123,7 @@ export class ReminderPanel {
                     }
 
                     // 局部移除该实例的DOM，避免全量刷新
-                    this.removeReminderFromDOM(reminder.id, [reminder.id]);
+                    this.removeReminderFromDOM([reminder.id]);
 
                     undo.show(i18n("instanceDeleted"));
 
@@ -12003,8 +11331,6 @@ export class ReminderPanel {
             existingControls.remove();
         }
 
-        this.lastTruncatedTotal = truncatedTotal;
-
         // 如果没有分页需求，直接返回
         if (this.totalPages <= 1 && truncatedTotal === 0) {
             return;
@@ -12823,7 +12149,7 @@ export class ReminderPanel {
                     // 乐观更新：立即移除 DOM，避免等待写盘导致列表跳动
                     const allIds = Array.from(toDelete);
                     if (allIds.length > 0) {
-                        this.removeReminderFromDOM(ids[0], allIds);
+                        this.removeReminderFromDOM(allIds);
                     }
 
                     allIds.forEach(id => {
