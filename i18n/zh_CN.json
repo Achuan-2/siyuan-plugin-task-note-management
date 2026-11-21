@@ -1412,7 +1412,7 @@
     "icsSubscription": "日历订阅",
     "icsSubscriptionDesc": "订阅外部ICS日历（如outlook可生成ics链接，以及导入别人制作的节假日日历、天气日历等），自动同步日程到本插件里，建议为每个订阅日历设置专门项目（可以新建一个项目状态为订阅日历，专门存放这些项目）。⚠️注意：订阅的日程不可编辑。<br>帮助文档：<a href=\"https://zhuanlan.zhihu.com/p/2010849488441459078\">如何订阅外部在线日历，如天气日历、节日日历、Outlook日历等</a>",
     "genericCalendar": "通用日历",
-    "appleCalendar": "苹果日历",
+    "appleCalendar": "iCloud",
     "feishuCalendar": "飞书日历",
     "dingtalkCalendar": "钉钉日历",
     "wecomCalendar": "企业微信日历",

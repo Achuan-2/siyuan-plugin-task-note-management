@@ -242,7 +242,7 @@
                             <div class="b3-label__text">${i18n('calendarProvider') || '日历平台'}</div>
                             <select class="b3-select fn__block" id="sub-provider">
                                 <option value="generic" ${(!subscription?.provider || subscription?.provider === 'generic') ? 'selected' : ''}>${i18n('genericCalendar') || '通用日历'}</option>
-                                <option value="apple" ${subscription?.provider === 'apple' ? 'selected' : ''}>${i18n('appleCalendar') || '苹果日历'}</option>
+                                <option value="apple" ${subscription?.provider === 'apple' ? 'selected' : ''}>${i18n('appleCalendar') || 'iCloud'}</option>
                                 <option value="feishu" ${subscription?.provider === 'feishu' ? 'selected' : ''}>${i18n('feishuCalendar') || '飞书日历'}</option>
                                 <option value="dingtalk" ${subscription?.provider === 'dingtalk' ? 'selected' : ''}>${i18n('dingtalkCalendar') || '钉钉日历'}</option>
                                 <option value="wecom" ${subscription?.provider === 'wecom' ? 'selected' : ''}>${i18n('wecomCalendar') || '企业微信日历'}</option>
@@ -662,7 +662,7 @@
                             <div class="sub-name">{sub.name}</div>
                             <div class="sub-url ariaLabel" aria-label={sub.url}>
                                 {(sub.type || 'ics').toUpperCase()} · {sub.provider === 'apple'
-                                    ? i18n('appleCalendar') || '苹果日历'
+                                    ? i18n('appleCalendar') || 'iCloud'
                                     : sub.provider === 'feishu'
                                       ? i18n('feishuCalendar') || '飞书日历'
                                       : sub.provider === 'dingtalk'
