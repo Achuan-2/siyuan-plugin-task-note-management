@@ -45,6 +45,7 @@ export interface TaskRenderContext {
     showProjectTagIcon?: boolean; // 项目标签默认显示图标，设为 false 时使用 # 前缀
     showDocumentTitle?: boolean;
     showCategoryBadge?: boolean; // 是否显示分类标签（默认 true）
+    showMilestoneBadge?: boolean; // 是否显示里程碑标签（默认 true）
     priorityDisplayStyle?: TaskPriorityDisplayStyle;
     allTasks?: any[]; // All tasks in context (e.g. for subtask progress ratio)
     taskHierarchy?: TaskHierarchyIndex;
@@ -1613,7 +1614,7 @@ export class TaskRenderer {
         }
 
         // 里程碑
-        if (task.milestoneId && context.milestoneMap) {
+        if (context.showMilestoneBadge !== false && task.milestoneId && context.milestoneMap) {
             const milestone = context.milestoneMap.get(task.milestoneId);
             if (milestone) {
                 const milestoneEl = document.createElement('div');

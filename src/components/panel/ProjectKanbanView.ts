@@ -8536,7 +8536,7 @@ export class ProjectKanbanView {
 
 
     private createTaskElement(task: any, level: number = 0, hierarchy?: TaskHierarchyIndex): HTMLElement {
-        // 仅嵌套展示时与直接父任务比较，独立展示的子任务仍保留分类。
+        // 仅嵌套展示时与直接父任务比较，独立展示的子任务仍保留分类和里程碑。
         const parentTask = level > 0 && task.parentId
             ? (hierarchy ? hierarchy.byId.get(task.parentId) : this.tasks.find(parent => parent.id === task.parentId))
             : null;
@@ -8545,6 +8545,11 @@ export class ProjectKanbanView {
         )).sort().join(',');
         const hasSameParentCategories = !!parentTask
             && normalizeCategories(task.categoryId) === normalizeCategories(parentTask.categoryId);
+        const normalizeMilestoneId = (milestoneId: unknown): string => String(milestoneId || '').trim();
+        const taskMilestoneId = normalizeMilestoneId(task.milestoneId);
+        const hasSameParentMilestone = !!parentTask
+            && !!taskMilestoneId
+            && taskMilestoneId === normalizeMilestoneId(parentTask.milestoneId);
 
         const context = {
             plugin: this.plugin,
@@ -8559,6 +8564,7 @@ export class ProjectKanbanView {
             showProjectBadge: false,
             showProjectTagIcon: false,
             showCategoryBadge: this.showTaskCategories && !hasSameParentCategories,
+            showMilestoneBadge: !hasSameParentMilestone,
             customContainerClass: 'kanban-task',
             allTasks: this.tasks,
             taskHierarchy: hierarchy,
