@@ -155,13 +155,13 @@ export class SubtasksDialog {
                             ${i18n("sort") || "排序"}
                         </button>
                         ${this.readOnly ? '' : `
-                        <button id="pasteSubtaskBtn" class="b3-button b3-button--outline">
-                            <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
-                            ${i18n("pasteSubtasks") || "粘贴新建"}
-                        </button>
                         <button type="button" id="addSubtaskTopBtn" class="b3-button b3-button--primary">
                             <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
                             ${i18n("createSubtask")}
+                        </button>
+                        <button id="pasteSubtaskBtn" class="b3-button b3-button--outline">
+                            <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
+                            ${i18n("pasteSubtasks") || "粘贴新建"}
                         </button>
                         `}
                     </div>
