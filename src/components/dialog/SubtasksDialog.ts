@@ -9,7 +9,7 @@ import { TaskRenderer, type TaskRenderCallbacks, type TaskRenderContext } from "
 import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager } from "../dataManager/projectManager";
 import { getLogicalDateString } from "../../utils/dateUtils";
-import { getSortCriterionName, type SortCriterion } from "../../utils/sortConfig";
+import { getSortCriterionName, loadSubtaskSortCriteria, saveSubtaskSortCriteria, type SortCriterion } from "../../utils/sortConfig";
 import { excludeRepeatInstance, resolveRepeatReminderTimes, addDaysToDate, getDaysDifference, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, getRepeatInstanceState, patchRepeatInstanceState } from "../dataManager/repeatUtils";
 import { getLuteInstance } from "../../utils/luteSingleton";
 
@@ -103,6 +103,12 @@ export class SubtasksDialog {
     }
 
     private async ensureRenderDependencies() {
+        try {
+            this.currentSortCriteria = this.normalizeSubtaskSortCriteria(await loadSubtaskSortCriteria(this.plugin));
+        } catch (error) {
+            console.warn('Failed to load subtask sort settings:', error);
+        }
+
         try {
             await this.categoryManager.initialize();
         } catch (error) {
@@ -310,6 +316,7 @@ export class SubtasksDialog {
                 isRepeatInstance: true,
                 originalId: templateTask.id,
                 completed: instanceState.completed || false,
+                completedTime: instanceState.completedTime,
                 title: instanceState.title || templateTask.title || i18n("untitledInParentheses"),
                 date: instanceDateVal,
                 endDate: instanceEndDate,
@@ -351,7 +358,6 @@ export class SubtasksDialog {
                     order: criterion.order === 'desc' ? 'desc' : 'asc'
                 }))
             : [];
-
     }
 
     private getActiveSortCriteria(): SortCriterion[] {
@@ -590,16 +596,18 @@ export class SubtasksDialog {
     }
 
     private compareByCompletedTime(a: any, b: any, order: 'asc' | 'desc' = 'desc'): number {
-        const completedTimeA = this.getCompletedTime(a);
-        const completedTimeB = this.getCompletedTime(b);
+        const completedA = !!a.completed;
+        const completedB = !!b.completed;
+        if (completedA !== completedB) return completedA === (order === 'desc') ? -1 : 1;
 
-        if (completedTimeA && completedTimeB) {
-            const timeA = new Date(completedTimeA).getTime();
-            const timeB = new Date(completedTimeB).getTime();
-            return order === 'desc' ? timeB - timeA : timeA - timeB;
+        if (completedA) {
+            const timeA = Date.parse(this.getCompletedTime(a) ?? '');
+            const timeB = Date.parse(this.getCompletedTime(b) ?? '');
+            const hasTimeA = Number.isFinite(timeA);
+            const hasTimeB = Number.isFinite(timeB);
+            if (hasTimeA && hasTimeB) return order === 'desc' ? timeB - timeA : timeA - timeB;
+            if (hasTimeA !== hasTimeB) return hasTimeA ? -1 : 1;
         }
-        if (completedTimeA && !completedTimeB) return -1;
-        if (!completedTimeA && completedTimeB) return 1;
 
         const hasDateA = !!a.date;
         const hasDateB = !!b.date;
@@ -828,10 +836,16 @@ export class SubtasksDialog {
         dialog.show();
     }
 
-    private applySortCriteria(criteria: SortCriterion[]) {
+    private async applySortCriteria(criteria: SortCriterion[]) {
         this.currentSortCriteria = this.normalizeSubtaskSortCriteria(criteria);
         this.renderSubtasks();
         this.updateSortDisplay();
+        try {
+            await saveSubtaskSortCriteria(this.plugin, this.currentSortCriteria);
+        } catch (error) {
+            console.error('Failed to save subtask sort settings:', error);
+            showMessage(i18n('saveFailed'), 3000, 'error');
+        }
     }
 
     private updateSortDisplay() {

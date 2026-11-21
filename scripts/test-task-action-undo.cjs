@@ -612,6 +612,66 @@ function inlineSubtaskFixture(initial = {}) {
     return { ...f, view };
 }
 
+test('子任务排序独立保存，重新打开时使用最后一次选择并保留手动排序', async () => {
+    const f = fixture();
+    const functions = extract('src/utils/sortConfig.ts', null, ['loadSubtaskSortCriteria', 'saveSubtaskSortCriteria']);
+    const compiled = ts.transpileModule(`const pendingSubtaskSortSaves = new WeakMap();\n${functions}`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    Object.assign(f.dependencies, new Function(`${compiled}; return { loadSubtaskSortCriteria, saveSubtaskSortCriteria };`)());
+    const sidebarCriteria = [{ method: 'priority', order: 'desc' }];
+    let settings = { sortCriteria: clone(sidebarCriteria), sortMethod: 'priority', sortOrder: 'desc' };
+    const writes = [];
+    Object.assign(f.plugin, {
+        loadSettings: async () => clone(settings),
+        saveSettings: async next => { writes.push(clone(next)); settings = clone(next); },
+    });
+    const createView = () => Object.assign(compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
+        'ensureRenderDependencies', 'applySortCriteria', 'normalizeSubtaskSortCriteria', 'getActiveSortCriteria',
+    ]), {
+        categoryManager: { initialize: async () => {} }, projectManager: { initialize: async () => {} },
+        buildMilestoneMap() {}, renderSubtasks() {}, updateSortDisplay() {},
+    });
+
+    const view = createView();
+    await view.ensureRenderDependencies();
+    assert.deepEqual(view.getActiveSortCriteria(), []);
+    const criteria = [{ method: 'completed', order: 'desc' }];
+    const first = view.applySortCriteria(criteria);
+    criteria[0].order = 'asc';
+    const second = view.applySortCriteria(criteria);
+    const reopened = createView();
+    await reopened.ensureRenderDependencies();
+    await Promise.all([first, second]);
+    assert.deepEqual(writes.map(value => value.subtaskSortCriteria[0].order), ['desc', 'asc']);
+    assert.deepEqual(reopened.getActiveSortCriteria(), criteria);
+    await reopened.applySortCriteria([]);
+    await view.ensureRenderDependencies();
+    assert.deepEqual(view.getActiveSortCriteria(), []);
+    assert.deepEqual(settings, { sortCriteria: sidebarCriteria, sortMethod: 'priority', sortOrder: 'desc', subtaskSortCriteria: [] });
+});
+
+test('完成时间升序时未完成任务在前，已完成任务按时间从早到晚排列', () => {
+    const f = fixture();
+    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [
+        'compareSubtasks', 'compareByCriterion', 'compareByCompletedTime', 'getCompletedTime',
+        'parseInstanceParentId', 'compareByCreatedTime', 'getReminderSortValue',
+    ]);
+    const tasks = [
+        { id: 'newer', completed: true, completedTime: '2026-11-20T12:00:00Z' },
+        { id: 'legacy', completed: true },
+        { id: 'unfinished', completed: false },
+        { id: 'old', completed: true, completedTime: '2026-11-19T12:00:00Z' },
+        { id: 'stale', completed: false, completedTime: '2026-11-20T10:00:00Z', date: '2026-11-20' },
+    ];
+    const sorted = order => {
+        view.getActiveSortCriteria = () => [{ method: 'completed', order }];
+        return [...tasks].sort((a, b) => view.compareSubtasks(a, b)).map(task => task.id);
+    };
+    assert.deepEqual(sorted('asc'), ['stale', 'unfinished', 'old', 'newer', 'legacy']);
+    assert.deepEqual(sorted('desc'), ['newer', 'old', 'legacy', 'stale', 'unfinished']);
+});
+
 test('临时子任务在列表中回车连续创建，输入法确认和空标题不会新建', async () => {
     const f = inlineSubtaskFixture();
     const created = [];

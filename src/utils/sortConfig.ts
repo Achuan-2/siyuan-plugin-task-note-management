@@ -31,6 +31,38 @@ export const DEFAULT_SORT_CONFIG: SortConfig = {
     ]
 };
 
+const pendingSubtaskSortSaves = new WeakMap<Plugin, Promise<void>>();
+
+export async function loadSubtaskSortCriteria(plugin: Plugin): Promise<SortCriterion[]> {
+    await pendingSubtaskSortSaves.get(plugin)?.catch(() => {});
+    const settings = await (plugin as any).loadSettings();
+    return settings?.subtaskSortCriteria ?? [];
+}
+
+export async function saveSubtaskSortCriteria(plugin: Plugin, criteria: SortCriterion[]): Promise<void> {
+    const snapshot = criteria.map(criterion => ({ ...criterion }));
+    const previous = pendingSubtaskSortSaves.get(plugin);
+    const save = async () => {
+        const settings = await (plugin as any).loadSettings();
+        const previousCriteria = settings.subtaskSortCriteria;
+        settings.subtaskSortCriteria = snapshot;
+        try {
+            await (plugin as any).saveSettings(settings);
+        } catch (error) {
+            if (previousCriteria === undefined) delete settings.subtaskSortCriteria;
+            else settings.subtaskSortCriteria = previousCriteria;
+            throw error;
+        }
+    };
+    const pending = previous ? previous.then(save, save) : save();
+    pendingSubtaskSortSaves.set(plugin, pending);
+    try {
+        await pending;
+    } finally {
+        if (pendingSubtaskSortSaves.get(plugin) === pending) pendingSubtaskSortSaves.delete(plugin);
+    }
+}
+
 /**
  * 加载排序配置（新版，支持多条件）
  */
