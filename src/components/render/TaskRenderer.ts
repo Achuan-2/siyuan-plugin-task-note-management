@@ -18,12 +18,14 @@ import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { shouldTreatStartDateOnlyAsOverdue, isOpenEndedStartDateTask } from "../../utils/startDateOverdue";
 import { applyProjectTagColor } from "../../utils/projectTagColor";
+import type { PanelViewMode } from "../menu/PanelViewMenu";
 import { getReminderSkipWeekendsEffective, getReminderSkipHolidaysEffective, shouldSkipReminderOnDate } from "../../utils/reminderSkipDate";
 
 export type TaskPriorityDisplayStyle = 'background' | 'checkboxBorder';
 
 export interface TaskRenderContext {
     plugin: any;
+    viewMode?: PanelViewMode;
     selectionMode?: boolean;
     today: string;
     collapsedTasks?: Set<string>;
@@ -377,12 +379,12 @@ export class TaskRenderer {
         let result = '';
 
         // 处理跨天事件
-        if (endDate && endDate !== date) {
+        if (context?.viewMode !== 'mini' && endDate && endDate !== date) {
             const endDateStr = formatDateLabel(endDate, logicalEnd);
             const startTimeStr = time ? ` ${time}` : '';
             const endTimeStr = endTime ? ` ${endTime}` : '';
             result = `${dateStr}${startTimeStr} → ${endDateStr}${endTimeStr}`;
-        } else if (endTime && endTime !== time) {
+        } else if (context?.viewMode !== 'mini' && endTime && endTime !== time) {
             // 当天时间段
             result = `${dateStr} ${time || ''} - ${endTime}`;
         } else {
@@ -625,6 +627,7 @@ export class TaskRenderer {
         context: TaskRenderContext,
         infoEl: HTMLElement
     ): void {
+        if (context.viewMode === 'mini') return;
         let percent = 0;
         let shouldShow = false;
 
@@ -841,6 +844,7 @@ export class TaskRenderer {
         allVisibleTasks: any[] = []
     ): HTMLElement {
         const today = context.today;
+        const isMini = context.viewMode === 'mini';
         const treatsOnlyStartAsDeadline = shouldTreatStartDateOnlyAsOverdue(task, context.plugin?.settings);
 
         // 改进过期判断逻辑
@@ -900,6 +904,7 @@ export class TaskRenderer {
 
         // 拼接基础与视图自定义类名
         const baseClasses = ['reminder-item'];
+        if (isMini) baseClasses.push('reminder-item--mini');
         if (context.customContainerClass) {
             baseClasses.push(context.customContainerClass);
         }
@@ -915,7 +920,7 @@ export class TaskRenderer {
         taskEl.setAttribute('data-level', level.toString());
         if (level > 0) {
             baseClasses.push('is-subtask');
-            taskEl.style.marginLeft = `${level * 20}px`;
+            taskEl.style.marginLeft = `${isMini ? Math.min(level * 12, 48) : level * 20}px`;
         }
 
         if (hasChildren && maxChildDepth > 1) {
@@ -1055,7 +1060,7 @@ export class TaskRenderer {
         const titleContainer = document.createElement('div');
         titleContainer.className = 'reminder-item__title-container';
 
-        if (this.shouldRenderDocumentTitle(task, context)) {
+        if (!isMini && this.shouldRenderDocumentTitle(task, context)) {
             const docTitle = String(cachedProjHabit?.docTitle || task.docTitle || '').trim();
             if (docTitle) {
                 titleContainer.appendChild(
@@ -1082,7 +1087,7 @@ export class TaskRenderer {
             }
         }
 
-        if (level === 0 && (isParentHidden || isIndependentKanbanSubtask) && context.allTasks) {
+        if (!isMini && level === 0 && (isParentHidden || isIndependentKanbanSubtask) && context.allTasks) {
             const ancestors: string[] = [];
             let currentParentId = task.parentId;
             while (currentParentId) {
@@ -1147,7 +1152,7 @@ export class TaskRenderer {
             titleEl.style.cssText = `font-weight: 500; color: var(--b3-theme-on-surface); cursor: default; text-decoration: none;`;
         }
 
-        if (context.clipTitleToOneLine) {
+        if (!isMini && context.clipTitleToOneLine) {
             titleEl.style.cssText += `; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; margin-bottom: 0;`;
         }
 
@@ -1177,7 +1182,9 @@ export class TaskRenderer {
         // 时间与倒计时容器
         const timeContainer = document.createElement('div');
         timeContainer.className = 'reminder-item__time-container';
-        timeContainer.style.cssText = `display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap;`;
+        timeContainer.style.cssText = isMini
+            ? 'display: flex; align-items: center; gap: 3px; flex-wrap: nowrap;'
+            : 'display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap;';
 
         if (task.repeat?.enabled || task.isRepeatInstance) {
             const repeatIcon = document.createElement('span');
@@ -1197,7 +1204,22 @@ export class TaskRenderer {
             const displayTime = task.date ? task.time : (task.endTime || task.time);
             const timeText = this.formatReminderTime(displayDate, displayTime, today, task.endDate, task.endTime, task, context);
             const hasNoDate = !task.date && !task.endDate;
-            setTaskMetadataText(timeEl, (hasNoDate ? '' : '🗓️ ') + timeText);
+            if (isMini) {
+                const reminderIndex = timeText.indexOf('⏰');
+                const label = document.createElement('span');
+                label.className = 'reminder-item__time-text';
+                label.textContent = reminderIndex < 0 ? timeText : timeText.slice(0, reminderIndex).trim();
+                if (label.textContent) timeEl.appendChild(label);
+                if (reminderIndex >= 0) {
+                    const indicator = document.createElement('span');
+                    indicator.className = 'reminder-item__reminder-indicator';
+                    indicator.setAttribute('aria-hidden', 'true');
+                    indicator.innerHTML = renderTaskMetadataIcon('alarm');
+                    timeEl.appendChild(indicator);
+                }
+            } else {
+                setTaskMetadataText(timeEl, (hasNoDate ? '' : '🗓️ ') + timeText);
+            }
 
             const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
             if (isEditable) {
@@ -1215,9 +1237,12 @@ export class TaskRenderer {
                 timeEl.setAttribute('aria-label', i18n("subscribedTaskReadOnly") || "订阅任务（只读）");
                 timeEl.style.cursor = 'default';
             }
+            if (isMini) {
+                timeEl.setAttribute('aria-label', `${timeText} · ${timeEl.getAttribute('aria-label')}`);
+            }
             timeContainer.appendChild(timeEl);
 
-            const countdownEl = this.createCountdownBadge(task, today, context);
+            const countdownEl = isMini ? null : this.createCountdownBadge(task, today, context);
             if (countdownEl) {
                 timeContainer.appendChild(countdownEl);
             }
@@ -1232,13 +1257,13 @@ export class TaskRenderer {
         const totalRepeatingPomodoroCount = cachedProjHabit?.totalRepeatingPomodoroCount ?? task.totalRepeatingPomodoroCount;
         const totalRepeatingFocusTime = cachedProjHabit?.totalRepeatingFocusTime ?? task.totalRepeatingFocusTime;
 
-        if ((pomodoroCount && pomodoroCount > 0) ||
+        if (!isMini && ((pomodoroCount && pomodoroCount > 0) ||
             (todayPomodoroCount && todayPomodoroCount > 0) ||
             (focusTime && focusTime > 0) ||
             (todayFocusTime && todayFocusTime > 0) ||
             (totalRepeatingPomodoroCount && totalRepeatingPomodoroCount > 0) ||
             (totalRepeatingFocusTime && totalRepeatingFocusTime > 0) ||
-            task.estimatedPomodoroDuration) {
+            task.estimatedPomodoroDuration)) {
 
             const pomodoroDisplay = document.createElement('div');
             pomodoroDisplay.className = 'reminder-item__pomodoro-count';
@@ -1313,7 +1338,7 @@ export class TaskRenderer {
             } catch (e) { }
 
             const completedTimeStr = virtualTodayCompletedTime || (context.getCompletedTime ? context.getCompletedTime(task) : task.completedTime);
-            if (completedTimeStr) {
+            if (completedTimeStr && !isMini) {
                 infoEl.appendChild(createTaskCompletedTimeElement(completedTimeStr, context.formatCompletedTime));
             }
         } else {
@@ -1335,29 +1360,41 @@ export class TaskRenderer {
                     } catch (e) { }
                     const dailyTimes = task.dailyDessertCompletedTimes || {};
                     const timeStr = dailyTimes[currentToday];
-                    infoEl.appendChild(createTaskCompletedTimeElement(timeStr, context.formatCompletedTime));
+                    if (!isMini) infoEl.appendChild(createTaskCompletedTimeElement(timeStr, context.formatCompletedTime));
                 } else if (checkIgnoreMark()) {
                     taskEl.classList.add('reminder-ignored');
                     try {
                         taskEl.style.setProperty('opacity', '0.5', 'important');
                     } catch (e) { }
-                    const ignoredEl = document.createElement('div');
-                    ignoredEl.className = 'reminder-item__ignored-time';
-                    ignoredEl.textContent = i18n("taskIgnoredTodayWithIcon");
-                    ignoredEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
-                    infoEl.appendChild(ignoredEl);
+                    if (!isMini) {
+                        const ignoredEl = document.createElement('div');
+                        ignoredEl.className = 'reminder-item__ignored-time';
+                        ignoredEl.textContent = i18n("taskIgnoredTodayWithIcon");
+                        ignoredEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
+                        infoEl.appendChild(ignoredEl);
+                    }
                 }
             } else if (canRenderTodayIgnoreStatus && checkIgnoreMark()) {
                 taskEl.classList.add('reminder-ignored');
                 try {
                     taskEl.style.setProperty('opacity', '0.5', 'important');
                 } catch (e) { }
-                const ignoredEl = document.createElement('div');
-                ignoredEl.className = 'reminder-item__ignored-time';
-                ignoredEl.textContent = i18n("taskIgnoredTodayWithIcon");
-                ignoredEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
-                infoEl.appendChild(ignoredEl);
+                if (!isMini) {
+                    const ignoredEl = document.createElement('div');
+                    ignoredEl.className = 'reminder-item__ignored-time';
+                    ignoredEl.textContent = i18n("taskIgnoredTodayWithIcon");
+                    ignoredEl.style.cssText = 'font-size:12px; margin-top:6px; opacity:0.95;';
+                    infoEl.appendChild(ignoredEl);
+                }
             }
+        }
+
+        // 紧凑列表保留相同的状态与操作，跳过备注、统计和关联信息的 DOM 构建。
+        if (isMini) {
+            contentEl.appendChild(infoEl);
+            taskEl.appendChild(contentEl);
+            this.updateMiniTaskTooltip(taskEl, task, context);
+            return taskEl;
         }
 
         // 备注信息 (HTML / Markdown)
@@ -1736,9 +1773,86 @@ export class TaskRenderer {
     }
 
 
+    /** Native SiYuan tooltips keep the compact row unchanged and own their hover lifecycle. */
+    public static updateMiniTaskTooltip(element: HTMLElement, task: any, context: TaskRenderContext): void {
+        if (context.viewMode !== 'mini') return;
+        const rows: [string, string][] = [];
+        const add = (label: string, value: unknown) => {
+            if (value !== undefined && value !== null && String(value).trim()) rows.push([label, String(value)]);
+        };
+        const cache = context.projectCache?.get(task.id) || context.projectCache?.get(task.projectId) || {};
+        const project = cache.project || task.project;
+        const dateTime = (date?: string, time?: string) => [date, time].filter(Boolean).join(' ');
+        const start = dateTime(task.date, task.time);
+        const end = dateTime(task.endDate, task.endTime);
+        add(i18n('taskMiniTime'), start && end && start !== end ? `${start} ~ ${end}` : start || end);
+        if (this.getReminderTimeEntries(task).length) {
+            const formattedTime = this.formatReminderTime(task.date || task.endDate || context.today,
+                task.time, context.today, task.endDate, task.endTime, task, context);
+            const reminderIndex = formattedTime.indexOf('⏰');
+            if (reminderIndex >= 0) add(i18n('reminderTime'), formattedTime.slice(reminderIndex + 1).trim());
+        }
+        if (task.repeat?.enabled) add(i18n('repeatRule'), getRepeatDescription(task.repeat));
+        else if (task.isRepeatInstance) add(i18n('repeatRule'), i18n('repeatInstance'));
+        const priority = { high: i18n('highPriority'), medium: i18n('mediumPriority'), low: i18n('lowPriority') }[task.priority];
+        add(i18n('priority'), priority);
+        const group = project?.customGroups?.find((value: any) => value.id === task.customGroupId && !value.archived)
+            || (cache.customGroup?.id === task.customGroupId ? cache.customGroup : null);
+        const projectName = project?.title || project?.name;
+        add(i18n('project'), projectName && group?.name ? `${projectName}/${group.name}` : projectName);
+        const status = context.getReminderKanbanStatusInfo?.(task);
+        add(i18n('projectStatus'), status?.name);
+        const categories = String(task.categoryId || '').split(',').map(id => context.categoryManager?.getCategoryById(id.trim())?.name).filter(Boolean);
+        add(i18n('category'), categories.length ? [...new Set(categories)].join(', ') : '');
+        add(i18n('tags'), Array.isArray(task.tags) ? task.tags.join(', ') : '');
+        add(i18n('belongsToDocument'), cache.docTitle || task.docTitle);
+        add(i18n('habitPanelTitle'), (cache.habit || task.linkedHabit)?.title);
+        add(i18n('milestone'), context.milestoneMap?.get(task.milestoneId)?.name);
+        const custom = this.normalizeCustomProgress(task.customProgress);
+        const children = context.taskHierarchy?.children(task.id) || context.allTasks?.filter(child => child.parentId === task.id) || [];
+        if (custom !== undefined) add(i18n('taskMiniProgress'), `${task.completed ? 100 : custom}%`);
+        else if (children.length) {
+            const done = children.filter(child => child.completed).length;
+            add(i18n('taskMiniProgress'), `${done}/${children.length} (${Math.round(done / children.length * 100)}%)`);
+        }
+        const count = cache.pomodoroCount ?? task.pomodoroCount ?? 0;
+        const todayCount = cache.todayPomodoroCount ?? task.todayPomodoroCount ?? 0;
+        const minutes = cache.focusTime ?? task.focusTime ?? 0;
+        const todayMinutes = cache.todayFocusTime ?? task.todayFocusTime ?? 0;
+        if (count || todayCount) add(i18n('pomodoroTimerLabel'), `${i18n('today')} ${todayCount} · ${i18n('total')} ${count}`);
+        if (minutes || todayMinutes) add(i18n('focusTime'), `${i18n('today')} ${todayMinutes} · ${i18n('total')} ${minutes} ${i18n('minutes')}`);
+        const seriesCount = cache.totalRepeatingPomodoroCount ?? task.totalRepeatingPomodoroCount ?? 0;
+        const seriesMinutes = cache.totalRepeatingFocusTime ?? task.totalRepeatingFocusTime ?? 0;
+        if (task.isRepeatInstance && (seriesCount || seriesMinutes)) {
+            add(i18n('series'), `${i18n('pomodoroTimerLabel')} ${seriesCount} · ${seriesMinutes} ${i18n('minutes')}`);
+        }
+        if (task.estimatedPomodoroDuration) add(i18n('estimatedPomodoro'), `${task.estimatedPomodoroDuration} ${i18n('minutes')}`);
+        if (task.completed && task.completedTime) add(i18n('completedAt'), task.completedTime);
+        const title = String(task.title || i18n('unnamedNote'));
+        const note = String(task.note || '').trim();
+        const escape = (value: string) => value.replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        })[character]);
+        element.dataset.miniTaskTooltip = `<div class="task-mini-tooltip"><div class="task-mini-tooltip__title">${escape(title)}</div>`
+            + rows.map(([label, value]) => `<div class="task-mini-tooltip__row"><span>${escape(label)}</span><span>${escape(value)}</span></div>`).join('')
+            + (note ? `<div class="task-mini-tooltip__note">${escape(note)}</div>` : '') + '</div>';
+        const plain = [title, ...rows.map(([label, value]) => `${label}: ${value}`), note ? `${i18n('note')}: ${note}` : ''].filter(Boolean).join('\n');
+        element.classList.add('ariaLabel');
+        element.setAttribute('aria-label', title);
+        element.setAttribute('aria-description', plain);
+        element.removeAttribute('title');
+        [element.querySelector('.reminder-item__title'), element.querySelector('.reminder-item__time')].forEach(target => {
+            if (!target) return;
+            target.classList.add('ariaLabel');
+            if (!target.getAttribute('aria-label')) target.setAttribute('aria-label', title);
+            target.setAttribute('aria-description', plain);
+            target.removeAttribute('title');
+        });
+    }
+
     /** 与完整卡片共用备注渲染，供侧栏局部更新时保留卡片节点和交互状态。 */
     public static createNoteElement(task: any, context: TaskRenderContext, onNoteClick?: (task: any, event: Event) => void): HTMLElement | null {
-        if (!task.note) return null;
+        if (context.viewMode === 'mini' || !task.note) return null;
         const noteEl = document.createElement('div');
         noteEl.className = 'reminder-item__note';
         const lute = context.lute ?? getLuteInstance();
