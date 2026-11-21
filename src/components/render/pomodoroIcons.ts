@@ -80,6 +80,8 @@ export const POMODORO_MENU_ICON_PATHS = {
     timer: ['M9 2h6m-3 0v4m6 1 2-2M12 10v4l3 2', 'M20 14a8 8 0 1 1-16 0 8 8 0 0 1 16 0'],
     hourglass: ['M5 2h14M5 22h14M6 2v5l6 5-6 5v5M18 2v5l-6 5 6 5v5'],
     pencil: ['m16 3 5 5M3 21l6-1L21 8a2 2 0 0 0 0-3l-2-2a2 2 0 0 0-3 0L4 15Z', 'm4 15 5 5'],
+    randomRest: ['M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z', 'M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01'],
+    randomRestOff: ['M2 2l20 20', 'M7 3h12a2 2 0 0 1 2 2v12', 'M17 21H5a2 2 0 0 1-2-2V7', 'M16 8h.01M8 16h.01'],
     settings: ['M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m2-6h6m2 8h6'],
     fullscreen: ['M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5'],
     exitFullscreen: ['M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5'],

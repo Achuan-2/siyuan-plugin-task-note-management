@@ -13,7 +13,10 @@ const timerClass = ast.statements.find(node => ts.isClassDeclaration(node) && no
 const names = ['showNativeSwitchMenuPopup', 'openPomodoroSettings', 'callMethod', 'toggleFullscreen',
     'setBrowserWindowFullscreen', 'setupBrowserWindowFullscreen', 'exitFullscreen', 'getMiniWindowStyle',
     'getCurrentState', 'updateBrowserWindowContent', 'formatTime',
-    'toggleBrowserWindowMiniMode', 'toggleBrowserWindowDock'];
+    'toggleBrowserWindowMiniMode', 'toggleBrowserWindowDock',
+    'toggleRandomRest', 'ensureRandomRestAudioInitialized', 'startRandomRestTimer',
+    'stopRandomRestTimer', 'calculateNextRandomRestTime', 'checkRandomRestTrigger',
+    'updateSwitchMenuContent', 'updateRandomRestToggleButton'];
 const methods = timerClass.members.filter(node => names.includes(node.name?.getText(ast)))
     .map(node => node.getText(ast)).join('\n');
 const hostCode = ts.transpileModule(`class PomodoroTimer { ${methods} }`, {
@@ -24,13 +27,20 @@ const rendererCode = source.slice(source.indexOf('        function toggleSwitchM
     .replaceAll('${actionChannel}', 'pomodoro-action-test');
 
 function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, failFocus = false,
-    isMiniMode = false, miniStyle = 'ring', dark = false } = {}) {
+    isMiniMode = false, miniStyle = 'ring', dark = false, randomRestEnabled = false,
+    isRunning = false, isPaused = false, startTime = 0, timeLeft = 1500, totalTime = 1500 } = {}) {
     const menus = [];
     const actions = [];
+    const messages = [];
     const mainWindowCalls = [];
     let volumeClosed = 0;
     let fullscreen = false;
     let pendingFullscreen = false;
+    let displayUpdates = 0;
+    let randomRestWindowClosed = 0;
+    let nextIntervalId = 1;
+    const activeIntervals = new Map();
+    const activeTimeouts = new Map();
     const windowCalls = [];
     const rendererScripts = [];
     const owner = Object.assign(new EventEmitter(), {
@@ -39,7 +49,7 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         isDestroyed: () => false,
         getBounds: () => fullscreen ? { x: 0, y: 0, width: 1920, height: 1080 } : { x: 120, y: 80, width: 150, height: 32 },
         getNormalBounds: () => ({ x: 120, y: 80, width: 150, height: 32 }),
-        loadURL: async () => {},
+        loadURL: async () => { actions.push('loadURL'); },
         isFullScreen: () => fullscreen,
         setFullScreenable: () => {},
         setAspectRatio: ratio => windowCalls.push(['aspectRatio', ratio]),
@@ -70,18 +80,43 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         },
         MenuItem: class { constructor(options) { Object.assign(this, options); } }
     };
-    const Timer = new Function('window', 'i18n', 'console', 'getNativePomodoroMenuIcon', `${hostCode}; return PomodoroTimer;`)(
-        { require: () => remote, focus: () => mainWindowCalls.push('domFocus') }, key => key, { warn() {} },
-        (name, nativeImage, color) => ({ name, color })
+    const mockWindow = {
+        require: () => remote,
+        focus: () => mainWindowCalls.push('domFocus'),
+        setInterval: (fn, delay) => {
+            const id = nextIntervalId++;
+            activeIntervals.set(id, { fn, delay });
+            return id;
+        }
+    };
+    const Timer = new Function('window', 'i18n', 'console', 'getNativePomodoroMenuIcon', 'showMessage', 'setPomodoroIcon', 'clearInterval', 'clearTimeout', `${hostCode}; return PomodoroTimer;`)(
+        mockWindow, key => key, { warn() {}, log() {} },
+        (name, nativeImage, color) => ({ name, color }),
+        (msg, duration) => messages.push([msg, duration]),
+        (el, text) => { if (el) el.text = text; },
+        id => activeIntervals.delete(id),
+        id => activeTimeouts.delete(id)
     );
     Timer.browserWindowInstance = owner;
-    const timer = Object.assign(new Timer(), { isCountUp, isWorkPhase, isMiniMode, container: owner,
-        settings: { pomodoroMiniWindowStyle: miniStyle },
+    const timer = Object.assign(new Timer(), {
+        isCountUp, isWorkPhase, isMiniMode, isRunning, isPaused, startTime, timeLeft, totalTime,
+        randomRestEnabled, randomRestSounds: [], randomRestEndSound: null,
+        randomRestCheckTimer: null, randomRestEndSoundTimer: null,
+        randomRestNextTriggerTime: 0, randomRestWindowCloseTime: 0,
+        container: owner,
+        settings: { pomodoroMiniWindowStyle: miniStyle, randomRestMinInterval: 3, randomRestMaxInterval: 5 },
         reminder: { title: '测试任务' },
         recordManager: { getTodayFocusTime: () => 0, getWeekFocusTime: () => 0, formatTime: () => '0m' },
+        updateDisplay: () => { displayUpdates++; },
         updateBrowserWindowDisplay: () => {},
         preloadBrowserWindowBackgroundAudio: async () => {},
-        plugin: { openSetting: key => actions.push(['openSetting', key]) } });
+        preloadAudioBuffer: async () => {},
+        initRandomRestSounds: async () => { actions.push('initRandomRestSounds'); },
+        initRandomRestEndSound: async () => { actions.push('initRandomRestEndSound'); },
+        closeRandomRestWindow: () => { randomRestWindowClosed++; },
+        scheduleAllMobileNotifications: async () => { actions.push('scheduleAllMobileNotifications'); },
+        plugin: { openSetting: key => actions.push(['openSetting', key]) }
+    });
     Timer.browserWindowTimer = timer;
     timer.setupBrowserWindowFullscreen(owner);
     for (const method of ['toggleMode', 'startWorkTime', 'startShortBreak', 'startLongBreak', 'editTime']) {
@@ -97,8 +132,11 @@ function fixture({ isCountUp = false, isWorkPhase = true, minimized = false, fai
         // 子窗口无需 remote 或 HTML 菜单，普通和迷你模式均通过 IPC 打开完整原生菜单。
     });
     vm.runInContext(rendererCode, context);
-    return { menus, actions, owner, timer, mainWindowCalls, windowCalls, rendererScripts, Timer,
+    return { menus, actions, messages, owner, timer, mainWindowCalls, windowCalls, rendererScripts, Timer,
+        activeIntervals, activeTimeouts,
         get volumeClosed() { return volumeClosed; },
+        get displayUpdates() { return displayUpdates; },
+        get randomRestWindowClosed() { return randomRestWindowClosed; },
         open(kind = 'all') {
             const entry = { all: 'toggleMiniSwitchMenu', status: 'toggleStatusMenu', more: 'toggleMoreMenu' }[kind];
             vm.runInContext(`${entry}({ stopPropagation() {} })`, context);
@@ -127,28 +165,28 @@ test('迷你模式将状态放在首层，低频操作放在更多子菜单', ()
     assert.deepEqual(mini.items.slice(0, 3).map(item => item.icon.name), ['work', 'shortBreak', 'longBreak']);
     assert.equal(mini.items[3].label, 'switchToCountUp');
     assert.equal(mini.items[4].label, 'more');
-    assert.equal(mini.items[4].submenu.length, 4);
+    assert.equal(mini.items[4].submenu.length, 5);
     for (const item of mini.items[4].submenu) assert.equal(typeof item.click, 'function');
     assert.equal(mini.options.window, view.owner);
 });
 
-test('更多按钮只包含修改时长、设置、全屏和音量操作', () => {
+test('更多按钮包含修改时长、随机微休息开关、设置、全屏和音量操作', () => {
     const view = fixture();
     const menu = view.open('more');
-    assert.equal(menu.items.length, 4);
-    assert.deepEqual(menu.items.map(item => item.icon.name), ['pencil', 'settings', 'fullscreen', 'volume']);
+    assert.equal(menu.items.length, 5);
+    assert.deepEqual(menu.items.map(item => item.icon.name), ['pencil', 'randomRest', 'settings', 'fullscreen', 'volume']);
     assert.ok(menu.items.every(item => item.icon.color === '#333333'));
-    assert.deepEqual(menu.items.map(item => item.label), ['pomodoroEditDuration', 'pomodoroSettings', 'fullscreenMode', 'backgroundVolume']);
-    assert.equal(menu.items[2].accelerator, 'F11');
+    assert.deepEqual(menu.items.map(item => item.label), ['pomodoroEditDuration', 'enableRandomRest', 'pomodoroSettings', 'fullscreenMode', 'backgroundVolume']);
+    assert.equal(menu.items[3].accelerator, 'F11');
     menu.items[0].click();
-    menu.items[1].click();
+    menu.items[2].click();
     assert.deepEqual(view.actions, ['editTime', ['openSetting', 'pomodoroSettings']]);
 });
 
 test('普通和迷你菜单从更多打开原有音量面板', () => {
     for (const isMiniMode of [false, true]) {
         const view = fixture({ isMiniMode });
-        const item = isMiniMode ? view.open().items[4].submenu[3] : view.open('more').items[3];
+        const item = isMiniMode ? view.open().items[4].submenu[4] : view.open('more').items[4];
         assert.equal(item.label, 'backgroundVolume');
         assert.equal(item.icon.name, 'volume');
         item.click();
@@ -177,7 +215,7 @@ test('深色原生菜单的 SVG 图标使用浅色笔画', () => {
 
 test('点击番茄钟设置时显示并聚焦思源窗口', () => {
     const view = fixture();
-    view.open('more').items[1].click();
+    view.open('more').items[2].click();
     assert.deepEqual(view.mainWindowCalls, ['show', 'focus']);
     assert.deepEqual(view.actions, [['openSetting', 'pomodoroSettings']]);
 });
@@ -191,7 +229,7 @@ test('通过 IPC 打开番茄钟设置时恢复最小化的思源窗口', () => 
 
 test('窗口激活失败时仍然打开番茄钟设置', () => {
     const view = fixture({ failFocus: true });
-    view.open('more').items[1].click();
+    view.open('more').items[2].click();
     assert.deepEqual(view.mainWindowCalls, ['show', 'domFocus']);
     assert.deepEqual(view.actions, [['openSetting', 'pomodoroSettings']]);
 });
@@ -199,17 +237,107 @@ test('窗口激活失败时仍然打开番茄钟设置', () => {
 test('普通和迷你菜单支持进入全屏，原生事件完成后菜单变为退出全屏', () => {
     for (const isMiniMode of [false, true]) {
         const view = fixture({ isMiniMode });
-        const item = isMiniMode ? view.open().items[4].submenu[2] : view.open('more').items[2];
+        const item = isMiniMode ? view.open().items[4].submenu[3] : view.open('more').items[3];
         assert.equal(item.label, 'fullscreenMode');
         item.click();
         assert.deepEqual(view.windowCalls, [['aspectRatio', 0], ['fullscreen', true]]);
         assert.equal(view.timer.isMiniMode, isMiniMode);
         view.owner.finishFullscreenTransition();
         assert.equal(view.timer.isFullscreen, true);
-        const exitItem = isMiniMode ? view.open().items[4].submenu[2] : view.open('more').items[2];
+        const exitItem = isMiniMode ? view.open().items[4].submenu[3] : view.open('more').items[3];
         assert.equal(exitItem.label, 'exitFullscreen');
         assert.equal(exitItem.icon.name, 'exitFullscreen');
     }
+});
+
+test('更多菜单快捷开关随机微休息在计时中不中断主计时且仅启停微休息调度', () => {
+    const startTime = Date.now() - 120000;
+    const mainTimerHandle = { main: true };
+    const view = fixture({
+        randomRestEnabled: true,
+        isRunning: true,
+        isPaused: false,
+        isWorkPhase: true,
+        startTime,
+        timeLeft: 1380,
+        totalTime: 1500
+    });
+    view.timer.timer = mainTimerHandle;
+    view.timer.settings.randomRestSounds = 'rest-start.mp3';
+    view.timer.settings.randomRestEndSound = 'rest-end.mp3';
+    view.timer.startRandomRestTimer();
+    assert.equal(view.activeIntervals.size, 1);
+
+    // 1. 当前已开启，菜单显示关闭随机微休息
+    const disableItem = view.open('more').items[1];
+    assert.equal(disableItem.label, 'disableRandomRest');
+    assert.equal(disableItem.icon.name, 'randomRestOff');
+    disableItem.click();
+
+    assert.equal(view.timer.randomRestEnabled, false);
+    assert.equal(view.activeIntervals.size, 0);
+    assert.equal(view.timer.randomRestNextTriggerTime, 0);
+    assert.equal(view.timer.randomRestWindowCloseTime, 0);
+    assert.equal(view.randomRestWindowClosed >= 1, true);
+    // 主计时器状态与窗口内容未被重置或重载
+    assert.equal(view.timer.isRunning, true);
+    assert.equal(view.timer.isPaused, false);
+    assert.equal(view.timer.startTime, startTime);
+    assert.equal(view.timer.timeLeft, 1380);
+    assert.equal(view.timer.totalTime, 1500);
+    assert.equal(view.timer.timer, mainTimerHandle);
+    assert.equal(view.actions.includes('loadURL'), false);
+    assert.deepEqual(view.messages.at(-1), ['randomRestTurnedOff', 1500]);
+
+    // 2. 再次打开菜单显示开启随机微休息，点击后仅重启微休息调度并按需加载音频
+    const enableItem = view.open('more').items[1];
+    assert.equal(enableItem.label, 'enableRandomRest');
+    assert.equal(enableItem.icon.name, 'randomRest');
+    enableItem.click();
+
+    assert.equal(view.timer.randomRestEnabled, true);
+    assert.equal(view.activeIntervals.size, 1);
+    assert.ok(view.timer.randomRestNextTriggerTime > Date.now());
+    assert.equal(view.actions.includes('initRandomRestSounds'), true);
+    assert.equal(view.actions.includes('initRandomRestEndSound'), true);
+    assert.equal(view.timer.isRunning, true);
+    assert.equal(view.timer.isPaused, false);
+    assert.equal(view.timer.startTime, startTime);
+    assert.equal(view.timer.timeLeft, 1380);
+    assert.equal(view.timer.timer, mainTimerHandle);
+    assert.equal(view.actions.includes('loadURL'), false);
+    assert.deepEqual(view.messages.at(-1), ['randomRestTurnedOn', 1500]);
+});
+
+test('未运行、暂停或休息阶段切换随机微休息不会提前启动微休息定时器，也不修改计时状态', () => {
+    for (const state of [
+        { isRunning: false, isPaused: false, isWorkPhase: true },
+        { isRunning: true, isPaused: true, isWorkPhase: true },
+        { isRunning: true, isPaused: false, isWorkPhase: false }
+    ]) {
+        const view = fixture({ ...state, randomRestEnabled: false, timeLeft: 900, totalTime: 1500 });
+        view.open('more').items[1].click();
+        assert.equal(view.timer.randomRestEnabled, true);
+        assert.equal(view.activeIntervals.size, 0);
+        assert.equal(view.timer.isRunning, state.isRunning);
+        assert.equal(view.timer.isPaused, state.isPaused);
+        assert.equal(view.timer.timeLeft, 900);
+        assert.equal(view.displayUpdates, 1);
+    }
+});
+
+test('迷你菜单和 DOM 切换菜单同步更新随机微休息按钮文案', () => {
+    const view = fixture({ isMiniMode: true, randomRestEnabled: false });
+    view.timer.randomRestToggleBtn = {};
+    view.timer.updateSwitchMenuContent();
+    assert.equal(view.timer.randomRestToggleBtn.text, '🎲 enableRandomRest');
+
+    const miniItem = view.open().items[4].submenu[1];
+    assert.equal(miniItem.label, 'enableRandomRest');
+    miniItem.click();
+    assert.equal(view.timer.randomRestEnabled, true);
+    assert.equal(view.timer.randomRestToggleBtn.text, '🎲 disableRandomRest');
+    assert.equal(view.open().items[4].submenu[1].label, 'disableRandomRest');
 });
 
 test('退出全屏恢复圆环比例，横条和极简保持自由比例且不改窗口大小', () => {

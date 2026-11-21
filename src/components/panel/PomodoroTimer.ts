@@ -37,6 +37,7 @@ export class PomodoroTimer {
     private minimizeBtn: HTMLElement;
     private mainSwitchBtn: HTMLElement; // 新增：主切换按钮
     private moreMenuBtn: HTMLElement;
+    private randomRestToggleBtn: HTMLElement;
     private switchMenuMode: 'status' | 'more' = 'status';
     private switchMenu: HTMLElement; // 新增：切换菜单
     private switchMenuAnchor: HTMLElement | null = null;
@@ -1070,6 +1071,11 @@ export class PomodoroTimer {
                 }
             }
 
+            // 音频等待期间若已关闭微休息，不再继续弹窗或排程结束提醒
+            if (!this.randomRestEnabled) {
+                return;
+            }
+
             // 打开弹窗提示
             this.openRandomRestWindow();
 
@@ -1100,6 +1106,10 @@ export class PomodoroTimer {
             this.randomRestEndSoundTimer = window.setTimeout(() => {
                 // setTimeout 正常触发，清除轮询目标时刻
                 this.randomRestWindowCloseTime = 0;
+                if (!this.randomRestEnabled) {
+                    this.randomRestEndSoundTimer = null;
+                    return;
+                }
 
                 // 播放结束声音（fire-and-forget，不阻塞关闭和通知）
                 if (this.randomRestEndSound) {
@@ -1259,6 +1269,51 @@ export class PomodoroTimer {
             this.randomRestEndSoundTimer = null;
         }
         this.closeRandomRestWindow();
+    }
+
+    private ensureRandomRestAudioInitialized() {
+        const tasks: Promise<void>[] = [];
+        if (this.settings?.randomRestSounds && (!this.randomRestSounds || this.randomRestSounds.length === 0)) {
+            tasks.push(this.initRandomRestSounds().then(() => {
+                (this.randomRestSounds || []).forEach(audio => {
+                    if (audio) void this.preloadAudioBuffer(audio.src);
+                });
+            }));
+        }
+        if (this.settings?.randomRestEndSound && !this.randomRestEndSound) {
+            tasks.push(this.initRandomRestEndSound().then(() => {
+                if (this.randomRestEndSound) void this.preloadAudioBuffer(this.randomRestEndSound.src);
+            }));
+        }
+        if (tasks.length > 0) {
+            void Promise.all(tasks).catch(error => {
+                console.warn("[PomodoroTimer] Failed to initialize random microbreak audio:", error);
+            });
+        }
+    }
+
+    private toggleRandomRest() {
+        this.randomRestEnabled = !this.randomRestEnabled;
+
+        if (this.randomRestEnabled) {
+            this.ensureRandomRestAudioInitialized();
+            if (this.isRunning && !this.isPaused && this.isWorkPhase) {
+                this.startRandomRestTimer();
+            }
+        } else {
+            this.stopRandomRestTimer();
+            this.randomRestNextTriggerTime = 0;
+            this.randomRestWindowCloseTime = 0;
+        }
+
+        if (this.isRunning && !this.isPaused && this.isWorkPhase && this.plugin?.isInMobileApp) {
+            void this.scheduleAllMobileNotifications();
+        }
+
+        this.updateSwitchMenuContent();
+        this.updateDisplay();
+
+        showMessage(i18n(this.randomRestEnabled ? 'randomRestTurnedOn' : 'randomRestTurnedOff'), 1500);
     }
 
 
@@ -3229,6 +3284,19 @@ export class PomodoroTimer {
         });
         this.initMenuItemHoverEffects(editDurationBtn);
 
+        this.randomRestToggleBtn = document.createElement('button');
+        this.randomRestToggleBtn.className = 'pomodoro-menu-item';
+        this.randomRestToggleBtn.dataset.randomRestToggle = '';
+        this.randomRestToggleBtn.style.cssText = this.getMenuItemStyle();
+        this.updateRandomRestToggleButton();
+        this.randomRestToggleBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.hideSwitchMenu();
+            this.toggleRandomRest();
+        });
+        this.initMenuItemHoverEffects(this.randomRestToggleBtn);
+
         const settingsBtn = document.createElement('button');
         settingsBtn.className = 'pomodoro-menu-item';
         settingsBtn.style.cssText = this.getMenuItemStyle();
@@ -3242,7 +3310,7 @@ export class PomodoroTimer {
         this.initMenuItemHoverEffects(settingsBtn);
 
         for (const item of [workBtn, shortBreakBtn, longBreakBtn, this.modeToggleBtn]) item.dataset.menuGroup = 'status';
-        for (const item of [editDurationBtn, settingsBtn]) item.dataset.menuGroup = 'more';
+        for (const item of [editDurationBtn, this.randomRestToggleBtn, settingsBtn]) item.dataset.menuGroup = 'more';
 
         // 将菜单项添加到菜单中
         this.switchMenu.appendChild(workBtn);
@@ -3250,6 +3318,7 @@ export class PomodoroTimer {
         this.switchMenu.appendChild(longBreakBtn);
         this.switchMenu.appendChild(this.modeToggleBtn);
         this.switchMenu.appendChild(editDurationBtn);
+        this.switchMenu.appendChild(this.randomRestToggleBtn);
         this.switchMenu.appendChild(settingsBtn);
 
         this.moreMenuBtn = document.createElement('button');
@@ -5249,10 +5318,17 @@ export class PomodoroTimer {
      * 更新切换菜单的内容
      */
     private updateSwitchMenuContent() {
-        if (!this.modeToggleBtn) return;
+        if (this.modeToggleBtn) {
+            // 更新计时模式切换按钮的文字
+            setPomodoroIcon(this.modeToggleBtn, `${this.isCountUp ? '🍅' : '⏱️'} ${this.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}`);
+        }
+        this.updateRandomRestToggleButton();
+    }
 
-        // 更新计时模式切换按钮的文字
-        setPomodoroIcon(this.modeToggleBtn, `${this.isCountUp ? '🍅' : '⏱️'} ${this.isCountUp ? (i18n('switchToCountdown') || '切换到倒计时') : (i18n('switchToCountUp') || '切换到正计时')}`);
+    private updateRandomRestToggleButton() {
+        if (!this.randomRestToggleBtn) return;
+        const label = i18n(this.randomRestEnabled ? 'disableRandomRest' : 'enableRandomRest');
+        setPomodoroIcon(this.randomRestToggleBtn, `🎲 ${label}`);
     }
 
     private toggleMode() {
@@ -5346,6 +5422,10 @@ export class PomodoroTimer {
             icon: menuIcon('pencil'),
             enabled: !(this.isCountUp && this.isWorkPhase),
             click: () => this.editTime()
+        }, {
+            label: i18n(this.randomRestEnabled ? 'disableRandomRest' : 'enableRandomRest'),
+            icon: menuIcon(this.randomRestEnabled ? 'randomRestOff' : 'randomRest'),
+            click: () => this.toggleRandomRest()
         }, {
             label: (i18n('pomodoroSettings') || '番茄钟设置').replace(/^🍅\s*/, ''),
             icon: menuIcon('settings'),
@@ -11872,6 +11952,9 @@ document.body.classList.remove('docked-mode');
                     break;
                 case 'openPomodoroSettings':
                     this.openPomodoroSettings();
+                    break;
+                case 'toggleRandomRest':
+                    this.toggleRandomRest();
                     break;
                 case 'toggleFullscreen':
                     this.toggleFullscreen();
