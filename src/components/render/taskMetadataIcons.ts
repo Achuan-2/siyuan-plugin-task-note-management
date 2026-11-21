@@ -21,6 +21,7 @@ const paths = {
     calendarHeart: '<path d="M12.127 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v5.125"/><path d="M14.62 17.8A2.25 2.25 0 1118 14.836a2.25 2.25 0 113.38 2.966l-2.626 2.856a.998.998 0 01-1.507 0z"/><path d="M16 2v3"/><path d="M3 9h18"/><path d="M8 2v3"/>',
     calendarCheck: '<path d="M 19 3 L 5 3"/><path d="M 21 13 L 21 5"/><path d="M 21 5 A2 2 0 0 0 19 3"/><path d="M 3 19 A2 2 0 0 0 5 21"/><path d="M 3 5 L 3 19"/><path d="M 5 3 A2 2 0 0 0 3 5"/><path d="m16 19 2 2 4-4"/><path d="M16 2v3"/><path d="M3 9h18"/><path d="M5 21 L12.5 21"/><path d="M8 2v3"/>',
     clipboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 12h6m-6 4h6"/>',
+    heading: '<path d="M18 20V4"/><path d="M6 12H18"/><path d="M6 20V4"/>',
     note: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M16 3l5 5M10 14l-1 4 4-1L22 8a2.1 2.1 0 0 0-5-5Z"/>',
     group: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     folderOpen: '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
@@ -38,7 +39,7 @@ export function renderTaskMetadataIcon(name: TaskMetadataIcon, size = 14): strin
     // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
     const content = name === 'tomato' || name === 'project' || name === 'parent' || name === 'duration' || name === 'check'
         ? paths[name]
-        : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' || name === 'calendarHeart' || name === 'calendarCheck' || name === 'folderOpen' || name === 'progress' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
+        : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' || name === 'calendarHeart' || name === 'calendarCheck' || name === 'folderOpen' || name === 'progress' || name === 'heading' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
     const viewBox = name === 'duration' ? '0 0 1024 1024' : '0 0 24 24';
     return `<svg xmlns="http://www.w3.org/2000/svg" class="task-metadata-icon" viewBox="${viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false" style="display:inline-block;width:${size}px;height:${size}px;vertical-align:-2px;flex-shrink:0;float:none;margin:0;pointer-events:none;fill:none;stroke:none">${content}</svg>`;
 }

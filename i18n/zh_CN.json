@@ -767,7 +767,7 @@
     "singleDateDefaultRoleDeadline": "结束日期",
     "singleDateDefaultRoleStart": "开始日期",
     "quickReminderTitlePasteAutoDetect": "任务编辑弹窗标题粘贴自动识别日期",
-    "quickReminderTitlePasteAutoDetectDesc": "开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间；仍可在弹窗内临时关闭。",
+    "quickReminderTitlePasteAutoDetectDesc": "开启后，在任务编辑弹窗标题中粘贴文本时自动识别日期时间",
     "createQuickReminder": "创建任务",
     "bindToBlock": "绑定到块",
     "unboundReminder": "未绑定任务",
@@ -2968,5 +2968,10 @@
     "builtInArchivedStatusAlwaysHidden": "内置已归档状态默认隐藏",
     "projectStatusHiddenInAll": "已设为默认隐藏（同已归档效果）",
     "projectStatusShownInAll": "已取消默认隐藏，将在全部项目中显示",
-    "projectStatusArchiveUpdateFailed": "更新隐藏设置失败，请重试"
+    "projectStatusArchiveUpdateFailed": "更新隐藏设置失败，请重试",
+    "setParentTask": "设置父任务",
+    "selectParentTask": "选择父任务",
+    "cannotSetSelfAsParent": "不能将任务设为自身的父任务",
+    "cannotSetDescendantAsParent": "不能将当前任务的子任务设为父任务",
+    "subscribedTaskCannotBeParent": "订阅任务不能设为父任务"
 }

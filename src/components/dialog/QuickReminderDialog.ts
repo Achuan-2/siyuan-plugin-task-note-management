@@ -488,6 +488,8 @@ export class QuickReminderDialog {
     private activeDialogTab: 'task' | 'select-task' = 'task';
     private onSelectExistingTask?: (task: any) => Promise<void>;
     private taskSelectionPanel?: { destroy(): void };
+    private parentPickerDialog?: Dialog;
+    private parentPickerPanel?: { destroy(): void };
     private activeDetailTab: 'settings' | 'notes' | 'subtasks' = 'settings';
     private editFutureInstancesOnly: boolean = false;
     private futureEditOriginalReminder?: any;
@@ -1876,14 +1878,16 @@ export class QuickReminderDialog {
         };
 
         // 隐藏父任务组
+        const setParentBtn = dialog.querySelector('#quickSetParentBtn') as HTMLElement;
+        if (setParentBtn) setParentBtn.style.display = 'none';
         const parentGroup = dialog.querySelector('#quickParentTaskGroup') as HTMLElement;
         if (parentGroup) parentGroup.style.display = 'none';
 
         // 隐藏标题输入组
         hideGroupOf('#quickReminderTitle');
 
-        // 隐藏自动识别/同步块标题复选框组
-        hideGroupOf('#quickPasteAutoDetect');
+        // 隐藏同步块标题按钮组
+        hideGroupOf('#quickSyncBlockTitleBtn');
 
         // 隐藏完成时间组
         const completedGroup = dialog.querySelector('#quickCompletedTimeGroup') as HTMLElement;
@@ -2901,7 +2905,7 @@ export class QuickReminderDialog {
                         <div class="b3-form__group" id="quickParentTaskGroup" style="display: none;">
                             <label class="b3-form__label">${this.renderSettingLabel('parent', i18n("parentTask"))}</label>
                             <div style="display: flex; gap: 8px; align-items: center;">
-                                <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: default;" placeholder="${i18n("noParentTask")}">
+                                <input type="text" id="quickParentTaskDisplay" class="b3-text-field" readonly style="flex: 1; background: var(--b3-theme-background-light); cursor: ${this.canSelectParentTask() ? 'pointer' : 'default'};" placeholder="${i18n("noParentTask")}">
                                 <button type="button" id="quickViewParentBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("viewParentTask")}" style="display: none;">
                                     <svg class="b3-button__icon"><use xlink:href="#iconEye"></use></svg>
                                 </button>
@@ -2911,7 +2915,12 @@ export class QuickReminderDialog {
                             </div>
                         </div>
                         <div class="b3-form__group">
-                            <label class="b3-form__label">${this.renderSettingLabel('note', i18n("taskTitle"))}</label>
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+                                <label class="b3-form__label" style="margin-bottom: 0;">${this.renderSettingLabel('heading', i18n("taskTitle"))}</label>
+                                ${this.canSelectParentTask() ? `<button type="button" class="b3-button b3-button--outline b3-button--small" id="quickSetParentBtn" style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px;">
+                                    ${renderTaskMetadataIcon('parent', 14)}<span>${i18n("setParentTask")}</span>
+                                </button>` : ''}
+                            </div>
                             <div class="title-input-container" style="display: flex; gap: 8px; align-items: flex-start;">
                                 <textarea id="quickReminderTitle" class="b3-text-field" rows="1" placeholder="${i18n("enterReminderTitle")}" spellcheck="false" style="flex: 1; max-height: 200px; resize: vertical; overflow-y: auto; padding: 4px 8px; line-height: 1.5;" required autofocus></textarea>
                                 <button type="button" id="quickNlBtn" class="b3-button b3-button--outline ariaLabel" aria-label="${i18n("smartDateRecognition")}">
@@ -2919,18 +2928,11 @@ export class QuickReminderDialog {
                                 </button>
                             </div>
                         </div>
-                        <div class="b3-form__group" style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-                            <label class="b3-checkbox" style="display: flex; align-items: center;">
-                                <input type="checkbox" class="b3-switch" id="quickPasteAutoDetect" ${this.titlePasteAutoDetect ? 'checked' : ''}>
-                                <span class="b3-checkbox__graphic"></span>
-                                <span class="b3-checkbox__label">${i18n("pasteAutoDetectDate")}</span>
-                            </label>
-                            <div id="quickSyncBlockTitleContainer" style="display: none;">
-                                <button type="button" id="quickSyncBlockTitleBtn" class="b3-button b3-button--outline b3-button--small" style="display: flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px;">
-                                    <svg style="width: 12px; height: 12px;"><use xlink:href="#iconRefresh"></use></svg>
-                                    <span>${i18n("syncBlockTitle")}</span>
-                                </button>
-                            </div>
+                        <div class="b3-form__group" id="quickSyncBlockTitleContainer" style="display: none;">
+                            <button type="button" id="quickSyncBlockTitleBtn" class="b3-button b3-button--outline b3-button--small" style="display: flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 8px;">
+                                <svg style="width: 12px; height: 12px;"><use xlink:href="#iconRefresh"></use></svg>
+                                <span>${i18n("syncBlockTitle")}</span>
+                            </button>
                         </div>
 
                         <div id="quickTaskDetailTabs" class="quick-reminder-dialog__detail-tabs" role="tablist">
@@ -3318,6 +3320,10 @@ export class QuickReminderDialog {
             width: "min(500px, 90%)",
             height: (this.mode === 'note' || this.dateOnly) ? "auto" : "81vh",
             destroyCallback: () => {
+                this.parentPickerPanel?.destroy();
+                this.parentPickerPanel = undefined;
+                this.parentPickerDialog?.destroy();
+                this.parentPickerDialog = undefined;
                 this.taskSelectionPanel?.destroy();
                 this.taskSelectionPanel = undefined;
                 this.subtasksDialog?.dispose();
@@ -4980,8 +4986,7 @@ export class QuickReminderDialog {
                     }
 
                     // 如果启用了自动识别，检测日期时间
-                    const pasteAutoDetect = this.dialog.element.querySelector('#quickPasteAutoDetect') as HTMLInputElement;
-                    if (pasteAutoDetect && pasteAutoDetect.checked) {
+                    if (this.titlePasteAutoDetect) {
                         // 使用粘贴的所有非空行进行识别，以便第二行或后续行中的自然语言也能被识别
                         const joined = meaningfulLines.join(' ');
                         const detected = this.detectDateTimeFromTitle(joined, 'none');
@@ -5624,6 +5629,18 @@ export class QuickReminderDialog {
                 this.reminder.parentId = undefined;
             }
             this.updateParentTaskDisplay();
+        });
+
+        const setParentBtn = this.dialog.element.querySelector('#quickSetParentBtn') as HTMLButtonElement;
+        setParentBtn?.addEventListener('click', () => {
+            void this.openParentTaskPickerDialog();
+        });
+
+        const parentTaskDisplay = this.dialog.element.querySelector('#quickParentTaskDisplay') as HTMLInputElement;
+        parentTaskDisplay?.addEventListener('click', () => {
+            const parentId = this.reminder?.parentId || this.defaultParentId;
+            if (!this.canSelectParentTask() || parentId === '__TEMP_PARENT__') return;
+            void this.openParentTaskPickerDialog();
         });
 
         // 完成时间相关按钮事件
@@ -6914,6 +6931,11 @@ export class QuickReminderDialog {
 
                 // 应用基础字段修改
                 optimisticReminder.title = title;
+                if (this.reminder.parentId) {
+                    optimisticReminder.parentId = this.reminder.parentId;
+                } else {
+                    delete optimisticReminder.parentId;
+                }
                 optimisticReminder.blockId = inputId || null;
                 optimisticReminder.url = url;
                 optimisticReminder.date = date;
@@ -7144,6 +7166,11 @@ export class QuickReminderDialog {
 
                     // 更新字段
                     reminder.title = title;
+                    if (this.reminder.parentId) {
+                        reminder.parentId = this.reminder.parentId;
+                    } else {
+                        delete reminder.parentId;
+                    }
                     reminder.blockId = inputId || null;
                     reminder.url = url || undefined;
                     reminder.date = date || undefined;
@@ -7807,10 +7834,20 @@ export class QuickReminderDialog {
         return null;
     }
 
+    private canSelectParentTask(): boolean {
+        return !this.readOnly
+            && !this.skipSave
+            && !this.dateOnly
+            && this.mode !== 'note'
+            && !(this.isInstanceEdit && this.reminder?.isInstance)
+            && !this.reminder?.isSubscribed;
+    }
+
     /**
      * 更新父任务显示
      */
     private async updateParentTaskDisplay() {
+        const setParentBtn = this.dialog.element.querySelector('#quickSetParentBtn') as HTMLElement | null;
         const parentTaskGroup = this.dialog.element.querySelector('#quickParentTaskGroup') as HTMLElement;
         const parentTaskDisplay = this.dialog.element.querySelector('#quickParentTaskDisplay') as HTMLInputElement;
         const viewParentBtn = this.dialog.element.querySelector('#quickViewParentBtn') as HTMLButtonElement;
@@ -7824,13 +7861,16 @@ export class QuickReminderDialog {
         const parentId = this.reminder?.parentId || this.defaultParentId;
 
         if (!parentId) {
-            // 没有父任务，隐藏整个区域
+            // 没有父任务，隐藏父任务展示区域，显示标题右侧“设置父任务”按钮
             parentTaskGroup.style.display = 'none';
+            if (setParentBtn) setParentBtn.style.display = 'inline-flex';
             return;
         }
 
-        // 显示父任务区域
+        // 显示父任务区域，隐藏独立的“设置父任务”按钮（点击父任务输入框可直接更换）
         parentTaskGroup.style.display = '';
+        if (setParentBtn) setParentBtn.style.display = 'none';
+        parentTaskDisplay.style.cursor = (this.canSelectParentTask() && parentId !== '__TEMP_PARENT__') ? 'pointer' : 'default';
 
         if (parentId === '__TEMP_PARENT__') {
             const displayTitle = this.tempParentName || i18n("newTask") || "新建任务";
@@ -8220,6 +8260,118 @@ export class QuickReminderDialog {
             group.style.display = 'none';
         }
     }
+    private async openParentTaskPickerDialog() {
+        if (this.readOnly || this.skipSave || !this.plugin) return;
+
+        this.parentPickerPanel?.destroy();
+        this.parentPickerPanel = undefined;
+        this.parentPickerDialog?.destroy();
+        this.parentPickerDialog = undefined;
+
+        const pickerDialog = new Dialog({
+            title: i18n("selectParentTask") || i18n("setParentTask"),
+            content: `<div id="quickParentPickerPanel" style="height: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden;"></div>`,
+            width: "min(480px, 92vw)",
+            height: "min(76vh, 680px)",
+            destroyCallback: () => {
+                if (this.parentPickerDialog === pickerDialog) {
+                    this.parentPickerPanel?.destroy();
+                    this.parentPickerPanel = undefined;
+                    this.parentPickerDialog = undefined;
+                }
+            }
+        });
+        this.parentPickerDialog = pickerDialog;
+
+        const container = pickerDialog.element.querySelector('#quickParentPickerPanel') as HTMLElement | null;
+        if (!container) return;
+        const dialogBody = container.parentElement as HTMLElement | null;
+        if (dialogBody) {
+            dialogBody.style.display = 'flex';
+            dialogBody.style.flexDirection = 'column';
+            dialogBody.style.flex = '1';
+            dialogBody.style.minHeight = '0';
+            dialogBody.style.overflow = 'hidden';
+        }
+
+        try {
+            const { ReminderPanel } = await import('../panel/ReminderPanel');
+            if (this.parentPickerDialog !== pickerDialog || !container.isConnected) return;
+            const panel = new ReminderPanel(container, this.plugin, undefined, {
+                onSelectTask: async (selectedTask) => {
+                    if (this.parentPickerDialog !== pickerDialog) return;
+                    const accepted = await this.applySelectedParentTask(selectedTask);
+                    if (accepted && this.parentPickerDialog === pickerDialog) {
+                        pickerDialog.destroy();
+                    }
+                }
+            });
+            if (this.parentPickerDialog !== pickerDialog) {
+                panel.destroy();
+                return;
+            }
+            this.parentPickerPanel = panel;
+        } catch (error) {
+            console.error('Failed to open parent task picker:', error);
+            showMessage(i18n('loadingFailed'), 3000, 'error');
+            if (this.parentPickerDialog === pickerDialog) {
+                pickerDialog.destroy();
+            }
+        }
+    }
+
+    private async applySelectedParentTask(selectedTask: any): Promise<boolean> {
+        if (!selectedTask?.id) return false;
+        if (selectedTask.isSubscribed) {
+            showMessage(i18n('subscribedTaskCannotBeParent'), 3000, 'error');
+            return false;
+        }
+
+        const selectedId = String(selectedTask.id);
+        const parsedSelected = parseReminderInstanceId(selectedId);
+        const selectedBaseId = selectedTask.originalId || parsedSelected?.originalId || selectedId;
+
+        const reminderData = await this.plugin.loadReminderData(true) || {};
+        const targetRecord = reminderData[selectedId] || reminderData[selectedBaseId];
+        if (!targetRecord || targetRecord.isSubscribed) {
+            showMessage(i18n(targetRecord?.isSubscribed ? 'subscribedTaskCannotBeParent' : 'parentTaskNotExist'), 3000, 'error');
+            return false;
+        }
+
+        if (this.mode === 'edit' && this.reminder?.id) {
+            const currentId = String(this.reminder.id);
+            const currentBaseId = this.reminder.originalId || parseReminderInstanceId(currentId)?.originalId || currentId;
+            if (selectedId === currentId || selectedBaseId === currentBaseId) {
+                showMessage(i18n('cannotSetSelfAsParent'), 3000, 'error');
+                return false;
+            }
+
+            const visited = new Set<string>([currentId, currentBaseId]);
+            let cursorId: string | undefined = selectedId;
+            while (cursorId) {
+                const parsedCursor = parseReminderInstanceId(cursorId);
+                const cursorBaseId = parsedCursor?.originalId || cursorId;
+                if (visited.has(cursorId) || visited.has(cursorBaseId)) {
+                    showMessage(i18n('cannotSetDescendantAsParent'), 3000, 'error');
+                    return false;
+                }
+                visited.add(cursorId);
+                visited.add(cursorBaseId);
+                const record = reminderData[cursorId] || reminderData[cursorBaseId];
+                cursorId = record?.parentId;
+            }
+
+            this.reminder.parentId = selectedId;
+        } else {
+            this.defaultParentId = selectedId;
+        }
+
+        if (this.dialog?.element) {
+            await this.updateParentTaskDisplay();
+        }
+        return true;
+    }
+
     private async viewParentTask() {
         const parentId = this.reminder?.parentId || this.defaultParentId;
 

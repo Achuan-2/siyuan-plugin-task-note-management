@@ -767,7 +767,7 @@
     "singleDateDefaultRoleDeadline": "Deadline",
     "singleDateDefaultRoleStart": "Start date",
     "quickReminderTitlePasteAutoDetect": "Auto detect pasted title dates",
-    "quickReminderTitlePasteAutoDetectDesc": "When enabled, pasted text in the task edit dialog title auto-detects date and time. You can still turn it off in the dialog temporarily.",
+    "quickReminderTitlePasteAutoDetectDesc": "When enabled, pasted text in the task edit dialog title auto-detects date and time.",
     "createQuickReminder": "Create task",
     "bindToBlock": "Bind To Block",
     "unboundReminder": "Unbound Reminder",
@@ -2968,5 +2968,10 @@
     "builtInArchivedStatusAlwaysHidden": "Built-in archived status is always hidden by default",
     "projectStatusHiddenInAll": "Set to hidden by default (same as archived)",
     "projectStatusShownInAll": "Shown in All Projects again",
-    "projectStatusArchiveUpdateFailed": "Failed to update hide setting. Please try again"
+    "projectStatusArchiveUpdateFailed": "Failed to update hide setting. Please try again",
+    "setParentTask": "Set Parent Task",
+    "selectParentTask": "Select Parent Task",
+    "cannotSetSelfAsParent": "Cannot set a task as its own parent",
+    "cannotSetDescendantAsParent": "Cannot set a subtask of this task as its parent",
+    "subscribedTaskCannotBeParent": "Subscribed tasks cannot be set as a parent task"
 }
