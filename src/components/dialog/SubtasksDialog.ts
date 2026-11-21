@@ -154,6 +154,10 @@ export class SubtasksDialog {
                             <svg class="b3-button__icon"><use xlink:href="#iconPaste"></use></svg>
                             ${i18n("pasteSubtasks") || "粘贴新建"}
                         </button>
+                        <button type="button" id="addSubtaskTopBtn" class="b3-button b3-button--primary">
+                            <svg class="b3-button__icon"><use xlink:href="#iconAdd"></use></svg>
+                            ${i18n("createSubtask")}
+                        </button>
                         `}
                     </div>
                     <div id="subtasksList" class="subtasks-dialog__list"></div>
@@ -652,22 +656,6 @@ export class SubtasksDialog {
         return entries;
     }
 
-    private buildProjectCache(tasks: any[]): Map<string, any> {
-        const projectCache = new Map<string, any>();
-        tasks.forEach(task => {
-            if (!task?.projectId) return;
-            const project = this.projectManager.getProjectById(task.projectId);
-            if (!project) return;
-            const customGroup = (project.customGroups || []).find((group: any) => group.id === task.customGroupId);
-            projectCache.set(task.id, {
-                project,
-                customGroup,
-                customGroupName: customGroup?.name
-            });
-        });
-        return projectCache;
-    }
-
     private renderSubtasks(preserveRows = false, changedParentId?: string) {
         const listEl = this.getRootElement().querySelector("#subtasksList") as HTMLElement;
         if (!listEl) return;
@@ -684,19 +672,17 @@ export class SubtasksDialog {
         }
 
         const entries = this.getVisibleSubtaskEntries();
-        const projectCache = this.buildProjectCache(this.subtasks);
         const context: TaskRenderContext = {
             plugin: this.plugin,
             today: getLogicalDateString(),
             collapsedTasks: this.collapsedSubtaskIds,
-            showProjectBadge: true,
+            showProjectBadge: false,
             showCategoryBadge: true,
             showDocumentTitle: true,
             allTasks: this.subtasks,
             categoryManager: this.categoryManager,
             milestoneMap: this.milestoneMap,
             lute: this.lute,
-            projectCache,
             isMobileClient: this.plugin?.isInMobileApp,
             isTaskCollapsed: (task: any) => this.collapsedSubtaskIds.has(task.id),
             isReminderPinned: (t: any) => !!t.pinned,
@@ -818,8 +804,8 @@ export class SubtasksDialog {
     private bindEvents() {
         const rootElement = this.getRootElement();
 
-        rootElement.querySelector("#addSubtaskBtn")?.addEventListener("click", () => {
-            void this.startInlineSubtask();
+        rootElement.querySelectorAll("#addSubtaskTopBtn, #addSubtaskBtn").forEach(button => {
+            button.addEventListener("click", () => { void this.startInlineSubtask(); });
         });
 
         rootElement.querySelector("#pasteSubtaskBtn")?.addEventListener("click", () => {
@@ -1539,7 +1525,6 @@ export class SubtasksDialog {
                 this.onUpdate();
             }
             this.renderSubtasks();
-            showMessage(i18n("sortUpdated") || "排序已更新");
             return;
         }
 
@@ -1570,8 +1555,6 @@ export class SubtasksDialog {
                 }
             }));
         }
-
-        showMessage(i18n("sortUpdated") || "排序已更新");
     }
 
     // 显示粘贴新建子任务对话框
