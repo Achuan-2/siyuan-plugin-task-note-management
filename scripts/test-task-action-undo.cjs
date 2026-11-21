@@ -557,6 +557,37 @@ test('子任务弹窗删除已保存任务及 ghost 实例后都可撤回', asyn
     }
 });
 
+test('子任务右键和更多按钮打开思源菜单，只读时仅保留查看', async () => {
+    const f = fixture();
+    const menus = [], actions = [];
+    f.dependencies.Menu = class {
+        constructor() { this.items = []; menus.push(this); }
+        addItem(item) { this.items.push(item); }
+        open(position) { this.position = position; }
+    };
+    f.dependencies.openBlock = id => { actions.push(['block', id]); };
+    const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', ['showSubtaskActionMenu']);
+    Object.assign(view, {
+        startInlineSubtask: id => actions.push(['create', id]),
+        editSubtask: task => actions.push(['edit', task.id]),
+        deleteSubtask: id => actions.push(['delete', id]),
+        finishInlineTitle: async () => true,
+    });
+    const row = { getBoundingClientRect: () => ({ right: 100, bottom: 60 }) };
+    view.showSubtaskActionMenu({ id: 'first', blockId: 'block' }, row, { type: 'contextmenu', clientX: 20, clientY: 40 });
+    assert.deepEqual(menus[0].position, { x: 20, y: 40 });
+    assert.deepEqual(menus[0].items.map(item => item.label), ['createSubtask', 'openBoundBlock', 'edit', 'delete']);
+    for (const item of menus[0].items) await item.click();
+    assert.deepEqual(actions, [['create', 'first'], ['block', 'block'], ['edit', 'first'], ['delete', 'first']]);
+
+    view.readOnly = true;
+    view.showSubtaskActionMenu({ id: 'second' }, row, { type: 'click' });
+    assert.deepEqual(menus[1].position, { x: 100, y: 64, isLeft: true });
+    assert.deepEqual(menus[1].items.map(item => item.label), ['viewTasks']);
+    await menus[1].items[0].click();
+    assert.deepEqual(actions.at(-1), ['edit', 'second']);
+});
+
 function inlineSubtaskFixture(initial = {}) {
     const f = fixture(initial);
     const view = compileView(f, 'src/components/dialog/SubtasksDialog.ts', 'SubtasksDialog', [

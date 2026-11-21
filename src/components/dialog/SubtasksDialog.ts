@@ -1,4 +1,4 @@
-import { Dialog, showMessage, confirm } from "siyuan";
+import { Dialog, Menu, showMessage, confirm } from "siyuan";
 import { TaskActionUndo } from "../../utils/taskActionUndo";
 import { openBlock } from "../../api";
 import { i18n } from "../../pluginInstance";
@@ -776,69 +776,43 @@ export class SubtasksDialog {
     }
 
     private showSubtaskActionMenu(task: any, element: HTMLElement, event: MouseEvent) {
-        document.querySelector('.subtasks-task-menu')?.remove();
-
-        const menuEl = document.createElement('div');
-        menuEl.className = 'subtasks-task-menu';
-        menuEl.style.cssText = `
-            position: fixed;
-            background: var(--b3-theme-surface);
-            border: 1px solid var(--b3-theme-border);
-            border-radius: 6px;
-            padding: 6px;
-            z-index: 1000;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            min-width: 120px;
-        `;
-
-        const createButton = (label: string, icon: string, action: () => void) => {
-            const button = document.createElement('button');
-            button.className = 'b3-button b3-button--text';
-            button.style.cssText = 'justify-content: flex-start; gap: 6px; width: 100%;';
-            button.innerHTML = `<svg class="b3-button__icon"><use xlink:href="${icon}"></use></svg><span>${label}</span>`;
-            button.addEventListener('click', () => {
-                menuEl.remove();
-                action();
-            });
-            menuEl.appendChild(button);
-        };
-
+        const menu = new Menu();
         if (!this.readOnly) {
-            createButton(i18n("createSubtask") || "创建子任务", '#iconAdd', () => {
-                void this.startInlineSubtask(task.id);
+            menu.addItem({
+                icon: 'iconAdd',
+                label: i18n('createSubtask'),
+                click: () => { void this.startInlineSubtask(task.id); },
             });
             const boundBlockId = task.blockId || task.docId;
             if (boundBlockId && !task.isSubscribed) {
-                createButton(i18n("openBoundBlock"), '#iconOpenWindow', () => { void openBlock(boundBlockId); });
+                menu.addItem({
+                    icon: 'iconOpenWindow',
+                    label: i18n('openBoundBlock'),
+                    click: () => { void openBlock(boundBlockId); },
+                });
             }
         }
-        createButton(this.readOnly ? (i18n("viewTasks") || "查看任务") : (i18n("edit") || "编辑"), '#iconEdit', () => this.editSubtask(task));
+        menu.addItem({
+            icon: 'iconEdit',
+            label: i18n(this.readOnly ? 'viewTasks' : 'edit'),
+            click: () => { void this.editSubtask(task); },
+        });
         if (!this.readOnly) {
-            createButton(i18n("delete") || "删除", '#iconTrashcan', async () => {
-                if (await this.finishInlineTitle() !== false) await this.deleteSubtask(task.id);
+            menu.addItem({
+                icon: 'iconTrashcan',
+                label: i18n('delete'),
+                click: async () => {
+                    if (await this.finishInlineTitle() !== false) await this.deleteSubtask(task.id);
+                },
             });
         }
 
-        document.body.appendChild(menuEl);
-        const rect = element.getBoundingClientRect();
-        const left = event.type === 'contextmenu' ? event.clientX : rect.right;
-        const top = event.type === 'contextmenu' ? event.clientY : rect.bottom + 4;
-        menuEl.style.left = `${left}px`;
-        menuEl.style.top = `${top}px`;
-
-        const closeMenu = () => {
-            menuEl.remove();
-            document.removeEventListener('click', handleClickOutside);
-        };
-        const handleClickOutside = (e: MouseEvent) => {
-            if (!menuEl.contains(e.target as Node)) {
-                closeMenu();
-            }
-        };
-        setTimeout(() => document.addEventListener('click', handleClickOutside), 0);
+        if (event.type === 'contextmenu') {
+            menu.open({ x: event.clientX, y: event.clientY });
+        } else {
+            const rect = element.getBoundingClientRect();
+            menu.open({ x: rect.right, y: rect.bottom + 4, isLeft: true });
+        }
     }
 
     private bindEvents() {
