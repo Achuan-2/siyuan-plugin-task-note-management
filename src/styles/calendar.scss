@@ -653,6 +653,11 @@
                     overflow-y: auto !important;
                     transition: max-height 0.1s linear;
                 }
+
+                &.resizing .fc-scroller {
+                    transition: none !important;
+                    will-change: max-height;
+                }
             }
 
             .fc-allday-resizer {
@@ -685,6 +690,38 @@
                     &::after {
                         opacity: 1;
                         background-color: var(--b3-theme-primary);
+                    }
+                }
+            }
+
+            @media (hover: none), (pointer: coarse) {
+                .fc-allday-resizer {
+                    height: 14px;
+                    -webkit-touch-callout: none;
+                    user-select: none;
+
+                    &::after {
+                        left: 0;
+                        right: 0;
+                        top: 50%;
+                        height: 2px;
+                        transform: translateY(-50%);
+                        background-color: var(--b3-theme-primary);
+                        opacity: 0;
+                    }
+
+                    &.resizing::after {
+                        opacity: 1;
+                    }
+                }
+
+                .fc-timegrid-divider {
+                    min-height: 8px;
+                    -webkit-touch-callout: none;
+                    user-select: none;
+
+                    &.resizing {
+                        background-color: rgba(var(--b3-theme-primary-rgb), 0.25) !important;
                     }
                 }
             }
@@ -886,4 +923,98 @@
     border-bottom-right-radius: 0 !important;
     border-right-width: 0 !important;
     border-right-color: transparent !important;
+}
+
+/* 移动端长按选中事件后的高亮与整边触控调整区，便于沿上下/左右整条边框拖拽起止日期或时段 */
+@media (hover: none), (pointer: coarse) {
+    .TN-reminder-calendar-view .fc-event {
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    .TN-reminder-calendar-view .fc-event.fc-event-selected {
+        box-shadow: 0 0 0 2px var(--b3-theme-primary), 0 4px 12px rgba(0, 0, 0, 0.16) !important;
+        z-index: 20 !important;
+        overflow: visible !important;
+
+        // 重置 FullCalendar 默认的 8px 小圆点样式，改为整条边框可拖拽触控区
+        .fc-event-resizer {
+            border: 0 !important;
+            border-radius: 0 !important;
+            background: transparent !important;
+            margin: 0 !important;
+            display: block !important;
+            z-index: 25 !important;
+
+            &::before {
+                display: none !important;
+            }
+        }
+    }
+
+    // 水平事件（月视图/周全天行）：左右整条边框均作为宽触控调整区
+    .TN-reminder-calendar-view .fc-h-event.fc-event-selected .fc-event-resizer {
+        top: -4px !important;
+        bottom: -4px !important;
+        height: auto !important;
+        width: 18px !important;
+
+        &.fc-event-resizer-start {
+            left: -9px !important;
+            right: auto !important;
+        }
+
+        &.fc-event-resizer-end {
+            right: -9px !important;
+            left: auto !important;
+        }
+
+        &::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 60%;
+            min-height: 12px;
+            max-height: 24px;
+            transform: translate(-50%, -50%);
+            border-radius: 999px;
+            background: var(--b3-theme-primary);
+            box-shadow: 0 0 0 1.5px var(--b3-theme-background);
+        }
+    }
+
+    // 垂直事件（周/日时间网格）：上下整条边框均作为高触控调整区
+    .TN-reminder-calendar-view .fc-v-event.fc-event-selected .fc-event-resizer {
+        left: 0 !important;
+        right: 0 !important;
+        width: auto !important;
+        height: 18px !important;
+
+        &.fc-event-resizer-start {
+            top: -9px !important;
+            bottom: auto !important;
+        }
+
+        &.fc-event-resizer-end {
+            bottom: -9px !important;
+            top: auto !important;
+        }
+
+        &::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 32px;
+            max-width: 60%;
+            height: 4px;
+            transform: translate(-50%, -50%);
+            border-radius: 999px;
+            background: var(--b3-theme-primary);
+            box-shadow: 0 0 0 1.5px var(--b3-theme-background);
+        }
+    }
 }

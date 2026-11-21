@@ -864,3 +864,594 @@ test('移动端长按手势：220ms 就绪反馈后移动进入拖拽，850ms �
         global.performance = prevGlobals.performance;
     }
 });
+
+test('项目管理与项目看板移动端接入统一的长按拖拽（220ms）与上下文菜单（850ms）配置', () => {
+    const projectDragMethod = extractMethod('src/components/panel/ProjectPanel.ts', 'ProjectPanel', 'ensureMobileProjectDrag');
+    const kanbanDragMethod = extractMethod('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', 'ensureMobileTaskDrag');
+
+    const captured = [];
+    class FakeLongPressTaskDrag {
+        constructor(root, options) {
+            this.root = root;
+            this.options = options;
+            captured.push(options);
+        }
+    }
+
+    const menuCalls = [];
+    const ProjectFixture = new Function(
+        'LongPressTaskDrag', 'ProjectFolderManager', 'menuCalls',
+        compile(`class ProjectFixture {
+            constructor() {
+                this.disposed = false;
+                this.projectsContainer = { contains: () => true };
+                this.currentProjectsCache = [{ id: 'p1', name: '项目A' }];
+                this.folderTreeNodeMap = new Map([['f1', { folder: { id: 'f1', name: '目录1' }, projects: [], children: [], totalProjectCount: 0 }]]);
+                this.plugin = {};
+            }
+            getProjectFromElement(el) { return this.currentProjectsCache.find(p => p.id === el.dataset.projectId); }
+            isDragDisabledBySortMode() { return true; }
+            showProjectContextMenu(point, project) { menuCalls.push(['project', project.id, point.clientX, point.clientY]); }
+            showFolderContextMenu(point, folder) { menuCalls.push(['folder', folder.id, point.clientX, point.clientY]); }
+            ${projectDragMethod}
+        }`) + '; return ProjectFixture;'
+    )(FakeLongPressTaskDrag, { getInstance: () => ({ getFolders: () => [] }) }, menuCalls);
+
+    const KanbanFixture = new Function(
+        'LongPressTaskDrag', 'menuCalls',
+        compile(`class KanbanFixture {
+            constructor() {
+                this.disposed = false;
+                this.isLoading = false;
+                this.isMultiSelectMode = false;
+                this.selectedTaskIds = new Set();
+                this.container = { contains: () => true };
+            }
+            getTaskFromElement() { return { id: 't1', title: '看板任务' }; }
+            toggleTaskSelection(id) { this.selectedTaskIds.add(id); }
+            async showBatchContextMenu(point) { menuCalls.push(['batch', point.clientX, point.clientY]); }
+            showSubscribedTaskContextMenu(point, task) { menuCalls.push(['sub', task.id, point.clientX, point.clientY]); }
+            async showTaskContextMenu(point, task) { menuCalls.push(['task', task.id, point.clientX, point.clientY]); }
+            ${kanbanDragMethod}
+        }`) + '; return KanbanFixture;'
+    )(FakeLongPressTaskDrag, menuCalls);
+
+    // 1. 项目管理：支持项目和文件夹的长按，禁拖排序下 draggable=false 但仍可弹出上下文菜单
+    const projectPanel = new ProjectFixture();
+    projectPanel.ensureMobileProjectDrag();
+    const projectOpts = captured.at(-1);
+    assert.equal(projectOpts.dragDelayMs, 220);
+    assert.equal(projectOpts.contextMenuDelayMs, 850);
+
+    const projectEl = { dataset: { projectId: 'p1' }, closest: s => s === '.project-item[data-project-id]' ? projectEl : null };
+    const projectSource = projectOpts.getSource(projectEl);
+    assert.equal(projectSource.draggable, false);
+    projectOpts.onContextMenu(projectSource, { clientX: 50, clientY: 60 });
+
+    const folderEl = { dataset: { folderId: 'f1' }, closest: s => s === '.project-folder-header[data-folder-id]' ? folderEl : null };
+    const folderSource = projectOpts.getSource(folderEl);
+    assert.equal(folderSource.draggable, true);
+    projectOpts.onContextMenu(folderSource, { clientX: 70, clientY: 80 });
+
+    // 2. 项目看板：常规模式可拖可弹任务菜单，多选模式禁拖但仍可弹批量菜单
+    const kanban = new KanbanFixture();
+    kanban.ensureMobileTaskDrag();
+    const kanbanOpts = captured.at(-1);
+    assert.equal(kanbanOpts.dragDelayMs, 220);
+    assert.equal(kanbanOpts.contextMenuDelayMs, 850);
+
+    const taskEl = { dataset: { taskId: 't1' }, closest: s => s === '.kanban-task[data-task-id]' ? taskEl : null };
+    const taskSource = kanbanOpts.getSource(taskEl);
+    assert.equal(taskSource.draggable, true);
+    kanbanOpts.onContextMenu(taskSource, { clientX: 90, clientY: 100 });
+
+    kanban.isMultiSelectMode = true;
+    const multiSource = kanbanOpts.getSource(taskEl);
+    assert.equal(multiSource.draggable, false);
+    kanbanOpts.onContextMenu(multiSource, { clientX: 110, clientY: 120 });
+
+    assert.deepEqual(menuCalls, [
+        ['project', 'p1', 50, 60],
+        ['folder', 'f1', 70, 80],
+        ['task', 't1', 90, 100],
+        ['batch', 110, 120],
+    ]);
+});
+
+test('日历视图移动端配置 220ms/250ms 长按拖动选区与 850ms 静止长按右键菜单', () => {
+    const calendarSource = fs.readFileSync(path.join(root, 'src/components/panel/CalendarView.ts'), 'utf8');
+    assert.ok(calendarSource.includes('longPressDelay: 250'));
+    assert.ok(calendarSource.includes('eventLongPressDelay: 220'));
+    assert.ok(calendarSource.includes('selectLongPressDelay: 250'));
+
+    const setupMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'setupMobileEventTouchInteractions');
+    const cancelMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'cancelMobileEventContextMenuTimer');
+
+    const timers = new Map();
+    let nextTimerId = 1;
+    let now = 2000;
+    const createTarget = () => {
+        const listeners = new Map();
+        return {
+            addEventListener(type, fn) {
+                if (!listeners.has(type)) listeners.set(type, []);
+                listeners.get(type).push(fn);
+            },
+            removeEventListener(type, fn) {
+                const list = listeners.get(type);
+                if (!list) return;
+                const idx = list.indexOf(fn);
+                if (idx >= 0) list.splice(idx, 1);
+            },
+            dispatch(type, ev) {
+                for (const fn of [...(listeners.get(type) || [])]) fn(ev);
+            },
+        };
+    };
+    class FakeElement {
+        constructor(matches = {}, classes = []) {
+            this.matches = matches;
+            this.classList = { contains: name => classes.includes(name) };
+        }
+        closest(sel) {
+            const parts = sel.split(',').map(s => s.trim());
+            for (const key of Object.keys(this.matches)) {
+                if (parts.includes(key)) return this.matches[key];
+            }
+            return null;
+        }
+        querySelector() { return null; }
+        getAttribute() { return null; }
+    }
+    const fakeDoc = Object.assign(createTarget(), { hidden: false });
+    const fakeWin = createTarget();
+    const advanceBy = ms => {
+        const target = now + ms;
+        while (true) {
+            const due = [...timers.entries()].filter(([, item]) => item.runAt <= target).sort((a, b) => a[1].runAt - b[1].runAt)[0];
+            if (!due) break;
+            const [id, item] = due;
+            timers.delete(id);
+            now = item.runAt;
+            item.fn();
+        }
+        now = target;
+    };
+
+    const prevGlobals = { document: global.document, window: global.window, Element: global.Element };
+    const origNow = Date.now;
+    global.document = fakeDoc;
+    global.window = fakeWin;
+    global.Element = FakeElement;
+    Date.now = () => now;
+
+    try {
+        const menuCalls = [];
+        const Fixture = new Function(
+            'menuCalls',
+            compile(`class Fixture {
+                constructor() {
+                    this.disposed = false;
+                    this.calendarEventElMap = new WeakMap();
+                    this.mobileEventContextTimer = 0;
+                    this.mobileEventTouchSession = null;
+                    this.suppressCalendarClickUntil = 0;
+                    this.lifecycle = {
+                        listen: (t, type, fn) => t.addEventListener(type, fn),
+                        timeout: (fn, delay) => {
+                            const id = ${'__setTimer'}(fn, delay);
+                            return id;
+                        },
+                        clearTimeout: id => ${'__clearTimer'}(id),
+                    };
+                }
+                async showEventContextMenu(point, ev) { menuCalls.push([ev.id, point.clientX, point.clientY]); }
+                keepMobileEventSelected() {}
+                clearMobileEventSelection() {}
+                ${cancelMethod}
+                ${setupMethod}
+            }`).replace('__setTimer', 'this.__setTimer').replace('__clearTimer', 'this.__clearTimer') + '; return Fixture;'
+        )(menuCalls);
+
+        const fixture = new Fixture();
+        fixture.__setTimer = (fn, delay) => { const id = nextTimerId++; timers.set(id, { fn, runAt: now + delay }); return id; };
+        fixture.__clearTimer = id => timers.delete(id);
+
+        // 模拟 FullCalendar 真实 DOM：事件节点本身是 <a class="fc-event">
+        const eventEl = new FakeElement({ '.fc-event': null, a: null }, ['fc-event']);
+        eventEl.matches['.fc-event'] = eventEl;
+        eventEl.matches.a = eventEl;
+        const innerLinkEl = new FakeElement({ a: null, '.fc-event': eventEl }, []);
+        innerLinkEl.matches.a = innerLinkEl;
+        const resizerEl = new FakeElement({ '.fc-event-resizer': true, '.fc-event': eventEl, a: eventEl }, []);
+        const calendarEl = Object.assign(createTarget(), { contains: node => node === eventEl || node === resizerEl || node === innerLinkEl });
+        fixture.calendarEventElMap.set(eventEl, { id: 'ev1', extendedProps: {} });
+        fixture.setupMobileEventTouchInteractions(calendarEl);
+
+        const touch = (target, x, y) => ({ target, touches: [{ identifier: 1, clientX: x, clientY: y }] });
+
+        // 1. 触摸调整手柄或事件内部普通链接时不弹出上下文菜单
+        calendarEl.dispatch('touchstart', touch(resizerEl, 50, 50));
+        advanceBy(900);
+        calendarEl.dispatch('touchstart', touch(innerLinkEl, 50, 50));
+        advanceBy(900);
+        assert.deepEqual(menuCalls, []);
+
+        // 2. 长按期间拖动移动超过 8px -> 取消上下文菜单
+        calendarEl.dispatch('touchstart', touch(eventEl, 100, 100));
+        advanceBy(300);
+        fakeDoc.dispatch('touchmove', touch(eventEl, 120, 100));
+        advanceBy(600);
+        assert.deepEqual(menuCalls, []);
+
+        // 2.5 短按后即使仅在原始目标触发 touchend（模拟节点脱离 DOM 后 document 收不到 touchend），也不会延迟弹出右键菜单
+        const detachedTarget = Object.assign(new FakeElement({ '.fc-event': eventEl, a: eventEl }, ['fc-event']), createTarget());
+        calendarEl.contains = node => node === eventEl || node === resizerEl || node === innerLinkEl || node === detachedTarget;
+        calendarEl.dispatch('touchstart', touch(detachedTarget, 100, 100));
+        advanceBy(120);
+        detachedTarget.dispatch('touchend', {});
+        advanceBy(900);
+        assert.deepEqual(menuCalls, []);
+
+        // 2.6 长按拖动期间即使仅在脱离 DOM 的原始目标上触发 touchmove，也会取消右键菜单
+        calendarEl.dispatch('touchstart', touch(detachedTarget, 100, 100));
+        advanceBy(300);
+        detachedTarget.dispatch('touchmove', touch(detachedTarget, 130, 150));
+        advanceBy(700);
+        assert.deepEqual(menuCalls, []);
+
+        // 3. 静止长按 850ms -> 弹出事件右键菜单并吞掉后续 click
+        calendarEl.dispatch('touchstart', touch(eventEl, 100, 100));
+        advanceBy(850);
+        assert.deepEqual(menuCalls, [['ev1', 100, 100]]);
+        const clickEv = { cancelable: true, prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; } };
+        calendarEl.dispatch('click', clickEv);
+        assert.equal(clickEv.prevented, true);
+        assert.equal(clickEv.stopped, true);
+    } finally {
+        Date.now = origNow;
+        global.document = prevGlobals.document;
+        global.window = prevGlobals.window;
+        global.Element = prevGlobals.Element;
+    }
+});
+
+test('移动端日历短按未选中任务直接进入时间长度调整选中态，再次双击打开编辑', async () => {
+    const clickMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'handleEventClick');
+    const selectMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'selectCalendarEventForTouchResize');
+    const getSelectedMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'getSelectedCalendarEventInstanceId');
+
+    const actions = [];
+    const dispatched = [];
+    const Fixture = new Function(
+        'actions', 'dispatched',
+        compile(`class Fixture {
+            constructor() {
+                this.isDragging = false;
+                this.suppressCalendarClickUntil = 0;
+                this.lastEventClickTime = 0;
+                this.lastEventClickId = null;
+                this.eventClickTimeout = null;
+                this.calendar = {
+                    currentData: {
+                        eventSelection: '',
+                        dispatch: action => {
+                            dispatched.push(action);
+                            if (action.type === 'SELECT_EVENT') this.calendar.currentData.eventSelection = action.eventInstanceId;
+                        },
+                    },
+                };
+                this.lifecycle = {
+                    timeout: fn => { fn(); return 1; },
+                    clearTimeout: () => {},
+                };
+            }
+            isMobileCalendarClient() { return true; }
+            keepMobileEventSelected() {}
+            cancelMobileEventContextMenuTimer() { actions.push('cancel-menu-timer'); }
+            async openEventEditDialog(ev) { actions.push('edit:' + ev.id); }
+            async executeSingleClickEventAction(info) { actions.push('single:' + info.event.id); }
+            ${getSelectedMethod}
+            ${selectMethod}
+            ${clickMethod}
+        }`) + '; return Fixture;'
+    )(actions, dispatched);
+
+    const fixture = new Fixture();
+    const ev = { id: 'ev1', extendedProps: { blockId: 'b1' }, _instance: { instanceId: 'inst-1' } };
+
+    // 1. 首次短按：直接派发 SELECT_EVENT（展示上下/左右调整边框），不跳转笔记，并清理长按菜单计时器
+    await fixture.handleEventClick({ event: ev });
+    assert.deepEqual(dispatched, [{ type: 'SELECT_EVENT', eventInstanceId: 'inst-1' }]);
+    assert.deepEqual(actions, ['cancel-menu-timer']);
+
+    // 2. 短时间再次点击（双击）：打开编辑弹窗
+    await fixture.handleEventClick({ event: ev });
+    assert.deepEqual(actions, ['cancel-menu-timer', 'cancel-menu-timer', 'edit:ev1']);
+});
+
+test('移动端日历多天/周/日视图全天区域支持长按 220ms 拖动调整高度', () => {
+    const methodText = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'setupAllDayResizer');
+    const timers = new Map();
+    let nextTimerId = 1;
+    let now = 3000;
+
+    const createNode = () => {
+        const listeners = new Map();
+        const classes = new Set();
+        return {
+            dataset: {},
+            style: {},
+            offsetHeight: 160,
+            scrollHeight: 260,
+            classList: {
+                add: (...names) => names.forEach(n => classes.add(n)),
+                remove: (...names) => names.forEach(n => classes.delete(n)),
+                contains: n => classes.has(n),
+            },
+            setAttribute() {},
+            addEventListener(type, fn) {
+                if (!listeners.has(type)) listeners.set(type, []);
+                listeners.get(type).push(fn);
+            },
+            removeEventListener(type, fn) {
+                const list = listeners.get(type);
+                if (!list) return;
+                const idx = list.indexOf(fn);
+                if (idx >= 0) list.splice(idx, 1);
+            },
+            dispatch(type, ev) {
+                for (const fn of [...(listeners.get(type) || [])]) fn(ev);
+            },
+        };
+    };
+
+    const advanceBy = ms => {
+        const target = now + ms;
+        while (true) {
+            const due = [...timers.entries()].filter(([, item]) => item.runAt <= target).sort((a, b) => a[1].runAt - b[1].runAt)[0];
+            if (!due) break;
+            const [id, item] = due;
+            timers.delete(id);
+            now = item.runAt;
+            item.fn();
+        }
+        now = target;
+    };
+
+    const fakeDoc = Object.assign(createNode(), {
+        body: { style: {} },
+        createElement: () => createNode(),
+    });
+    const fakeWin = Object.assign(createNode(), {
+        innerHeight: 800,
+        getComputedStyle: () => ({ maxHeight: '200px' }),
+    });
+
+    const prevGlobals = { document: global.document, window: global.window };
+    global.document = fakeDoc;
+    global.window = fakeWin;
+
+    try {
+        let hapticCount = 0;
+        const Fixture = new Function(
+            'i18n',
+            compile(`class Fixture {
+                constructor() {
+                    this.disposed = false;
+                    this.allDayHeight = 200;
+                    this.isResizingAllDay = false;
+                    this.startResizeY = 0;
+                    this.startResizeHeight = 0;
+                    this.lifecycle = {
+                        listen: (t, type, fn) => { t.addEventListener(type, fn); return () => t.removeEventListener(type, fn); },
+                        timeout: (fn, delay) => this.__setTimer(fn, delay),
+                        clearTimeout: id => this.__clearTimer(id),
+                        addCleanup: fn => fn,
+                    };
+                }
+                triggerMobileTouchHaptic() { this.__onHaptic(); }
+                ${methodText}
+            }`) + '; return Fixture;'
+        )(k => k);
+
+        const fixture = new Fixture();
+        fixture.__setTimer = (fn, delay) => { const id = nextTimerId++; timers.set(id, { fn, runAt: now + delay }); return id; };
+        fixture.__clearTimer = id => timers.delete(id);
+        fixture.__onHaptic = () => { hapticCount++; };
+
+        let appendedResizer = null;
+        const scroller = createNode();
+        const harness = Object.assign(createNode(), {
+            querySelector: () => appendedResizer,
+            appendChild: child => { appendedResizer = child; return child; },
+        });
+        const allDayBody = {
+            closest: sel => sel === '.fc-scroller' ? scroller : sel === '.fc-scroller-harness' ? harness : null,
+        };
+        const divider = createNode();
+        const viewEl = {
+            querySelector: sel => sel === '.fc-daygrid-body' ? allDayBody : sel === '.fc-timegrid-divider' ? divider : null,
+        };
+
+        fixture.setupAllDayResizer(viewEl);
+        assert.ok(appendedResizer);
+
+        const touch = y => ({
+            touches: [{ identifier: 1, clientX: 100, clientY: y }],
+            cancelable: true,
+            prevented: false,
+            stopped: false,
+            preventDefault() { this.prevented = true; },
+            stopImmediatePropagation() { this.stopped = true; },
+        });
+
+        // 1. 220ms 前快速滑动 -> 不进入高度调整（保留正常滚动）
+        divider.dispatch('touchstart', touch(200));
+        advanceBy(100);
+        const fastScroll = touch(240);
+        fakeDoc.dispatch('touchmove', fastScroll);
+        advanceBy(200);
+        assert.equal(fastScroll.prevented, false);
+        assert.equal(fixture.allDayHeight, 200);
+
+        // 2. 长按分隔线 220ms 后向下拖动 80px -> 全天高度从 200px 调整为 280px
+        divider.dispatch('touchstart', touch(200));
+        advanceBy(220);
+        assert.equal(fixture.isResizingAllDay, true);
+        assert.equal(appendedResizer.classList.contains('resizing'), true);
+        assert.equal(hapticCount, 1);
+
+        const dragMove = touch(280);
+        fakeDoc.dispatch('touchmove', dragMove);
+        assert.equal(dragMove.prevented, true);
+        assert.equal(fixture.allDayHeight, 280);
+        assert.equal(scroller.style.maxHeight, '280px');
+
+        const dragEnd = { ...touch(280), touches: [] };
+        fakeDoc.dispatch('touchend', dragEnd);
+        assert.equal(fixture.isResizingAllDay, false);
+        assert.equal(appendedResizer.classList.contains('resizing'), false);
+    } finally {
+        global.document = prevGlobals.document;
+        global.window = prevGlobals.window;
+    }
+});
+
+test('日历调整跨天事件长度时若 FullCalendar 传入 _def 缺失的 event，自动从 oldEvent 与 delta 还原且不报错', async () => {
+    const addDurationMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'addCalendarDuration');
+    const normalizeMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'normalizeCalendarMutationInfo');
+    const resizeMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'handleEventResize');
+
+    const updatedCalls = [];
+    const Fixture = new Function(
+        'updatedCalls',
+        compile(`class Fixture {
+            async refreshEvents() {}
+            async updateEventTime(id, info, isResize) {
+                updatedCalls.push({
+                    id,
+                    isResize,
+                    start: info.event.start.toISOString().slice(0, 10),
+                    end: info.event.end.toISOString().slice(0, 10),
+                    type: info.event.extendedProps.type,
+                });
+            }
+            ${addDurationMethod}
+            ${normalizeMethod}
+            ${resizeMethod}
+        }`) + '; return Fixture;'
+    )(updatedCalls);
+
+    const brokenUpdatedEvent = {
+        _def: undefined,
+        get extendedProps() {
+            return this._def.extendedProps; // 模拟 FullCalendar EventImpl.extendedProps 抛错
+        },
+    };
+    const oldEvent = {
+        id: 'task-1',
+        title: '跨天任务',
+        allDay: true,
+        start: new Date('2026-11-20T00:00:00.000Z'),
+        end: new Date('2026-11-23T00:00:00.000Z'),
+        extendedProps: { type: 'task', date: '2026-11-20', endDate: '2026-11-22' },
+        _def: { extendedProps: { type: 'task' } },
+        _instance: { instanceId: 'inst-old' },
+    };
+
+    const fixture = new Fixture();
+    await fixture.handleEventResize({
+        event: brokenUpdatedEvent,
+        oldEvent,
+        startDelta: { years: 0, months: 0, days: 0, milliseconds: 0 },
+        endDelta: { years: 0, months: 0, days: 2, milliseconds: 0 },
+        revert() {},
+    });
+
+    assert.deepEqual(updatedCalls, [{
+        id: 'task-1',
+        isResize: true,
+        start: '2026-11-20',
+        end: '2026-11-25',
+        type: 'task',
+    }]);
+});
+
+test('移动端日历选中调整框保留 6000ms 且刷新事件后自动恢复，超时后自动取消选中', () => {
+    const keepMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'keepMobileEventSelected');
+    const clearMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'clearMobileEventSelection');
+    const restoreMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'restoreMobileEventSelectionIfActive');
+    const getSelectedMethod = extractMethod('src/components/panel/CalendarView.ts', 'CalendarView', 'getSelectedCalendarEventInstanceId');
+
+    const timers = new Map();
+    let nextId = 1;
+    let now = 5000;
+    const origNow = Date.now;
+    Date.now = () => now;
+    const advanceBy = ms => {
+        const target = now + ms;
+        while (true) {
+            const due = [...timers.entries()].filter(([, item]) => item.runAt <= target).sort((a, b) => a[1].runAt - b[1].runAt)[0];
+            if (!due) break;
+            const [id, item] = due;
+            timers.delete(id);
+            now = item.runAt;
+            item.fn();
+        }
+        now = target;
+    };
+
+    try {
+        const actions = [];
+        const currentData = {
+            eventSelection: 'inst-old',
+            dispatch(action) {
+                actions.push(action);
+                if (action.type === 'SELECT_EVENT') currentData.eventSelection = action.eventInstanceId;
+                if (action.type === 'UNSELECT_EVENT') currentData.eventSelection = '';
+            },
+        };
+        const Fixture = new Function(
+            'currentData',
+            compile(`class Fixture {
+                constructor() {
+                    this.isDragging = false;
+                    this.mobileSelectedEventId = null;
+                    this.mobileSelectedEventUntil = 0;
+                    this.mobileSelectionExpireTimer = 0;
+                    this.calendar = {
+                        currentData,
+                        getEventById: id => id === 'ev1' ? { id: 'ev1', _instance: { instanceId: 'inst-new' }, _context: currentData } : null,
+                    };
+                    this.lifecycle = {
+                        timeout: (fn, delay) => this.__setTimer(fn, delay),
+                        clearTimeout: id => this.__clearTimer(id),
+                    };
+                }
+                ${getSelectedMethod}
+                ${keepMethod}
+                ${clearMethod}
+                ${restoreMethod}
+            }`) + '; return Fixture;'
+        )(currentData);
+
+        const fixture = new Fixture();
+        fixture.__setTimer = (fn, delay) => { const id = nextId++; timers.set(id, { fn, runAt: now + delay }); return id; };
+        fixture.__clearTimer = id => timers.delete(id);
+
+        // 1. 选中事件后，即使经过 1500ms 且底层刷新产生了新 instanceId，仍自动恢复选中调整框
+        fixture.keepMobileEventSelected('ev1');
+        advanceBy(1500);
+        currentData.eventSelection = '';
+        fixture.restoreMobileEventSelectionIfActive();
+        assert.equal(currentData.eventSelection, 'inst-new');
+
+        // 2. 满 6000ms 无操作后自动取消选中
+        advanceBy(4500);
+        assert.equal(currentData.eventSelection, '');
+        assert.equal(actions.at(-1).type, 'UNSELECT_EVENT');
+    } finally {
+        Date.now = origNow;
+    }
+});

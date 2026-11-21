@@ -143,9 +143,23 @@ export class CalendarView {
         date: string;
         isLocked?: boolean;
     } | null = null;
-    private allDayDragListener: ((e: MouseEvent) => void) | null = null;
+    private allDayDragListener: ((e: MouseEvent | TouchEvent) => void) | null = null;
     private isAllDayReordering: boolean = false; // 标记是否正在处理全天重排序
     private allDayReorderPromise: Promise<void> | null = null; // 串行化全天重排序与 eventDrop 保存
+    private calendarEventElMap: WeakMap<HTMLElement, any> = new WeakMap();
+    private mobileEventContextTimer: number = 0;
+    private mobileEventTouchSession: {
+        touchId: number;
+        startX: number;
+        startY: number;
+        point: { clientX: number; clientY: number };
+        event: any;
+        cleanupTarget?: () => void;
+    } | null = null;
+    private suppressCalendarClickUntil: number = 0;
+    private mobileSelectedEventId: string | null = null;
+    private mobileSelectedEventUntil: number = 0;
+    private mobileSelectionExpireTimer: number = 0;
 
     // 全天事件区域调整相关
     private allDayHeight: number = 200;
@@ -481,39 +495,74 @@ export class CalendarView {
             resizer.classList.add('ariaLabel'); resizer.setAttribute('aria-label', i18n("dragToResize") || "拖动调整高度");
             harness.appendChild(resizer);
 
+            const divider = el.querySelector('.fc-timegrid-divider') as HTMLElement | null;
+            const resolveStartHeight = (): number => {
+                const currentStyle = window.getComputedStyle(scroller);
+                const currentMaxHeight = parseInt(currentStyle.maxHeight, 10);
+                if (isNaN(currentMaxHeight)) {
+                    return Math.max(60, scroller.offsetHeight);
+                }
+                const usefulMax = Math.max(scroller.scrollHeight || 0, scroller.offsetHeight || 0, 60);
+                return Math.max(60, Math.min(currentMaxHeight, usefulMax));
+            };
+            let resizeRaf = 0;
+            let pendingResizeY: number | null = null;
+            const applyResizeHeight = (clientY: number) => {
+                const delta = clientY - this.startResizeY;
+                const maxAllowed = Math.max(240, Math.round((window.innerHeight || 800) * 0.7));
+                const newHeight = Math.max(60, Math.min(maxAllowed, Math.round(this.startResizeHeight + delta)));
+                if (newHeight === this.allDayHeight && scroller.style.maxHeight === `${newHeight}px`) return;
+                this.allDayHeight = newHeight;
+                scroller.style.maxHeight = `${newHeight}px`;
+            };
+            const scheduleResizeHeight = (clientY: number) => {
+                pendingResizeY = clientY;
+                if (typeof requestAnimationFrame !== 'function') {
+                    applyResizeHeight(clientY);
+                    pendingResizeY = null;
+                    return;
+                }
+                if (resizeRaf) return;
+                resizeRaf = requestAnimationFrame(() => {
+                    resizeRaf = 0;
+                    if (pendingResizeY !== null && this.isResizingAllDay) {
+                        const y = pendingResizeY;
+                        pendingResizeY = null;
+                        applyResizeHeight(y);
+                    }
+                });
+            };
+            const flushResizeFrame = () => {
+                if (resizeRaf && typeof cancelAnimationFrame === 'function') {
+                    cancelAnimationFrame(resizeRaf);
+                    resizeRaf = 0;
+                }
+                if (pendingResizeY !== null && this.isResizingAllDay) {
+                    const y = pendingResizeY;
+                    pendingResizeY = null;
+                    applyResizeHeight(y);
+                } else {
+                    pendingResizeY = null;
+                }
+            };
+
             resizer.addEventListener('mousedown', (e: MouseEvent) => {
                 e.stopPropagation(); // 防止触发 FC 的点击日期事件
                 e.preventDefault();  // 防止选择文本
 
                 this.isResizingAllDay = true;
                 this.startResizeY = e.clientY;
+                this.startResizeHeight = resolveStartHeight();
 
-                // 获取当前计算后的最大高度，如果没有设置过 max-height，则可能需要获取 offsetHeight 或默认值
-                // 这里我们主要控制 maxHeight
-                const currentStyle = window.getComputedStyle(scroller);
-                const currentMaxHeight = parseInt(currentStyle.maxHeight);
-                // 如果是 none 或无效值，使用当前实际高度作为起点，或者默认值
-                if (isNaN(currentMaxHeight)) {
-                    this.startResizeHeight = scroller.offsetHeight;
-                } else {
-                    this.startResizeHeight = currentMaxHeight;
-                }
-
+                harness.classList.add('resizing');
                 resizer.classList.add('resizing');
+                divider?.classList.add('resizing');
                 const previousCursor = document.body.style.cursor;
                 document.body.style.cursor = 'row-resize';
 
                 const moveHandler = (moveEvent: MouseEvent) => {
                     if (!this.isResizingAllDay) return;
-
-                    const delta = moveEvent.clientY - this.startResizeY;
-                    const newHeight = Math.max(60, this.startResizeHeight + delta); // 最小高度 60px
-
-                    this.allDayHeight = newHeight;
-                    scroller.style.maxHeight = `${newHeight}px`;
-
-                    // 强制 fullcalendar 更新一下布局尺寸（如果需要）
-                    // view.calendar.updateSize(); // 可能导致重绘闪烁，暂时只要 CSS 生效即可
+                    scheduleResizeHeight(moveEvent.clientY);
                 };
 
                 const upHandler = () => {
@@ -523,12 +572,107 @@ export class CalendarView {
                 const removeMove = this.lifecycle.listen(document, 'mousemove', moveHandler);
                 const removeUp = this.lifecycle.listen(document, 'mouseup', upHandler);
                 const stopResize = this.lifecycle.addCleanup(() => {
+                    flushResizeFrame();
                     removeMove(); removeUp();
                     this.isResizingAllDay = false;
+                    harness.classList.remove('resizing');
                     resizer.classList.remove('resizing');
+                    divider?.classList.remove('resizing');
                     document.body.style.cursor = previousCursor;
                 });
             });
+
+            // 移动端：长按全天区域底部手柄或分隔线 220ms 后上下拖动调整全天区域高度
+            const bindTouchResize = (handle: HTMLElement) => {
+                let touchId: number | null = null;
+                let pressTimer = 0;
+                let startX = 0;
+                let startY = 0;
+                let lastY = 0;
+                let active = false;
+                let cleanupTouch: (() => void) | null = null;
+
+                const stopTouchResize = () => {
+                    if (pressTimer) {
+                        this.lifecycle.clearTimeout(pressTimer);
+                        pressTimer = 0;
+                    }
+                    touchId = null;
+                    if (active) {
+                        flushResizeFrame();
+                        active = false;
+                        this.isResizingAllDay = false;
+                        harness.classList.remove('resizing');
+                        resizer.classList.remove('resizing');
+                        divider?.classList.remove('resizing');
+                    }
+                    if (cleanupTouch) {
+                        const fn = cleanupTouch;
+                        cleanupTouch = null;
+                        fn();
+                    }
+                };
+
+                this.lifecycle.listen(handle, 'touchstart', (e: TouchEvent) => {
+                    stopTouchResize();
+                    if (this.disposed || e.touches.length !== 1) return;
+                    const touch = e.touches[0];
+                    touchId = touch.identifier;
+                    startX = touch.clientX;
+                    startY = touch.clientY;
+                    lastY = touch.clientY;
+
+                    const onTouchMove = (moveEvent: TouchEvent) => {
+                        const current = Array.from(moveEvent.touches).find(t => t.identifier === touchId);
+                        if (moveEvent.touches.length !== 1 || !current) {
+                            stopTouchResize();
+                            return;
+                        }
+                        lastY = current.clientY;
+                        if (!active) {
+                            if (Math.hypot(current.clientX - startX, current.clientY - startY) > 8) {
+                                stopTouchResize();
+                            }
+                            return;
+                        }
+                        if (moveEvent.cancelable) moveEvent.preventDefault();
+                        moveEvent.stopImmediatePropagation();
+                        scheduleResizeHeight(current.clientY);
+                    };
+
+                    const onTouchEnd = (endEvent: TouchEvent) => {
+                        if (active && endEvent.cancelable) endEvent.preventDefault();
+                        stopTouchResize();
+                    };
+
+                    const removeMove = this.lifecycle.listen(document, 'touchmove', onTouchMove, { capture: true, passive: false });
+                    const removeEnd = this.lifecycle.listen(document, 'touchend', onTouchEnd, { capture: true, passive: false });
+                    const removeCancel = this.lifecycle.listen(document, 'touchcancel', () => stopTouchResize(), true);
+                    const removeBlur = this.lifecycle.listen(window, 'blur', () => stopTouchResize());
+                    cleanupTouch = this.lifecycle.addCleanup(() => {
+                        removeMove(); removeEnd(); removeCancel(); removeBlur();
+                    });
+
+                    pressTimer = this.lifecycle.timeout(() => {
+                        pressTimer = 0;
+                        if (touchId === null || this.disposed) return;
+                        active = true;
+                        this.isResizingAllDay = true;
+                        this.startResizeY = lastY;
+                        this.startResizeHeight = resolveStartHeight();
+                        harness.classList.add('resizing');
+                        resizer.classList.add('resizing');
+                        divider?.classList.add('resizing');
+                        this.triggerMobileTouchHaptic();
+                    }, 220);
+                }, { passive: true });
+            };
+
+            bindTouchResize(resizer);
+            if (divider && divider.dataset.alldayTouchBound !== 'true') {
+                divider.dataset.alldayTouchBound = 'true';
+                bindTouchResize(divider);
+            }
         }
     }
 
@@ -1888,6 +2032,9 @@ export class CalendarView {
             selectable: !this.openedFromHabitPanel,
             selectMirror: true,
             selectOverlap: true,
+            longPressDelay: 250,
+            eventLongPressDelay: 220,
+            selectLongPressDelay: 250,
             eventResizableFromStart: true, // 允许从事件顶部拖动调整开始时间
             locale: window.siyuan.config.lang.toLowerCase().replace('_', '-'),
             scrollTime: (initialViewMode && initialViewMode.startsWith('timeGrid')) ? (() => {
@@ -2043,9 +2190,18 @@ export class CalendarView {
             eventDragStart: (info) => {
                 this.isDragging = true;
                 this.forceHideTooltip();
+                this.triggerMobileTouchHaptic();
+                if (this.isMobileCalendarClient() && info.event?.id) {
+                    this.keepMobileEventSelected(info.event.id);
+                }
                 this.startAllDayDragTracking(info);
             },
             eventDragStop: (info) => {
+                this.cancelMobileEventContextMenuTimer();
+                if (this.isMobileCalendarClient() && info.event?.id) {
+                    this.keepMobileEventSelected(info.event.id);
+                    this.lifecycle.frame(() => this.restoreMobileEventSelectionIfActive());
+                }
                 // 如果是全天事件，执行追踪停止逻辑
                 if (info.event.allDay) {
                     this.stopAllDayDragTracking(info);
@@ -2064,10 +2220,20 @@ export class CalendarView {
             },
             eventDrop: this.handleEventDrop.bind(this),
             eventResizeStart: (info) => {
+                this.cancelMobileEventContextMenuTimer();
                 this.isDragging = true;
                 this.forceHideTooltip();
+                this.triggerMobileTouchHaptic();
+                if (this.isMobileCalendarClient() && info.event?.id) {
+                    this.keepMobileEventSelected(info.event.id);
+                }
             },
             eventResizeStop: (info) => {
+                this.cancelMobileEventContextMenuTimer();
+                if (this.isMobileCalendarClient() && info.event?.id) {
+                    this.keepMobileEventSelected(info.event.id);
+                    this.lifecycle.frame(() => this.restoreMobileEventSelectionIfActive());
+                }
                 // 延迟重置拖动标志，防止调整大小结束后立即触发点击
                 this.lifecycle.timeout(() => {
                     this.isDragging = false;
@@ -2079,6 +2245,12 @@ export class CalendarView {
             },
             eventResize: this.handleEventResize.bind(this),
             eventAllow: (dropInfo, draggedEvent) => {
+                // 拖动导致时间/日期变化时，立即取消移动端静止长按菜单计时器
+                const startChanged = dropInfo.start?.valueOf() !== draggedEvent.start?.valueOf();
+                const endChanged = dropInfo.end?.valueOf() !== draggedEvent.end?.valueOf();
+                if (startChanged || endChanged) {
+                    this.cancelMobileEventContextMenuTimer();
+                }
                 // ICS 订阅只读；CalDAV 订阅根据 caldavEditable 决定是否允许编辑。
                 if (draggedEvent.extendedProps.isSubscribed) {
                     if (draggedEvent.extendedProps.subscriptionType !== 'caldav' || !draggedEvent.extendedProps.caldavEditable) {
@@ -2251,8 +2423,15 @@ export class CalendarView {
                     return;
                 }
 
+                this.calendarEventElMap.set(info.el, info.event);
+                if (targetEl !== info.el) {
+                    this.calendarEventElMap.set(targetEl, info.event);
+                }
+
                 info.el.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
+                    // 移动端/触控长按期间忽略系统 ~500ms contextmenu，改由 850ms 静止长按弹出菜单
+                    if (this.mobileEventTouchSession || Date.now() < this.suppressCalendarClickUntil || this.isMobileCalendarClient()) return;
                     this.showEventContextMenu(e, info.event).catch((err) => {
                         console.error("Failed to show event context menu:", err);
                     });
@@ -2305,6 +2484,8 @@ export class CalendarView {
         });
 
         this.calendar.render();
+
+        this.setupMobileEventTouchInteractions(calendarEl);
 
         // 绑定点击折叠条（fork 原生渲染的 .fc-timegrid-hidden-bar）展开对应时段的事件委托
         calendarEl.addEventListener('click', async (e: MouseEvent) => {
@@ -3764,7 +3945,200 @@ export class CalendarView {
         }
     }
 
-    private async showEventContextMenu(event: MouseEvent, calendarEvent: any) {
+    private isMobileCalendarClient(): boolean {
+        return getFrontend().endsWith('mobile') || this.plugin?.isInMobileApp === true;
+    }
+
+    private triggerMobileTouchHaptic(): void {
+        if (!this.isMobileCalendarClient()) return;
+        try {
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate(10);
+            }
+        } catch {
+            // ignore vibration errors
+        }
+    }
+
+    private cancelMobileEventContextMenuTimer(): void {
+        if (this.mobileEventContextTimer) {
+            this.lifecycle.clearTimeout(this.mobileEventContextTimer);
+            this.mobileEventContextTimer = 0;
+        }
+        const session = this.mobileEventTouchSession;
+        this.mobileEventTouchSession = null;
+        session?.cleanupTarget?.();
+    }
+
+    private getSelectedCalendarEventInstanceId(): string {
+        return (this.calendar as any)?.currentData?.eventSelection || '';
+    }
+
+    private keepMobileEventSelected(eventId: string, durationMs = 6000): void {
+        if (!eventId) return;
+        this.mobileSelectedEventId = eventId;
+        this.mobileSelectedEventUntil = Date.now() + durationMs;
+        if (this.mobileSelectionExpireTimer) {
+            this.lifecycle.clearTimeout(this.mobileSelectionExpireTimer);
+            this.mobileSelectionExpireTimer = 0;
+        }
+        this.mobileSelectionExpireTimer = this.lifecycle.timeout(() => {
+            this.mobileSelectionExpireTimer = 0;
+            if (this.mobileSelectedEventId !== eventId || this.isDragging) return;
+            this.clearMobileEventSelection(true);
+        }, durationMs);
+    }
+
+    private clearMobileEventSelection(unselectInCalendar = false): void {
+        if (this.mobileSelectionExpireTimer) {
+            this.lifecycle.clearTimeout(this.mobileSelectionExpireTimer);
+            this.mobileSelectionExpireTimer = 0;
+        }
+        this.mobileSelectedEventId = null;
+        this.mobileSelectedEventUntil = 0;
+        if (unselectInCalendar) {
+            const context = (this.calendar as any)?.currentData;
+            if (context?.dispatch && context.eventSelection) {
+                context.dispatch({ type: 'UNSELECT_EVENT' });
+            }
+        }
+    }
+
+    private restoreMobileEventSelectionIfActive(): void {
+        if (!this.mobileSelectedEventId) return;
+        if (Date.now() >= this.mobileSelectedEventUntil) {
+            this.clearMobileEventSelection();
+            return;
+        }
+        const ev = this.calendar?.getEventById(this.mobileSelectedEventId);
+        const instanceId = (ev as any)?._instance?.instanceId;
+        if (!ev || !instanceId) return;
+        if (this.getSelectedCalendarEventInstanceId() !== instanceId) {
+            const context = (ev as any)._context || (this.calendar as any)?.currentData;
+            context?.dispatch?.({ type: 'SELECT_EVENT', eventInstanceId: instanceId });
+        }
+    }
+
+    private selectCalendarEventForTouchResize(calendarEvent: any): boolean {
+        const context = calendarEvent?._context || (this.calendar as any)?.currentData;
+        const instanceId = calendarEvent?._instance?.instanceId;
+        if (!context?.dispatch || !instanceId) return false;
+        context.dispatch({ type: 'SELECT_EVENT', eventInstanceId: instanceId });
+        if (this.isMobileCalendarClient() && calendarEvent?.id) {
+            this.keepMobileEventSelected(calendarEvent.id);
+        }
+        return true;
+    }
+
+    /** 移动端日历事件触控：短按选中并展示整边调整区，按住 220ms 拖动移动事件，持续按住 850ms 未明显移动弹出上下文菜单。 */
+    private setupMobileEventTouchInteractions(calendarEl: HTMLElement): void {
+        const moveThresholdPx = 8;
+        const contextMenuDelayMs = 850;
+
+        this.lifecycle.listen(calendarEl, 'touchstart', (event: TouchEvent) => {
+            this.cancelMobileEventContextMenuTimer();
+            if (this.disposed || event.touches.length !== 1) return;
+            const target = event.target instanceof Element ? event.target : (event.target as Node | null)?.parentElement;
+            if (!target) return;
+            const touchedEventEl = target.closest<HTMLElement>('.fc-event');
+            if (!touchedEventEl || !calendarEl.contains(touchedEventEl)) {
+                this.clearMobileEventSelection();
+                return;
+            }
+            if (target.closest('.fc-event-resizer')) {
+                if (this.mobileSelectedEventId) this.keepMobileEventSelected(this.mobileSelectedEventId);
+                return;
+            }
+            if (target.closest('button, input, textarea, select, .reminder-calendar-event-checkbox')) return;
+            // FullCalendar 的事件节点本身就是 <a class="fc-event">，仅排除事件内部的普通链接
+            const link = target.closest('a');
+            if (link && !link.classList.contains('fc-event')) return;
+            const eventEl = touchedEventEl;
+            let calendarEvent = this.calendarEventElMap.get(eventEl);
+            if (!calendarEvent) {
+                const eventId = eventEl.querySelector('[data-event-id]')?.getAttribute('data-event-id') || eventEl.getAttribute('data-event-id');
+                if (eventId) calendarEvent = this.calendar?.getEventById(eventId);
+            }
+            if (!calendarEvent || calendarEvent.extendedProps?.type === 'pomodoroDailySummary') return;
+
+            const touch = event.touches[0];
+            const onTargetMove = (moveEvent: TouchEvent) => handleMoveEvent(moveEvent);
+            const onTargetEnd = () => this.cancelMobileEventContextMenuTimer();
+            const rawTarget = event.target as EventTarget | null;
+            // 在原始 touchstart 目标上直接监听 touchmove/touchend/touchcancel，避免 FullCalendar 拖拽重绘导致节点脱离 DOM 后 document 收不到后续事件
+            rawTarget?.addEventListener?.('touchmove', onTargetMove as EventListener, { passive: true });
+            rawTarget?.addEventListener?.('touchend', onTargetEnd, { passive: true });
+            rawTarget?.addEventListener?.('touchcancel', onTargetEnd, { passive: true });
+
+            const session = {
+                touchId: touch.identifier,
+                startX: touch.clientX,
+                startY: touch.clientY,
+                point: { clientX: touch.clientX, clientY: touch.clientY },
+                event: calendarEvent,
+                cleanupTarget: () => {
+                    rawTarget?.removeEventListener?.('touchmove', onTargetMove as EventListener);
+                    rawTarget?.removeEventListener?.('touchend', onTargetEnd);
+                    rawTarget?.removeEventListener?.('touchcancel', onTargetEnd);
+                },
+            };
+            this.mobileEventTouchSession = session;
+            this.mobileEventContextTimer = this.lifecycle.timeout(() => {
+                this.mobileEventContextTimer = 0;
+                if (this.mobileEventTouchSession !== session || this.disposed) return;
+                const menuPoint = { ...session.point };
+                const targetEvent = session.event;
+                this.mobileEventTouchSession = null;
+                session.cleanupTarget?.();
+                this.clearMobileEventSelection(true);
+                this.suppressCalendarClickUntil = Date.now() + 600;
+                this.showEventContextMenu(menuPoint, targetEvent).catch((err) => {
+                    console.error("Failed to show event context menu:", err);
+                });
+            }, contextMenuDelayMs);
+        }, { passive: true });
+
+        const handleMoveEvent = (event: TouchEvent) => {
+            const session = this.mobileEventTouchSession;
+            if (!session) return;
+            const touch = Array.from(event.touches).find(item => item.identifier === session.touchId);
+            if (event.touches.length !== 1 || !touch) {
+                this.cancelMobileEventContextMenuTimer();
+                return;
+            }
+            session.point = { clientX: touch.clientX, clientY: touch.clientY };
+            if (Math.hypot(touch.clientX - session.startX, touch.clientY - session.startY) > moveThresholdPx) {
+                this.cancelMobileEventContextMenuTimer();
+            }
+        };
+
+        this.lifecycle.listen(document, 'touchmove', handleMoveEvent, { capture: true, passive: true });
+        this.lifecycle.listen(document, 'pointermove', (event: PointerEvent) => {
+            const session = this.mobileEventTouchSession;
+            if (!session) return;
+            if (Math.hypot(event.clientX - session.startX, event.clientY - session.startY) > moveThresholdPx) {
+                this.cancelMobileEventContextMenuTimer();
+            }
+        }, { capture: true, passive: true });
+
+        this.lifecycle.listen(document, 'touchend', () => this.cancelMobileEventContextMenuTimer(), { capture: true, passive: true });
+        this.lifecycle.listen(document, 'touchcancel', () => this.cancelMobileEventContextMenuTimer(), { capture: true, passive: true });
+        this.lifecycle.listen(document, 'pointerup', () => this.cancelMobileEventContextMenuTimer(), { capture: true, passive: true });
+        this.lifecycle.listen(document, 'pointercancel', () => this.cancelMobileEventContextMenuTimer(), { capture: true, passive: true });
+        this.lifecycle.listen(calendarEl, 'scroll', () => this.cancelMobileEventContextMenuTimer(), { capture: true, passive: true });
+        this.lifecycle.listen(window, 'blur', () => this.cancelMobileEventContextMenuTimer());
+        this.lifecycle.listen(document, 'visibilitychange', () => {
+            if (document.hidden) this.cancelMobileEventContextMenuTimer();
+        });
+        this.lifecycle.listen(calendarEl, 'click', (event: Event) => {
+            if (Date.now() < this.suppressCalendarClickUntil) {
+                if (event.cancelable) event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+        }, true);
+    }
+
+    private async showEventContextMenu(event: MouseEvent | { clientX: number; clientY: number }, calendarEvent: any) {
         // 在显示右键菜单前先隐藏提示框
         if (this.tooltip) {
             this.hideEventTooltip();
@@ -6157,8 +6531,9 @@ export class CalendarView {
             date: getLocalDateString(event.start)
         };
 
-        this.allDayDragListener = (e: MouseEvent) => this.handleAllDayDragMove(e);
+        this.allDayDragListener = (e: MouseEvent | TouchEvent) => this.handleAllDayDragMove(e);
         window.addEventListener('mousemove', this.allDayDragListener);
+        window.addEventListener('touchmove', this.allDayDragListener, { passive: true });
     }
 
     private async stopAllDayDragTracking(info?: any) {
@@ -6167,6 +6542,7 @@ export class CalendarView {
         // 1. 立即移除监听器，切断未来的所有输入流
         if (this.allDayDragListener) {
             window.removeEventListener('mousemove', this.allDayDragListener);
+            window.removeEventListener('touchmove', this.allDayDragListener);
             this.allDayDragListener = null;
         }
 
@@ -6180,13 +6556,20 @@ export class CalendarView {
         }
 
         // 3. 彻底锁定状态并显示层断开
-        this.isAllDayReordering = true;
         this.allDayDragState.isLocked = true;
         this.hideDropIndicator();
 
         const stateToProcess = { ...this.allDayDragState };
 
+        // 未经过其他全天任务发生重排时，直接结束，避免无意义保存与 refreshEvents 清掉移动端选中调整框
+        if (!stateToProcess.targetEvent) {
+            this.allDayDragState = null;
+            this.isDragging = false;
+            return;
+        }
+
         // 4. 执行异步重排序
+        this.isAllDayReordering = true;
         const reorderPromise = this.handleAllDayReorder(stateToProcess);
         this.allDayReorderPromise = reorderPromise;
         try {
@@ -6205,14 +6588,27 @@ export class CalendarView {
         }
     }
 
-    private handleAllDayDragMove(e: MouseEvent) {
+    private handleAllDayDragMove(e: MouseEvent | TouchEvent) {
         // 如果状态已锁定或监听器已移除，停止处理，确保位置不再变化
         if (!this.allDayDragState || this.allDayDragState.isLocked) return;
         // 如果不是在 stop 阶段主动调用的同步，且监听器已不存在，则返回
         if (!this.allDayDragListener && (!this.isDragging)) return;
 
-        // 查找鼠标下的事件 harness
-        const el = document.elementFromPoint(e.clientX, e.clientY);
+        let clientX: number | undefined;
+        let clientY: number | undefined;
+        if ('touches' in e) {
+            const touch = e.touches[0] || e.changedTouches?.[0];
+            if (!touch) return;
+            clientX = touch.clientX;
+            clientY = touch.clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        if (typeof clientX !== 'number' || typeof clientY !== 'number') return;
+
+        // 查找指针下的事件 harness
+        const el = document.elementFromPoint(clientX, clientY);
         const harness = el?.closest('.fc-daygrid-event-harness') as HTMLElement;
 
         if (harness) {
@@ -6222,7 +6618,7 @@ export class CalendarView {
             // 排除正在拖动的事件自身
             if (eventId && eventId !== this.allDayDragState.draggedEvent.id) {
                 const rect = harness.getBoundingClientRect();
-                const isAbove = e.clientY < rect.top + rect.height / 2;
+                const isAbove = clientY < rect.top + rect.height / 2;
 
                 const dayCell = harness.closest('.fc-daygrid-day') as HTMLElement;
                 const cellDate = dayCell?.getAttribute('data-date');
@@ -6475,10 +6871,11 @@ export class CalendarView {
     }
 
     private async handleEventClick(info: any) {
+        this.cancelMobileEventContextMenuTimer();
         if (info.event.extendedProps?.type === 'pomodoroDailySummary') return;
 
-        // 如果正在拖动，不触发点击事件
-        if (this.isDragging) {
+        // 如果正在拖动或刚弹出移动端长按菜单，不触发点击事件
+        if (this.isDragging || Date.now() < this.suppressCalendarClickUntil) {
             return;
         }
 
@@ -6497,17 +6894,32 @@ export class CalendarView {
             this.lastEventClickTime = 0;
             this.lastEventClickId = null;
             await this.openEventEditDialog(info.event);
-        } else {
-            // 单击：设置延迟，防止误触发双击，如果无后续点击则执行单击动作（打开笔记）
+            return;
+        }
+
+        // 移动端短按未选中的可调整事件时，直接进入选中态以显示上下/左右边框时间长度调整手柄
+        const props = info.event.extendedProps || {};
+        const canSelectForTouchResize = this.isMobileCalendarClient()
+            && props.type !== 'pomodoro'
+            && (!props.isSubscribed || (props.subscriptionType === 'caldav' && props.caldavEditable))
+            && (!props.isHabit || props.type === 'habitReminderTime' || props.type === 'habitCheckInTime');
+        const instanceId = info.event?._instance?.instanceId;
+        if (canSelectForTouchResize && instanceId && this.getSelectedCalendarEventInstanceId() !== instanceId) {
+            this.selectCalendarEventForTouchResize(info.event);
             this.lastEventClickTime = currentTime;
             this.lastEventClickId = eventId;
-            this.eventClickTimeout = this.lifecycle.timeout(async () => {
-                this.lastEventClickTime = 0;
-                this.lastEventClickId = null;
-                this.eventClickTimeout = null;
-                await this.executeSingleClickEventAction(info);
-            }, 250);
+            return;
         }
+
+        // 单击：设置延迟，防止误触发双击，如果无后续点击则执行单击动作（打开笔记）
+        this.lastEventClickTime = currentTime;
+        this.lastEventClickId = eventId;
+        this.eventClickTimeout = this.lifecycle.timeout(async () => {
+            this.lastEventClickTime = 0;
+            this.lastEventClickId = null;
+            this.eventClickTimeout = null;
+            await this.executeSingleClickEventAction(info);
+        }, 250);
     }
 
     private async openEventEditDialog(calendarEvent: any) {
@@ -6598,7 +7010,77 @@ export class CalendarView {
         }
     }
 
-    private async handleEventDrop(info) {
+    private addCalendarDuration(
+        baseDate: Date | null | undefined,
+        duration?: { years?: number; months?: number; days?: number; milliseconds?: number } | null
+    ): Date | null {
+        if (!baseDate) return null;
+        const next = new Date(baseDate.getTime());
+        if (!duration) return next;
+        if (duration.years) next.setFullYear(next.getFullYear() + duration.years);
+        if (duration.months) next.setMonth(next.getMonth() + duration.months);
+        if (duration.days) next.setDate(next.getDate() + duration.days);
+        if (duration.milliseconds) next.setTime(next.getTime() + duration.milliseconds);
+        return next;
+    }
+
+    /**
+     * FullCalendar 在拖拽/调整跨天事件期间若底层 eventStore 曾被刷新导致 defId 失效，
+     * handleDragEnd 构造出的 info.event._def 可能为 undefined（访问 extendedProps 直接抛 TypeError）。
+     * 这里从有效的 info.oldEvent 与 delta 还原出完整的事件起止时间与元数据。
+     */
+    private normalizeCalendarMutationInfo(info: any, mode: 'resize' | 'drop'): any | null {
+        if (!info) return null;
+        if (info.event && info.event._def) {
+            return info;
+        }
+        const fallback = (info.oldEvent && info.oldEvent._def) ? info.oldEvent : null;
+        if (!fallback) {
+            return null;
+        }
+
+        const baseStart: Date | null = fallback.start ? new Date(fallback.start.getTime()) : null;
+        let baseEnd: Date | null = fallback.end ? new Date(fallback.end.getTime()) : null;
+        if (!baseEnd && baseStart) {
+            baseEnd = fallback.allDay
+                ? this.addCalendarDuration(baseStart, { days: 1 })
+                : this.addCalendarDuration(baseStart, { milliseconds: 60 * 60 * 1000 });
+        }
+
+        const start = mode === 'resize'
+            ? this.addCalendarDuration(baseStart, info.startDelta)
+            : this.addCalendarDuration(baseStart, info.delta);
+        const end = mode === 'resize'
+            ? this.addCalendarDuration(baseEnd, info.endDelta)
+            : (fallback.end ? this.addCalendarDuration(baseEnd, info.delta) : null);
+
+        const recoveredEvent = {
+            id: fallback.id,
+            title: fallback.title,
+            allDay: fallback.allDay,
+            start,
+            end,
+            extendedProps: { ...(fallback.extendedProps || {}) },
+            _def: fallback._def,
+            _instance: fallback._instance,
+        };
+
+        return {
+            ...info,
+            event: recoveredEvent,
+            revert: () => {
+                try { info.revert?.(); } catch { /* ignore */ }
+                void this.refreshEvents(true);
+            },
+        };
+    }
+
+    private async handleEventDrop(rawInfo) {
+        const info = this.normalizeCalendarMutationInfo(rawInfo, 'drop');
+        if (!info) {
+            void this.refreshEvents(true);
+            return;
+        }
         // 全天重排序在 eventDragStop 中先执行；这里等待它完成后再保存实际日期，避免相互覆盖。
         if (info.event.allDay && this.allDayReorderPromise) {
             await this.allDayReorderPromise;
@@ -6674,7 +7156,12 @@ export class CalendarView {
         }
     }
 
-    private async handleEventResize(info) {
+    private async handleEventResize(rawInfo) {
+        const info = this.normalizeCalendarMutationInfo(rawInfo, 'resize');
+        if (!info) {
+            void this.refreshEvents(true);
+            return;
+        }
         if (info.event.extendedProps.type === 'pomodoro') {
             await this.updatePomodoroRecordTimeEvent(info, true);
             return;
@@ -8150,6 +8637,7 @@ export class CalendarView {
                     this.calendar.updateSize();
                     // FullCalendar 的 render() 会强制重跑所有自定义内容；数据变化由事件 API 自动绘制。
                     if (!dataOnly) this.calendar.render();
+                    this.restoreMobileEventSelectionIfActive();
 
                     // 2. 恢复滚动位置
                     // 注意：FullCalendar 重新渲染可能会保留部分 DOM 结构，如果 el 还在文档中则直接恢复

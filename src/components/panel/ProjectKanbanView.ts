@@ -12752,19 +12752,19 @@ export class ProjectKanbanView {
         }
     }
 
-    /** 与任务侧栏共用长按手势，落点仍使用项目看板的排序和父子关系规则。 */
+    /** 与任务侧栏共用长按手势：按住 220ms 进入可拖拽就绪态，移动即拖拽；持续按住 850ms 未明显移动弹出上下文菜单。 */
     private ensureMobileTaskDrag(): void {
         if (this.mobileTaskDrag) return;
         this.mobileTaskDrag = new LongPressTaskDrag(this.container, {
             getSource: target => {
-                if (this.disposed || this.isLoading || this.isMultiSelectMode) return null;
+                if (this.disposed || this.isLoading) return null;
                 if (!target.closest || target.closest('button, input, textarea, select, [contenteditable="true"], [contenteditable=""], .reminder-item__progress-wrap')) return null;
                 const link = target.closest('a, [data-type="a"], [data-href]');
                 if (link && !link.classList.contains('reminder-item__title')) return null;
                 const element = target.closest<HTMLElement>('.kanban-task[data-task-id]');
                 if (!element || !this.container.contains(element)) return null;
                 const task = this.getTaskFromElement(element);
-                return task ? { element, task, title: task.title || '' } : null;
+                return task ? { element, task, title: task.title || '', draggable: !this.isMultiSelectMode } : null;
             },
             onStart: ({ element, task }) => {
                 this.isDragging = true;
@@ -12786,7 +12786,25 @@ export class ProjectKanbanView {
                 this.stopDragScroll();
                 this.clearDropZoneHighlights();
             },
+            onContextMenu: ({ task }, point) => {
+                if (this.disposed || this.isLoading) return;
+                if (this.isMultiSelectMode) {
+                    if (!this.selectedTaskIds.has(task.id)) {
+                        this.toggleTaskSelection(task.id, true);
+                    }
+                    this.lastClickedTaskId = task.id;
+                    void this.showBatchContextMenu(point);
+                    return;
+                }
+                if (task.isSubscribed && task.subscriptionType !== 'caldav') {
+                    this.showSubscribedTaskContextMenu(point, task);
+                    return;
+                }
+                void this.showTaskContextMenu(point, task);
+            },
             autoScroll: (point, elapsed) => this.scrollMobileTaskDrag(point, elapsed),
+            dragDelayMs: 220,
+            contextMenuDelayMs: 850,
         });
     }
 

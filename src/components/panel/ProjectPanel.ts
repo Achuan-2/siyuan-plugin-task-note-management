@@ -25,6 +25,7 @@ import { ProjectFolderManager, ProjectFolder } from "../dataManager/projectFolde
 import { ProjectFolderManageDialog } from "../dialog/ProjectFolderManageDialog";
 import { ProjectSelectorPopup } from "../dialog/ProjectSelectorPopup";
 import { showProjectStatsDialog, showFolderStatsDialog, countProjectTotalFocusTime as getProjectFocusMinutes } from "../dialog/ProjectStatsDialog";
+import { LongPressTaskDrag, type TaskDragPoint } from "../../utils/longPressTaskDrag";
 
 
 const PROJECT_PANEL_SORT_METHODS = new Set(['category', 'priority', 'time', 'startDate', 'endDate', 'created', 'title']);
@@ -37,6 +38,10 @@ interface ProjectFolderTreeNode {
 }
 
 type FolderDropMode = 'before' | 'inside' | 'after';
+
+type MobileProjectDragItem =
+    | { kind: 'project'; project: any }
+    | { kind: 'folder'; folder: any; node?: ProjectFolderTreeNode };
 
 export function normalizeProjectPanelSortCriteria(
     criteriaRaw: any,
@@ -258,6 +263,8 @@ export class ProjectPanel {
     private isDraggingFolder: boolean = false;
     private draggedFolderElement: HTMLElement | null = null;
     private draggedFolder: any = null;
+    private mobileProjectDrag: LongPressTaskDrag<MobileProjectDragItem> | null = null;
+    private folderTreeNodeMap: Map<string, ProjectFolderTreeNode> = new Map();
     private currentProjectsCache: any[] = [];
     // 缓存提醒数据，避免为每个项目重复读取
     private reminderDataCache: any = null;
@@ -332,6 +339,8 @@ export class ProjectPanel {
     public destroy() {
         if (this.disposed) return;
         this.disposed = true;
+        this.mobileProjectDrag?.dispose();
+        this.mobileProjectDrag = null;
         if (this.projectUpdatedHandler) {
             window.removeEventListener('projectUpdated', this.projectUpdatedHandler);
         }
@@ -529,9 +538,14 @@ export class ProjectPanel {
         this.container.appendChild(header);
 
         // 项目列表容器
+        this.mobileProjectDrag?.dispose();
+        this.mobileProjectDrag = null;
         this.projectsContainer = document.createElement('div');
         this.projectsContainer.className = 'project-list';
         this.container.appendChild(this.projectsContainer);
+        if (this.isMobileClient || this.plugin?.isInMobileApp) {
+            this.ensureMobileProjectDrag();
+        }
 
         this.projectsContainer.addEventListener('dragover', (e) => {
             if (this.isDragging) {
@@ -1117,9 +1131,179 @@ export class ProjectPanel {
     private async countProjectTotalFocusTime(projectId: string, reminderData: any): Promise<number> {
         return getProjectFocusMinutes(this.plugin, projectId, reminderData);
     }
+    /** 移动端项目管理长按手势：按住 220ms 进入可拖拽就绪态，移动即拖拽；持续按住 850ms 未明显移动弹出上下文菜单。 */
+    private ensureMobileProjectDrag(): void {
+        if (this.mobileProjectDrag || !this.projectsContainer) return;
+        this.mobileProjectDrag = new LongPressTaskDrag<MobileProjectDragItem>(this.projectsContainer, {
+            getSource: target => {
+                if (this.disposed) return null;
+                if (!target.closest || target.closest('button, input, textarea, select, [contenteditable="true"], [contenteditable=""], .project-folder-chevron')) return null;
+
+                const projectEl = target.closest<HTMLElement>('.project-item[data-project-id]');
+                if (projectEl && this.projectsContainer.contains(projectEl)) {
+                    const project = this.getProjectFromElement(projectEl);
+                    if (!project) return null;
+                    return {
+                        element: projectEl,
+                        task: { kind: 'project', project },
+                        title: project.name || project.title || '',
+                        draggable: !this.isDragDisabledBySortMode(),
+                    };
+                }
+
+                const folderHeaderEl = target.closest<HTMLElement>('.project-folder-header[data-folder-id]');
+                if (folderHeaderEl && this.projectsContainer.contains(folderHeaderEl)) {
+                    const folderId = folderHeaderEl.dataset.folderId || '';
+                    const node = this.folderTreeNodeMap.get(folderId);
+                    const folder = node?.folder || ProjectFolderManager.getInstance(this.plugin).getFolders().find(item => item.id === folderId);
+                    if (!folder) return null;
+                    return {
+                        element: folderHeaderEl,
+                        task: { kind: 'folder', folder, node },
+                        title: folder.name || '',
+                        draggable: true,
+                    };
+                }
+
+                return null;
+            },
+            onStart: ({ element, task }) => {
+                if (task.kind === 'project') {
+                    this.isDragging = true;
+                    this.draggedElement = element;
+                    this.draggedProject = task.project;
+                } else {
+                    this.isDraggingFolder = true;
+                    this.draggedFolderElement = element;
+                    this.draggedFolder = task.folder;
+                }
+            },
+            onMove: (item, point) => {
+                this.clearMobileDropIndicators();
+                const target = this.getMobileDropTarget(item, point);
+                if (!target) return;
+                if (target.kind === 'project-reorder') {
+                    this.showDropIndicator(target.element, point);
+                } else if (target.kind === 'project-to-folder') {
+                    target.headerEl.classList.add('drag-over');
+                } else if (target.kind === 'folder-drop') {
+                    this.showFolderDropState(target.headerEl, target.mode);
+                }
+            },
+            onDrop: (item, point) => {
+                const target = this.getMobileDropTarget(item, point);
+                if (!target) return;
+                if (target.kind === 'project-reorder') {
+                    void this.handleDropAtPoint(target.dragged, target.targetProject, target.insertBefore);
+                } else if (target.kind === 'project-to-folder') {
+                    void this.moveProjectToFolder(target.dragged.id, target.folderId);
+                } else if (target.kind === 'project-to-root') {
+                    void this.moveProjectToFolder(target.dragged.id, '');
+                } else if (target.kind === 'folder-drop') {
+                    void this.handleFolderDrop(target.draggedFolder, target.targetFolder, target.mode);
+                }
+            },
+            onEnd: () => {
+                this.isDragging = false;
+                this.draggedElement = null;
+                this.draggedProject = null;
+                this.isDraggingFolder = false;
+                this.draggedFolderElement = null;
+                this.draggedFolder = null;
+                this.clearMobileDropIndicators();
+            },
+            onContextMenu: ({ task }, point) => {
+                if (this.disposed) return;
+                if (task.kind === 'project') {
+                    this.showProjectContextMenu(point, task.project);
+                } else {
+                    this.showFolderContextMenu(point, task.folder, task.node);
+                }
+            },
+            dragDelayMs: 220,
+            contextMenuDelayMs: 850,
+        });
+    }
+
+    private clearMobileDropIndicators(): void {
+        this.hideDropIndicator();
+        this.clearFolderDropState();
+        this.projectsContainer?.querySelectorAll('.project-folder-header.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+    }
+
+    private getMobileDropTarget(item: MobileProjectDragItem, point: TaskDragPoint):
+        | { kind: 'project-reorder'; dragged: any; targetProject: any; element: HTMLElement; insertBefore: boolean }
+        | { kind: 'project-to-folder'; dragged: any; folderId: string; headerEl: HTMLElement }
+        | { kind: 'project-to-root'; dragged: any }
+        | { kind: 'folder-drop'; draggedFolder: any; targetFolder: any; headerEl: HTMLElement; mode: FolderDropMode }
+        | null {
+        if (this.disposed || !this.projectsContainer) return null;
+        const hit = document.elementFromPoint(point.clientX, point.clientY) as HTMLElement | null;
+        if (!hit || !this.projectsContainer.contains(hit)) return null;
+
+        if (item.kind === 'project') {
+            const dragged = this.currentProjectsCache.find(p => p.id === item.project.id);
+            if (!dragged) return null;
+
+            const projectEl = hit.closest<HTMLElement>('.project-item[data-project-id]');
+            if (projectEl && this.projectsContainer.contains(projectEl)) {
+                const targetProject = this.getProjectFromElement(projectEl);
+                if (targetProject && this.canDropHere(dragged, targetProject)) {
+                    const rect = projectEl.getBoundingClientRect();
+                    return {
+                        kind: 'project-reorder',
+                        dragged,
+                        targetProject,
+                        element: projectEl,
+                        insertBefore: point.clientY < rect.top + rect.height / 2,
+                    };
+                }
+                return null;
+            }
+
+            const folderGroupEl = hit.closest<HTMLElement>('.project-folder-group[data-folder-id]');
+            if (folderGroupEl && this.projectsContainer.contains(folderGroupEl)) {
+                const folderId = folderGroupEl.dataset.folderId || '';
+                const headerEl = folderGroupEl.querySelector<HTMLElement>(':scope > .project-folder-header');
+                if (folderId && headerEl) {
+                    return { kind: 'project-to-folder', dragged, folderId, headerEl };
+                }
+            }
+
+            if ((dragged.folderId || '') !== '') {
+                return { kind: 'project-to-root', dragged };
+            }
+            return null;
+        }
+
+        const folderManager = ProjectFolderManager.getInstance(this.plugin);
+        const draggedFolder = folderManager.getFolders().find(f => f.id === item.folder.id);
+        if (!draggedFolder) return null;
+
+        const headerEl = hit.closest<HTMLElement>('.project-folder-header[data-folder-id]');
+        if (!headerEl || !this.projectsContainer.contains(headerEl)) return null;
+        const targetFolderId = headerEl.dataset.folderId || '';
+        if (!targetFolderId || targetFolderId === draggedFolder.id) return null;
+        const targetFolder = folderManager.getFolders().find(f => f.id === targetFolderId);
+        if (!targetFolder) return null;
+
+        const mode = this.getFolderDropMode(headerEl, point);
+        const targetParentId = mode === 'inside' ? targetFolder.id : (targetFolder.parentId || '');
+        if (targetParentId === draggedFolder.id || (targetParentId && folderManager.isFolderDescendant(targetParentId, draggedFolder.id))) {
+            return null;
+        }
+        return { kind: 'folder-drop', draggedFolder, targetFolder, headerEl, mode };
+    }
+
     // 新增：添加拖拽功能
     private addDragFunctionality(projectEl: HTMLElement, project: any) {
-        if (this.isMobileClient || (this.plugin && this.plugin.isInMobileApp)) return;
+        if (this.isMobileClient || (this.plugin && this.plugin.isInMobileApp)) {
+            projectEl.draggable = false;
+            this.ensureMobileProjectDrag();
+            return;
+        }
 
         projectEl.draggable = true;
         projectEl.style.cursor = 'grab';
@@ -1214,7 +1398,7 @@ export class ProjectPanel {
     }
 
     // 新增：显示拖放指示器
-    private showDropIndicator(element: HTMLElement, event: DragEvent) {
+    private showDropIndicator(element: HTMLElement, event: { clientY: number }) {
         this.hideDropIndicator(); // 先清除之前的指示器
 
         const rect = element.getBoundingClientRect();
@@ -1253,12 +1437,15 @@ export class ProjectPanel {
 
     // 新增：处理拖放
     private async handleDrop(draggedProject: any, targetProject: any, event: DragEvent) {
-        try {
-            const dropTarget = (event.currentTarget as HTMLElement) || (event.target as HTMLElement);
-            const rect = dropTarget.getBoundingClientRect();
-            const midpoint = rect.top + rect.height / 2;
-            const insertBefore = event.clientY < midpoint;
+        const dropTarget = (event.currentTarget as HTMLElement) || (event.target as HTMLElement);
+        const rect = dropTarget.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        const insertBefore = event.clientY < midpoint;
+        await this.handleDropAtPoint(draggedProject, targetProject, insertBefore);
+    }
 
+    private async handleDropAtPoint(draggedProject: any, targetProject: any, insertBefore: boolean) {
+        try {
             await this.reorderProjects(draggedProject, targetProject, insertBefore);
 
             showMessage(i18n("sortUpdated"));
@@ -2642,6 +2829,8 @@ export class ProjectPanel {
     }
 
     private renderProjectsAsChecklist(projects: any[]) {
+        this.mobileProjectDrag?.cancel();
+        this.folderTreeNodeMap.clear();
         this.projectsContainer.innerHTML = '';
         const folderManager = ProjectFolderManager.getInstance(this.plugin);
         const folders = folderManager.getFolders();
@@ -2762,6 +2951,8 @@ export class ProjectPanel {
 
         const headerEl = document.createElement('div');
         headerEl.className = 'project-folder-header';
+        headerEl.dataset.folderId = folder.id;
+        this.folderTreeNodeMap.set(folder.id, node);
         headerEl.style.cssText = `
             display: flex;
             align-items: center;
@@ -2814,21 +3005,22 @@ export class ProjectPanel {
             this.openFolderKanban(node);
         });
 
-        const moreBtn = document.createElement('button');
-        moreBtn.className = 'b3-button b3-button--text project-folder-more-btn';
-        moreBtn.innerHTML = '<svg style="width:14px;height:14px;"><use xlink:href="#iconMore"></use></svg>';
-        moreBtn.style.padding = '2px 4px';
-        moreBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.showFolderContextMenu(e, folder, node);
-        });
-
         headerEl.appendChild(chevronEl);
         headerEl.appendChild(iconEl);
         headerEl.appendChild(nameEl);
         headerEl.appendChild(countEl);
         headerEl.appendChild(openKanbanBtn);
-        headerEl.appendChild(moreBtn);
+        if (!(this.isMobileClient || this.plugin?.isInMobileApp)) {
+            const moreBtn = document.createElement('button');
+            moreBtn.className = 'b3-button b3-button--text project-folder-more-btn';
+            moreBtn.innerHTML = '<svg style="width:14px;height:14px;"><use xlink:href="#iconMore"></use></svg>';
+            moreBtn.style.padding = '2px 4px';
+            moreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showFolderContextMenu(e, folder, node);
+            });
+            headerEl.appendChild(moreBtn);
+        }
 
         const childrenEl = document.createElement('div');
         childrenEl.className = 'project-folder-children';
@@ -2992,7 +3184,7 @@ export class ProjectPanel {
         }
     }
 
-    private getFolderDropMode(element: HTMLElement, event: DragEvent): FolderDropMode {
+    private getFolderDropMode(element: HTMLElement, event: { clientY: number }): FolderDropMode {
         const rect = element.getBoundingClientRect();
         const y = event.clientY - rect.top;
         if (y < rect.height * 0.25) return 'before';
@@ -3071,64 +3263,63 @@ export class ProjectPanel {
         projectEl.dataset.projectId = project.id;
         projectEl.dataset.priority = priority;
 
-        const itemMoreBtn = document.createElement('button');
-        itemMoreBtn.type = 'button';
-        itemMoreBtn.className = 'b3-button b3-button--text project-item__more-button';
-        itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
-        const shouldAlwaysShowMoreButton = !!this.plugin?.isInMobileApp;
-        itemMoreBtn.style.cssText = `
-            position: absolute;
-            top: 4px;
-            right: 4px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            padding: 0;
-            border-radius: 4px;
-            opacity: ${shouldAlwaysShowMoreButton ? '1' : '0'};
-            pointer-events: ${shouldAlwaysShowMoreButton ? 'auto' : 'none'};
-            transition: opacity 0.2s ease;
-            z-index: 10;
-        `;
-        itemMoreBtn.classList.add('ariaLabel');
-        itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
-        itemMoreBtn.draggable = false;
+        const isMobile = this.isMobileClient || !!this.plugin?.isInMobileApp;
+        if (!isMobile) {
+            const itemMoreBtn = document.createElement('button');
+            itemMoreBtn.type = 'button';
+            itemMoreBtn.className = 'b3-button b3-button--text project-item__more-button';
+            itemMoreBtn.innerHTML = '<svg class="b3-button__icon"><use xlink:href="#iconMore"></use></svg>';
+            itemMoreBtn.style.cssText = `
+                position: absolute;
+                top: 4px;
+                right: 4px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 24px;
+                height: 24px;
+                padding: 0;
+                border-radius: 4px;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.2s ease;
+                z-index: 10;
+            `;
+            itemMoreBtn.classList.add('ariaLabel');
+            itemMoreBtn.setAttribute('aria-label', i18n("more") || "更多");
+            itemMoreBtn.draggable = false;
 
-        const setMoreButtonVisible = (visible: boolean) => {
-            if (shouldAlwaysShowMoreButton) return;
-            itemMoreBtn.style.opacity = visible ? '1' : '0';
-            itemMoreBtn.style.pointerEvents = visible ? 'auto' : 'none';
-        };
+            const setMoreButtonVisible = (visible: boolean) => {
+                itemMoreBtn.style.opacity = visible ? '1' : '0';
+                itemMoreBtn.style.pointerEvents = visible ? 'auto' : 'none';
+            };
 
-        if (!shouldAlwaysShowMoreButton) {
             projectEl.addEventListener('mouseenter', () => setMoreButtonVisible(true));
             projectEl.addEventListener('mouseleave', () => setMoreButtonVisible(false));
             itemMoreBtn.addEventListener('focus', () => setMoreButtonVisible(true));
             itemMoreBtn.addEventListener('blur', () => setMoreButtonVisible(false));
+
+            itemMoreBtn.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+            });
+            itemMoreBtn.addEventListener('dragstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            itemMoreBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const rect = itemMoreBtn.getBoundingClientRect();
+                this.showProjectContextMenu({
+                    clientX: rect.right,
+                    clientY: rect.bottom + 4
+                }, project);
+            });
+            projectEl.appendChild(itemMoreBtn);
         }
 
-        itemMoreBtn.addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-        });
-        itemMoreBtn.addEventListener('dragstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        });
-        itemMoreBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const rect = itemMoreBtn.getBoundingClientRect();
-            this.showProjectContextMenu({
-                clientX: rect.right,
-                clientY: rect.bottom + 4
-            }, project);
-        });
-        projectEl.appendChild(itemMoreBtn);
-
-        if (!this.isDragDisabledBySortMode()) {
+        if (isMobile || !this.isDragDisabledBySortMode()) {
             this.addDragFunctionality(projectEl, project);
         }
         // 支持接收来自项目看板的任务拖入（修改任务所属项目）
