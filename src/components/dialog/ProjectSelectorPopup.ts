@@ -122,11 +122,17 @@ export class ProjectSelectorPopup {
         }
         
         const statusWrap = document.createElement('div');
-        statusWrap.style.cssText = 'padding: 4px 8px; border-bottom: 1px solid var(--b3-border-color);';
+        statusWrap.style.cssText = 'position: relative; padding: 4px 8px; border-bottom: 1px solid var(--b3-border-color);';
+        statusWrap.innerHTML = `
+            <svg aria-hidden="true" width="14" height="14" fill="currentColor"
+                style="position: absolute; z-index: 1; left: 16px; top: 50%; transform: translateY(-50%); color: var(--b3-theme-on-surface); pointer-events: none;">
+                <use xlink:href="#iconFilter"></use>
+            </svg>
+        `;
 
         this.statusSelect = document.createElement('select');
         this.statusSelect.className = 'b3-select project-selector-status-filter';
-        this.statusSelect.style.cssText = 'width: 100%; box-sizing: border-box;';
+        this.statusSelect.style.cssText = 'width: 100%; box-sizing: border-box; padding-left: 28px;';
         this.statusSelect.setAttribute('aria-label', i18n('projectStatus') || '项目状态');
         this.statusSelect.add(new Option(i18n('allProjects') || '全部项目', 'all'));
         this.projectManager.getStatusManager().getStatuses().forEach(status => {
