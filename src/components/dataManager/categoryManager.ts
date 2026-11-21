@@ -40,6 +40,8 @@ export class CategoryManager {
     private static instance: CategoryManager;
     private categories: Category[] = [];
     private plugin: any;
+    private initialized: boolean = false;
+    private initPromise: Promise<void> | null = null;
 
     private constructor(plugin: any) {
         this.plugin = plugin;
@@ -48,8 +50,10 @@ export class CategoryManager {
     public static getInstance(plugin?: any): CategoryManager {
         if (!CategoryManager.instance) {
             CategoryManager.instance = new CategoryManager(plugin);
-        } else if (plugin && !CategoryManager.instance.plugin) {
+        } else if (plugin && CategoryManager.instance.plugin !== plugin) {
             CategoryManager.instance.plugin = plugin;
+            CategoryManager.instance.initialized = false;
+            CategoryManager.instance.initPromise = null;
         }
         return CategoryManager.instance;
     }
@@ -57,13 +61,24 @@ export class CategoryManager {
     /**
      * 初始化分类数据
      */
-    public async initialize(): Promise<void> {
+    public async initialize(force: boolean = false): Promise<void> {
+        if (this.initialized && !force) return;
+        if (!force && this.initPromise) return this.initPromise;
+        const pending = (async () => {
+            try {
+                await this.loadCategories();
+                this.initialized = true;
+            } catch (error) {
+                console.error("Failed to initialize categories:", error);
+                // 如果加载失败，使用默认分类
+                this.categories = getLocalizedDefaultCategories();
+            }
+        })();
+        this.initPromise = pending;
         try {
-            await this.loadCategories();
-        } catch (error) {
-            console.error("Failed to initialize categories:", error);
-            // 如果加载失败，使用默认分类
-            this.categories = getLocalizedDefaultCategories();
+            await pending;
+        } finally {
+            if (this.initPromise === pending) this.initPromise = null;
         }
     }
 

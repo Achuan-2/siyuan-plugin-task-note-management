@@ -48,7 +48,7 @@ import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
 import { VipManager } from '../vip/vip';
 import { createPomodoroStartSubmenu as createSharedPomodoroStartSubmenu } from "@/utils/pomodoroPresets";
 import { buildProjectCategoryOrderMap, buildProjectStatusOrderMap, compareProjectsByPanelSort, normalizeProjectPanelSortCriteria } from "./ProjectPanel";
-import type { KanbanStatus } from "../dataManager/projectManager";
+import { ProjectManager, type KanbanStatus } from "../dataManager/projectManager";
 import { isOpenEndedStartDateTask, shouldTreatStartDateOnlyAsOverdue } from "../../utils/startDateOverdue";
 import {
     getReminderSkipHolidaysEffective,
@@ -147,6 +147,7 @@ export class ReminderPanel {
     private reminderSharedRenderSignature: string | undefined;
     private reminderSharedRenderVersion: number = 0;
     private isLoading: boolean = false;
+    private hasInitializedUI: boolean = false;
     private reminderLoadVersion: number = 0;
     private pendingReminderLoad: boolean = false;
     private pendingReminderForceLoad: boolean = false;
@@ -215,8 +216,11 @@ export class ReminderPanel {
             }
             this.loadTimeoutId = window.setTimeout(async () => {
                 this.loadTimeoutId = null;
-                // 撤回只改变任务数据，沿用已有番茄统计，避免恢复卡片前重读记录文件。
-                if (!event?.detail?.taskUndo) {
+                // 撤回只改变任务数据，沿用已有番茄统计；番茄记录仍在后台初始化时也不阻塞任务刷新。
+                const pomodoroReady = typeof this.pomodoroRecordManager?.isReady === 'function'
+                    ? this.pomodoroRecordManager.isReady()
+                    : true;
+                if (!event?.detail?.taskUndo && pomodoroReady) {
                     try {
                         await this.pomodoroRecordManager.refreshData();
                     } catch (e) {
@@ -269,50 +273,58 @@ export class ReminderPanel {
 
     private async initializeAsync() {
         if (this.disposed) return;
-        // 初始化分类管理器
-        await this.categoryManager.initialize();
-        if (this.disposed) return;
 
-        // 番茄统计不可用时仍加载任务；存储管理器保留失败状态，后续刷新可重试。
-        try {
-            await this.pomodoroRecordManager.initialize();
-        } catch (error) {
-            console.warn("Failed to initialize task panel pomodoro statistics:", error);
-        }
-        if (this.disposed) return;
-
-        // 加载持久化设置（例如 showCompletedSubtasks）
-        try {
-            const settings = await this.plugin.loadSettings();
-            this.viewMode = normalizePanelViewMode(settings.reminderPanelViewMode);
-            if (this.disposed) return;
-            if (settings.showCompletedSubtasks !== undefined) {
-                this.showCompletedSubtasks = !!settings.showCompletedSubtasks;
-            }
-            if (typeof settings.reminderPanelShowProjectKanbanStatus === 'boolean') {
-                this.showProjectKanbanStatus = settings.reminderPanelShowProjectKanbanStatus;
-            }
-            if (typeof settings.clipTitleToOneLine === 'boolean') {
-                this.clipTitleToOneLine = settings.clipTitleToOneLine;
-            }
-            if (typeof settings.showTaskCardDocumentTitle === 'boolean') {
-                this.showTaskCardDocumentTitle = settings.showTaskCardDocumentTitle;
-            }
-            if (Array.isArray(settings.reminderPanelSelectedCategories)) {
-                this.selectedCategories = settings.reminderPanelSelectedCategories;
-            }
-        } catch (e) {
-            // ignore
+        // 番茄统计在后台异步初始化，不阻塞任务列表首屏渲染；就绪后静默补刷角标。
+        const isPomodoroReady = typeof this.pomodoroRecordManager?.isReady === 'function'
+            && this.pomodoroRecordManager.isReady();
+        if (!isPomodoroReady) {
+            void this.pomodoroRecordManager.initialize().then(() => {
+                if (!this.disposed && this.hasInitializedUI) {
+                    void this.loadReminders();
+                }
+            }).catch((error: any) => {
+                console.warn("Failed to initialize task panel pomodoro statistics:", error);
+            });
         }
 
-        await this.refreshReminderSkipDateContext();
+        // 并行加载分类、插件设置、节假日上下文与自定义筛选器，消除启动串行瀑布。
+        const [, settings, filterSettings] = await Promise.all([
+            this.categoryManager.initialize(),
+            this.plugin.loadSettings().catch(() => null),
+            this.loadCustomFilters().catch(() => null),
+            this.refreshReminderSkipDateContext(),
+        ]);
         if (this.disposed) return;
+
+        if (settings) {
+            try {
+                this.viewMode = normalizePanelViewMode(settings.reminderPanelViewMode);
+                if (settings.showCompletedSubtasks !== undefined) {
+                    this.showCompletedSubtasks = !!settings.showCompletedSubtasks;
+                }
+                if (typeof settings.reminderPanelShowProjectKanbanStatus === 'boolean') {
+                    this.showProjectKanbanStatus = settings.reminderPanelShowProjectKanbanStatus;
+                }
+                if (typeof settings.clipTitleToOneLine === 'boolean') {
+                    this.clipTitleToOneLine = settings.clipTitleToOneLine;
+                }
+                if (typeof settings.showTaskCardDocumentTitle === 'boolean') {
+                    this.showTaskCardDocumentTitle = settings.showTaskCardDocumentTitle;
+                }
+                if (Array.isArray(settings.reminderPanelSelectedCategories)) {
+                    this.selectedCategories = settings.reminderPanelSelectedCategories;
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
+
         this.initUI();
-        await this.loadSortConfig();
-        if (this.disposed) return;
-        await this.loadCustomFilters(); // 加载自定义过滤器配置
-        if (this.disposed) return;
-        await this.updateFilterSelect(); // 先确保自定义筛选选项已创建，再恢复上次选择
+        this.hasInitializedUI = true;
+        await Promise.all([
+            this.loadSortConfig(),
+            this.updateFilterSelect(undefined, filterSettings),
+        ]);
         if (this.disposed) return;
         await this.loadFilterTab(); // 加载筛选配置（在选项创建后设置值）
         if (this.disposed) return;
@@ -335,7 +347,6 @@ export class ReminderPanel {
 
         // 确保对话框样式已加载
         this.addReminderDialogStyles();
-        this.reminderUpdatedHandler()
         // 监听提醒更新事件
         window.addEventListener('reminderUpdated', this.reminderUpdatedHandler);
         // 监听排序配置更新事件
@@ -1464,16 +1475,18 @@ export class ReminderPanel {
     }
 
     // 动态更新filterSelect选项
-    private async updateFilterSelect(preferredValue?: string) {
+    private async updateFilterSelect(preferredValue?: string, preloadedSettings?: any) {
         if (!this.filterSelect) return;
 
-        const settings = await this.plugin.loadData(FILTER_SETTINGS_FILE);
+        const settings = preloadedSettings !== undefined
+            ? preloadedSettings
+            : await this.plugin.loadData(FILTER_SETTINGS_FILE);
         const customFilters = settings?.customFilters || [];
         const filterOrder = settings?.filterOrder || [];
         const hiddenBuiltInFilters: string[] = settings?.hiddenBuiltInFilters || [];
 
-        // 重新加载自定义过滤器缓存
-        await this.loadCustomFilters();
+        // 直接同步自定义过滤器缓存，避免重复读取 filter-settings.json
+        this.applyCustomFiltersData(settings);
 
         // 保存当前选中的值
         const currentValue = this.filterSelect.value;
@@ -1637,10 +1650,12 @@ export class ReminderPanel {
 
 
 
-    private async buildMilestoneMap() {
+    private async buildMilestoneMap(preloadedProjectData?: any) {
         this.milestoneMap.clear();
         try {
-            const projectData = await this.plugin.loadProjectData() || {};
+            const projectData = preloadedProjectData !== undefined
+                ? (preloadedProjectData || {})
+                : (await this.plugin.loadProjectData() || {});
 
             for (const projectId in projectData) {
                 const project = projectData[projectId];
@@ -1856,11 +1871,31 @@ export class ReminderPanel {
     /**
      * 获取给定提醒的所有后代 id（深度优先）
      */
-    private getAllDescendantIds(id: string, reminderMap: Map<string, any>): string[] {
+    private getAllDescendantIds(
+        id: string,
+        reminderMap: Map<string, any>,
+        childrenByParentId?: Map<string, string[]>
+    ): string[] {
         const result: string[] = [];
         const stack = [id];
         const visited = new Set<string>(); // 防止循环引用
         visited.add(id);
+
+        if (childrenByParentId) {
+            while (stack.length > 0) {
+                const curId = stack.pop()!;
+                const children = childrenByParentId.get(curId);
+                if (!children) continue;
+                for (const childId of children) {
+                    if (!visited.has(childId)) {
+                        result.push(childId);
+                        stack.push(childId);
+                        visited.add(childId);
+                    }
+                }
+            }
+            return result;
+        }
 
         while (stack.length > 0) {
             const curId = stack.pop()!;
@@ -2167,12 +2202,21 @@ export class ReminderPanel {
         const scrollLeft = this.remindersContainer.scrollLeft;
 
         try {
-            // 构造里程碑映射
-            await this.buildMilestoneMap();
-            await this.refreshReminderSkipDateContext();
+            // 并行加载项目数据、跳过日期上下文与全部任务，避免串行瀑布
+            const projectDataPromise = typeof this.plugin?.loadProjectData === 'function'
+                ? this.plugin.loadProjectData().catch((error: any) => {
+                    console.warn("ReminderPanel: failed to load project data:", error);
+                    return {};
+                })
+                : Promise.resolve(undefined);
+            const [projectData, , reminderData] = await Promise.all([
+                projectDataPromise,
+                this.refreshReminderSkipDateContext(),
+                getAllReminders(this.plugin, undefined, force, 'sidebar'),
+            ]);
             if (!isCurrentLoad()) return;
-
-            const reminderData = await getAllReminders(this.plugin, undefined, force, 'sidebar');
+            // 复用本轮项目数据构造里程碑映射
+            await this.buildMilestoneMap(projectData);
             if (!isCurrentLoad()) return;
             if (!reminderData || typeof reminderData !== 'object') {
                 this.renderReminders([]);
@@ -2205,20 +2249,31 @@ export class ReminderPanel {
                 if (!isCurrentLoad()) return;
             }
 
-            // 过滤已归档分组的未完成任务
-            const filteredReminders = await this.filterArchivedGroupTasks(allRemindersWithInstances);
+            // 过滤已归档分组的未完成任务（复用本轮已加载的 projectData）
+            const filteredReminders = await this.filterArchivedGroupTasks(allRemindersWithInstances, projectData);
             if (!isCurrentLoad()) return;
 
-            // 构造 map 便于查找父子关系
+            // 构造 map 与父子索引，避免后续父任务驱动阶段出现 O(N²) 全量扫描
             const reminderMap = new Map<string, any>();
-            filteredReminders.forEach(r => reminderMap.set(r.id, r));
+            const childrenByParentId = new Map<string, string[]>();
+            filteredReminders.forEach(r => {
+                reminderMap.set(r.id, r);
+                if (r.parentId) {
+                    let list = childrenByParentId.get(r.parentId);
+                    if (!list) {
+                        list = [];
+                        childrenByParentId.set(r.parentId, list);
+                    }
+                    list.push(r.id);
+                }
+            });
 
             // 将所有任务保存到 allRemindersMap 中，用于后续计算进度
             this.allRemindersMap = new Map(reminderMap);
             this.completedSubtaskCollapse.sync(allRemindersWithInstances);
 
-            // 刷新项目看板状态名称缓存（供“看板状态名称筛选”与“默认隐藏放弃”使用）
-            await this.ensureProjectKanbanStatusNameCache(filteredReminders);
+            // 刷新项目看板状态名称缓存（复用本轮 projectData，供“看板状态名称筛选”与“默认隐藏放弃”使用）
+            await this.ensureProjectKanbanStatusNameCache(filteredReminders, projectData);
             if (!isCurrentLoad()) return;
 
             // 0. 如果当前是自定义过滤器，提前同步分类设置
@@ -2261,7 +2316,7 @@ export class ReminderPanel {
 
             // 父任务驱动: 如果父任务匹配，其所有后代都应显示
             for (const parent of directlyMatchingReminders) {
-                const descendants = this.getAllDescendantIds(parent.id, reminderMap);
+                const descendants = this.getAllDescendantIds(parent.id, reminderMap, childrenByParentId);
                 descendants.forEach(id => {
                     // 如果父任务未完成且开关关闭，不显示已完成的子任务
                     if (!parent.completed && !this.showCompletedSubtasks) {
@@ -2378,8 +2433,8 @@ export class ReminderPanel {
                 this.currentRemindersCache = [...displayReminders];
             }
 
-            // 5. 预处理异步数据以提高渲染性能（传入完整 reminderData 以便准确检测子代）
-            const asyncDataCache = await this.preprocessAsyncData(displayReminders, reminderData);
+            // 5. 预处理异步数据以提高渲染性能（传入完整 reminderData 以便准确检测子代，并复用本轮 projectData）
+            const asyncDataCache = await this.preprocessAsyncData(displayReminders, reminderData, projectData);
             // 异步预处理期间可能发生编辑或切换筛选，旧列表不能再提交到 DOM。
             if (!isCurrentLoad()) return;
             // 保存到实例级缓存，供动态展开子任务时复用
@@ -2472,32 +2527,34 @@ export class ReminderPanel {
      * @param reminders 要渲染的任务列表
      * @returns 异步数据缓存
      */
-    private async preprocessAsyncData(reminders: any[], reminderDataFull?: any): Promise<Map<string, any>> {
+    private async preprocessAsyncData(reminders: any[], reminderDataFull?: any, preloadedProjectData?: any): Promise<Map<string, any>> {
         const asyncDataCache = new Map<string, any>();
-        let habitData: any = {};
 
-        try {
-            habitData = await this.plugin.loadHabitData();
-        } catch (error) {
-            console.warn("Failed to get habit data in batch:", error);
-            habitData = {};
-        }
+        // 仅当存在关联习惯的任务时才加载习惯数据（避免无关联习惯时读取大量 habitCheckin 文件）
+        const habitPromise = reminders.some(reminder => reminder?.linkedHabitId)
+            ? this.plugin.loadHabitData().catch((error: any) => {
+                console.warn("Failed to get habit data in batch:", error);
+                return {};
+            })
+            : Promise.resolve({});
 
         const docTitleByReminderId = new Map<string, string>();
+        let docTitlesPromise: Promise<void> = Promise.resolve();
         if (this.isTaskCardDocumentTitleEnabled()) {
             const docIdsToQuery = new Set<string>();
+            const tabDocTitleCache = this.getDocTitleCacheForCurrentTab();
 
             reminders.forEach((reminder) => {
                 if (!this.shouldShowDocumentTitleForReminder(reminder)) return;
 
                 const existingTitle = String(reminder.docTitle || '').trim();
                 if (existingTitle) {
-                    this.getDocTitleCacheForCurrentTab().set(reminder.docId, existingTitle);
+                    tabDocTitleCache.set(reminder.docId, existingTitle);
                     docTitleByReminderId.set(reminder.id, existingTitle);
                     return;
                 }
 
-                if (this.getDocTitleCacheForCurrentTab().has(reminder.docId)) {
+                if (tabDocTitleCache.has(reminder.docId)) {
                     return;
                 }
 
@@ -2507,55 +2564,69 @@ export class ReminderPanel {
             if (docIdsToQuery.size > 0) {
                 const docIds = Array.from(docIdsToQuery);
                 const batchSize = 100;
+                const batches: string[][] = [];
                 for (let i = 0; i < docIds.length; i += batchSize) {
-                    const batchIds = docIds.slice(i, i + batchSize);
+                    batches.push(docIds.slice(i, i + batchSize));
+                }
+                docTitlesPromise = Promise.all(batches.map(async (batchIds, batchIdx) => {
                     const sqlScript = `select id, content from blocks where id in (${batchIds.map(id => `'${id}'`).join(',')})`;
                     try {
                         const results = await sql(sqlScript);
                         if (results && Array.isArray(results)) {
                             for (const row of results) {
                                 if (row && row.id && row.content) {
-                                    this.getDocTitleCacheForCurrentTab().set(row.id, row.content.trim());
+                                    tabDocTitleCache.set(row.id, row.content.trim());
                                 }
                             }
                         }
                     } catch (err) {
-                        console.warn(`Failed to fetch document titles in batch (${i}-${i + batchSize}):`, err);
+                        console.warn(`Failed to fetch document titles in batch (${batchIdx * batchSize}-${(batchIdx + 1) * batchSize}):`, err);
                     }
-                }
+                })).then(() => {});
             }
+        }
 
+        // 批量获取番茄钟计数和总专注时长（若番茄统计仍在后台首次初始化，则先不阻塞首屏，就绪后自动补刷）
+        const shouldWaitPomodoro = typeof this.pomodoroRecordManager?.isReady !== 'function'
+            || this.pomodoroRecordManager.isReady();
+        const pomodoroPromise = shouldWaitPomodoro
+            ? this.pomodoroRecordManager
+                .resolveReminderPomodoroStatsBatch(reminders, reminderDataFull || reminders)
+                .catch(error => {
+                    console.warn('Failed to get task pomodoro statistics:', error);
+                    return new Map();
+                })
+            : Promise.resolve(new Map());
+
+        // 批量获取项目信息（优先复用本轮已加载的 projectData）
+        const projectPromise = preloadedProjectData !== undefined
+            ? Promise.resolve(preloadedProjectData || {})
+            : (reminders.some(reminder => reminder.projectId)
+                ? this.plugin.loadProjectData().catch(error => {
+                    console.warn('Failed to get project information:', error);
+                    return {};
+                })
+                : Promise.resolve({}));
+
+        // 并行执行所有异步操作
+        const [habitData, , pomodoroStats, projectData] = await Promise.all([
+            habitPromise,
+            docTitlesPromise,
+            pomodoroPromise,
+            projectPromise,
+        ]);
+
+        if (this.isTaskCardDocumentTitleEnabled()) {
+            const tabDocTitleCache = this.getDocTitleCacheForCurrentTab();
             reminders.forEach((reminder) => {
                 if (!this.shouldShowDocumentTitleForReminder(reminder)) return;
-                const title = this.getDocTitleCacheForCurrentTab().get(reminder.docId) || '';
+                const title = tabDocTitleCache.get(reminder.docId) || '';
                 docTitleByReminderId.set(reminder.id, title);
                 if (title) {
                     reminder.docTitle = title;
                 }
             });
         }
-
-        // 批量获取番茄钟计数和总专注时长（分钟）
-        const pomodoroPromise = this.pomodoroRecordManager
-            .resolveReminderPomodoroStatsBatch(reminders, reminderDataFull || reminders)
-            .catch(error => {
-                console.warn('Failed to get task pomodoro statistics:', error);
-                return new Map();
-            });
-
-        // 批量获取项目信息
-        const projectPromise = reminders.some(reminder => reminder.projectId)
-            ? this.plugin.loadProjectData().catch(error => {
-                console.warn('Failed to get project information:', error);
-                return {};
-            })
-            : Promise.resolve({});
-
-        // 并行执行所有异步操作
-        const [pomodoroStats, projectData] = await Promise.all([
-            pomodoroPromise,
-            projectPromise,
-        ]);
 
         // 构建缓存
         reminders.forEach(reminder => {
@@ -2758,8 +2829,8 @@ export class ReminderPanel {
         return header;
     }
 
-    private getReminderTodayGroup(reminder: any, reminders: any[], today: string): 'today' | 'daily' {
-        const reminderMap = new Map(reminders.map(item => [item.id, item]));
+    private getReminderTodayGroup(reminder: any, reminders: any[], today: string, existingMap?: Map<string, any>): 'today' | 'daily' {
+        const reminderMap = existingMap || new Map(reminders.map(item => [item.id, item]));
         let root = reminder;
         const visited = new Set<string>();
         while (root?.parentId && !visited.has(root.parentId)) {
@@ -2771,8 +2842,8 @@ export class ReminderPanel {
         return this.isDailyDessertTaskForDate(root, today) && !!root.isAvailableToday ? 'daily' : 'today';
     }
 
-    private getTodayCompletedGroup(reminder: any, reminders: any[], today: string): 'completed' | 'ignored' {
-        const reminderMap = new Map(reminders.map(item => [item.id, item]));
+    private getTodayCompletedGroup(reminder: any, reminders: any[], today: string, existingMap?: Map<string, any>): 'completed' | 'ignored' {
+        const reminderMap = existingMap || new Map(reminders.map(item => [item.id, item]));
         let root = reminder;
         const visited = new Set<string>();
         while (root?.parentId && !visited.has(root.parentId)) {
@@ -2884,9 +2955,9 @@ export class ReminderPanel {
         let activeCustomGroup: ReminderGroup | null = null;
         const sectionCounts = topLevelReminders.reduce((counts, item) => {
             if (isTodayTaskGroupedView) {
-                counts[this.getReminderTodayGroup(item, reminders, today)]++;
+                counts[this.getReminderTodayGroup(item, reminders, today, indexes.visible.byId)]++;
             } else if (isTodayCompletedGroupedView) {
-                counts[this.getTodayCompletedGroup(item, reminders, today)]++;
+                counts[this.getTodayCompletedGroup(item, reminders, today, indexes.visible.byId)]++;
             }
             return counts;
         }, { today: 0, daily: 0, completed: 0, ignored: 0 });
@@ -2912,8 +2983,8 @@ export class ReminderPanel {
                 if (isTodayTaskGroupedView || isTodayCompletedGroupedView) {
                     if (level === 0) {
                         const nextGroup = isTodayTaskGroupedView
-                            ? this.getReminderTodayGroup(reminder, reminders, today)
-                            : this.getTodayCompletedGroup(reminder, reminders, today);
+                            ? this.getReminderTodayGroup(reminder, reminders, today, indexes.visible.byId)
+                            : this.getTodayCompletedGroup(reminder, reminders, today, indexes.visible.byId);
                         if (nextGroup !== activeGroup) {
                             activeGroup = nextGroup;
                             const newHeader = this.createTodayGroupHeader(nextGroup, sectionCounts[nextGroup] || 0);
@@ -3780,33 +3851,31 @@ export class ReminderPanel {
         }
     }
 
-    private async filterArchivedGroupTasks(reminders: any[]): Promise<any[]> {
+    private async filterArchivedGroupTasks(reminders: any[], preloadedProjectData?: any): Promise<any[]> {
         try {
-            // 收集所有涉及的项目ID
+            // 收集所有涉及的项目ID（只有存在 customGroupId 的任务才可能属于已归档分组）
             const projectIds = new Set<string>();
             reminders.forEach(r => {
-                if (r.projectId) {
+                if (r.projectId && r.customGroupId && !r.completed) {
                     projectIds.add(r.projectId);
                 }
             });
+            if (projectIds.size === 0) return reminders;
 
-            // 获取所有项目的分组信息，构建已归档分组的ID集合
+            // 直接复用本轮已加载的 projectData 同步提取已归档分组 ID，避免逐项目异步读取
+            const projectData = preloadedProjectData !== undefined
+                ? (preloadedProjectData || {})
+                : (await this.plugin.loadProjectData() || {});
             const archivedGroupIds = new Set<string>();
-            const { ProjectManager } = await import('../dataManager/projectManager');
-            const projectManager = ProjectManager.getInstance(this.plugin);
-
             for (const projectId of projectIds) {
-                try {
-                    const groups = await projectManager.getProjectCustomGroups(projectId);
-                    groups.forEach((g: any) => {
-                        if (g.archived) {
-                            archivedGroupIds.add(g.id);
-                        }
-                    });
-                } catch (e) {
-                    console.warn(`Failed to get group information for project ${projectId}`, e);
+                const groups = projectData[projectId]?.customGroups || [];
+                for (const g of groups) {
+                    if (g?.archived && g.id) {
+                        archivedGroupIds.add(g.id);
+                    }
                 }
             }
+            if (archivedGroupIds.size === 0) return reminders;
 
             // 过滤：如果任务属于已归档分组且未完成，则过滤掉
             return reminders.filter(r => {
@@ -3822,28 +3891,9 @@ export class ReminderPanel {
     }
 
     private generateAllRemindersWithInstances(reminderData: any, today: string): any[] {
-        const reminders = Object.values(reminderData).filter((reminder: any) => {
-            // 包含以下任务：
-            // 1. 有日期的任务
-            // 2. 有父任务的任务（子任务）
-            // 3. 有子任务的任务（父任务）
-            // 4. 已完成的任务
-            // 5. 没有日期的独立任务（既不是父任务也不是子任务，用于"无日期任务"筛选）
-            const shouldInclude = reminder && typeof reminder === 'object' && reminder.id &&
-                (reminder.date || reminder.parentId || this.hasChildren(reminder.id, reminderData) || reminder.completed || (!reminder.date && !reminder.parentId));
-
-            if (reminder && reminder.id) {
-                // console.log(`Task ${reminder.id} (${reminder.title}):`, {
-                //     hasDate: !!reminder.date,
-                //     hasParentId: !!reminder.parentId,
-                //     hasChildren: this.hasChildren(reminder.id, reminderData),
-                //     completed: reminder.completed,
-                //     shouldInclude
-                // });
-            }
-
-            return shouldInclude;
-        });
+        const reminders = Object.values(reminderData).filter((reminder: any) =>
+            !!(reminder && typeof reminder === 'object' && reminder.id)
+        );
 
         // console.log(`Total generated tasks: ${reminders.length}`);
         const allReminders = [];
@@ -4010,18 +4060,6 @@ export class ReminderPanel {
         });
 
         return allReminders;
-    }
-
-    /**
-     * 检查提醒是否有子任务
-     * @param reminderId 提醒ID
-     * @param reminderData 提醒数据对象
-     * @returns 是否有子任务
-     */
-    private hasChildren(reminderId: string, reminderData: any): boolean {
-        return Object.values(reminderData).some((reminder: any) =>
-            reminder && reminder.parentId === reminderId
-        );
     }
 
     public async getTaskCountByTabs(tabNames: string[], excludeDesserts: boolean = false): Promise<number> {
@@ -4369,19 +4407,25 @@ export class ReminderPanel {
         return this.customFilterCache.get(filterId);
     }
 
+    private applyCustomFiltersData(settings: any) {
+        const customFilters = settings?.customFilters || [];
+        this.customFilterCache.clear();
+        customFilters.forEach((filter: any) => {
+            this.customFilterCache.set(filter.id, filter);
+        });
+    }
+
     /**
      * 加载并缓存自定义过滤器配置
      */
-    private async loadCustomFilters() {
+    private async loadCustomFilters(): Promise<any> {
         try {
             const settings = await this.plugin.loadData(FILTER_SETTINGS_FILE);
-            const customFilters = settings?.customFilters || [];
-            this.customFilterCache.clear();
-            customFilters.forEach((filter: any) => {
-                this.customFilterCache.set(filter.id, filter);
-            });
+            this.applyCustomFiltersData(settings);
+            return settings;
         } catch (error) {
             console.error('Failed to load custom filters:', error);
+            return null;
         }
     }
 
@@ -4428,7 +4472,7 @@ export class ReminderPanel {
         return this.getReminderKanbanStatusInfo(reminder)?.name || null;
     }
 
-    private async ensureProjectKanbanStatusNameCache(reminders: any[]): Promise<void> {
+    private async ensureProjectKanbanStatusNameCache(reminders: any[], preloadedProjectData?: any): Promise<void> {
         try {
             const projectIds = Array.from(
                 new Set(
@@ -4438,11 +4482,10 @@ export class ReminderPanel {
                 )
             );
 
-            const { ProjectManager } = await import('../dataManager/projectManager');
             const projectManager = ProjectManager.getInstance(this.plugin);
+            const defaultStatuses = projectManager.getDefaultKanbanStatuses();
             this.defaultKanbanStatusCache = new Map(
-                projectManager.getDefaultKanbanStatuses()
-                    .map((status: KanbanStatus) => [status.id, status])
+                defaultStatuses.map((status: KanbanStatus) => [status.id, status])
             );
 
             if (projectIds.length === 0) {
@@ -4450,16 +4493,19 @@ export class ReminderPanel {
                 return;
             }
 
+            const projectData = preloadedProjectData !== undefined
+                ? (preloadedProjectData || {})
+                : (await this.plugin.loadProjectData() || {});
             const nextCache: Map<string, Map<string, KanbanStatus>> = new Map();
 
-            await Promise.all(projectIds.map(async projectId => {
+            for (const projectId of projectIds) {
                 try {
-                    const statusMap = await projectManager.getProjectKanbanStatusMap(projectId);
+                    const statusMap = projectManager.getProjectKanbanStatusMapFromData(projectData, projectId, defaultStatuses);
                     nextCache.set(projectId, statusMap);
                 } catch (error) {
                     console.warn(`[ReminderPanel] Failed to load project statuses: ${projectId}`, error);
                 }
-            }));
+            }
 
             this.projectKanbanStatusCache = nextCache;
         } catch (error) {

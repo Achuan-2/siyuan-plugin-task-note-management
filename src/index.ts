@@ -439,8 +439,14 @@ export default class ReminderPlugin extends Plugin {
     private subscriptionCache: any = null;
     private subscriptionTasksCache: { [id: string]: any } = {};
     private readonly pluginDataChanges = new PluginDataChanges(readDir, () => `/data/storage/petal/${this.name}`);
+    private pluginDataBaselineReady = false;
     private holidayDataCache: any = null;
     private pomodoroRecordsCache: any = null;
+    private readonly inFlightDataLoads = new Map<string, Promise<any>>();
+    private vipDataLoaded = false;
+    private legacyHabitDirChecked = false;
+    private legacyHabitFileIds: Set<string> | null = null;
+    private readonly badgeUpdateTimers = new Map<'reminder' | 'project' | 'habit', ReturnType<typeof setTimeout>>();
     private readonly pendingPomodoroDates = new Set<string>();
     private pomodoroRefreshTimer?: ReturnType<typeof setTimeout>;
 
@@ -526,22 +532,65 @@ export default class ReminderPlugin extends Plugin {
         return `${baseName}-${Math.abs(hash).toString(36)}`;
     }
 
+    private dedupeDataLoad<T>(key: string, update: boolean, loader: () => Promise<T>): Promise<T> {
+        if (!update) {
+            const existing = this.inFlightDataLoads.get(key);
+            if (existing) return existing as Promise<T>;
+        }
+        const pending = loader();
+        this.inFlightDataLoads.set(key, pending);
+        const clear = () => {
+            if (this.inFlightDataLoads.get(key) === pending) {
+                this.inFlightDataLoads.delete(key);
+            }
+        };
+        void pending.then(clear, clear);
+        return pending;
+    }
+
+    private async getLegacyHabitFileIds(force: boolean = false): Promise<Set<string>> {
+        if (!force && this.legacyHabitDirChecked && this.legacyHabitFileIds) {
+            return this.legacyHabitFileIds;
+        }
+        return this.dedupeDataLoad('legacy-habit-dir', force, async () => {
+            const ids = new Set<string>();
+            try {
+                const entries = await readDir(`/data/storage/petal/${this.name}/habit`);
+                if (Array.isArray(entries)) {
+                    for (const entry of entries) {
+                        if (!entry?.isDir && typeof entry?.name === 'string' && entry.name.endsWith('.json')) {
+                            ids.add(entry.name.slice(0, -5));
+                        }
+                    }
+                }
+            } catch {
+                // 旧目录不存在属于正常状态
+            }
+            this.legacyHabitFileIds = ids;
+            this.legacyHabitDirChecked = true;
+            return ids;
+        });
+    }
+
     /**
-     * 加载提醒数据，支持缓存
+     * 加载提醒数据，支持缓存与并发去重
      * @param update 是否强制更新（从文件读取）
      */
     public async loadReminderData(update: boolean = false): Promise<any> {
-        if (update || !this.reminderDataCache) {
+        if (!update && this.reminderDataCache) {
+            return this.reminderDataCache;
+        }
+        return this.dedupeDataLoad('reminder', update, async () => {
             try {
                 const data = await this.loadData(REMINDER_DATA_FILE);
                 this.reminderDataCache = data || {};
                 this.persistedTaskNoteIndex = buildTaskNoteIndex(this.reminderDataCache);
+                return this.reminderDataCache;
             } catch (error) {
                 console.error('Failed to load reminder data:', error);
                 throw error;
             }
-        }
-        return this.reminderDataCache;
+        });
     }
     /**
      * 保存提醒数据，并更新缓存
@@ -570,20 +619,23 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 加载项目数据，支持缓存
+     * 加载项目数据，支持缓存与并发去重
      * @param update 是否强制更新（从文件读取）
      */
     public async loadProjectData(update: boolean = false): Promise<any> {
-        if (update || !this.projectDataCache) {
+        if (!update && this.projectDataCache) {
+            return this.projectDataCache;
+        }
+        return this.dedupeDataLoad('project', update, async () => {
             try {
                 const data = await this.loadData(PROJECT_DATA_FILE);
                 this.projectDataCache = data || {};
+                return this.projectDataCache;
             } catch (error) {
                 console.error('Failed to load project data:', error);
                 throw error;
             }
-        }
-        return this.projectDataCache;
+        });
     }
 
     /**
@@ -596,20 +648,23 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 加载项目状态数据，支持缓存
+     * 加载项目状态数据，支持缓存与并发去重
      * @param update 是否强制更新（从文件读取）
      */
     public async loadProjectStatus(update: boolean = false): Promise<any> {
-        if (update || !this.statusDataCache) {
+        if (!update && this.statusDataCache) {
+            return this.statusDataCache;
+        }
+        return this.dedupeDataLoad('status', update, async () => {
             try {
                 const data = await this.loadData(STATUSES_DATA_FILE);
                 this.statusDataCache = data && Array.isArray(data) ? data : null;
+                return this.statusDataCache;
             } catch (error) {
                 console.error('Failed to load status data:', error);
                 throw error;
             }
-        }
-        return this.statusDataCache;
+        });
     }
 
     /**
@@ -622,20 +677,23 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 加载分类数据，支持缓存
+     * 加载分类数据，支持缓存与并发去重
      * @param update 是否强制更新（从文件读取）
      */
     public async loadCategories(update: boolean = false): Promise<any> {
-        if (update || !this.categoriesDataCache) {
+        if (!update && this.categoriesDataCache) {
+            return this.categoriesDataCache;
+        }
+        return this.dedupeDataLoad('categories', update, async () => {
             try {
                 const data = await this.loadData(CATEGORIES_DATA_FILE);
                 this.categoriesDataCache = data && Array.isArray(data) ? data : null;
+                return this.categoriesDataCache;
             } catch (error) {
                 console.error('Failed to load categories data:', error);
                 throw error;
             }
-        }
-        return this.categoriesDataCache;
+        });
     }
 
     /**
@@ -648,15 +706,19 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 加载习惯数据，支持缓存
+     * 加载习惯数据，支持缓存与并发去重
      * @param update 是否强制更新（从文件读取）
      */
     public async loadHabitData(update: boolean = false): Promise<any> {
-        if (update || !this.habitDataCache) {
+        if (!update && this.habitDataCache) {
+            return this.habitDataCache;
+        }
+        return this.dedupeDataLoad('habit', update, async () => {
             try {
                 const data = await this.loadData(HABIT_DATA_FILE);
                 const baseData = (data && typeof data === 'object') ? data : {};
                 const mergedData: Record<string, any> = {};
+                const emptyCheckinHabits: Array<[string, Record<string, any>]> = [];
 
                 await Promise.all(Object.entries(baseData).map(async ([habitId, habit]) => {
                     if (!habit || typeof habit !== 'object') {
@@ -665,16 +727,9 @@ export default class ReminderPlugin extends Plugin {
                     }
 
                     try {
-                        let checkinData = await this.loadData(this.getHabitCheckinFileName(habitId));
-                        // 兼容之前错误迁移到 habit 目录的数据
+                        const checkinData = await this.loadData(this.getHabitCheckinFileName(habitId));
                         if (!checkinData || Object.keys(checkinData).length === 0) {
-                            const oldPathData = await this.loadData(`habit/${habitId}.json`);
-                            if (oldPathData && Object.keys(oldPathData).length > 0) {
-                                checkinData = oldPathData;
-                                // 恢复到正确的目录
-                                await this.saveData(this.getHabitCheckinFileName(habitId), checkinData);
-                                await this.removeData(`habit/${habitId}.json`);
-                            }
+                            emptyCheckinHabits.push([habitId, habit as Record<string, any>]);
                         }
                         mergedData[habitId] = this.mergeHabitWithCheckinData(habit as Record<string, any>, checkinData);
                     } catch (error) {
@@ -683,14 +738,36 @@ export default class ReminderPlugin extends Plugin {
                     }
                 }));
 
+                // 仅当存在空打卡习惯且旧目录确实存在对应文件时，才迁移旧目录数据，避免为每个未打卡习惯盲发 404 请求
+                if (emptyCheckinHabits.length > 0) {
+                    const legacyIds = await this.getLegacyHabitFileIds(update);
+                    const toMigrate = emptyCheckinHabits.filter(([habitId]) => legacyIds.has(habitId));
+                    if (toMigrate.length > 0) {
+                        await Promise.all(toMigrate.map(async ([habitId, habit]) => {
+                            try {
+                                const oldPathData = await this.loadData(`habit/${habitId}.json`);
+                                if (oldPathData && Object.keys(oldPathData).length > 0) {
+                                    await this.saveData(this.getHabitCheckinFileName(habitId), oldPathData);
+                                    await this.removeData(`habit/${habitId}.json`);
+                                    legacyIds.delete(habitId);
+                                    mergedData[habitId] = this.mergeHabitWithCheckinData(habit, oldPathData);
+                                }
+                            } catch (error) {
+                                console.warn(`Failed to migrate legacy habit checkin data for ${habitId}:`, error);
+                                throw error;
+                            }
+                        }));
+                    }
+                }
+
                 this.habitDataCache = mergedData;
+                return this.habitDataCache;
             } catch (error) {
                 console.error('Failed to load habit data:', error);
                 this.protectedStorage.block(HABIT_DATA_FILE);
                 throw error;
             }
-        }
-        return this.habitDataCache;
+        });
     }
 
     /**
@@ -804,20 +881,23 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 加载习惯分组数据，支持缓存
+     * 加载习惯分组数据，支持缓存与并发去重
      * @param update 是否强制更新（从文件读取）
      */
     public async loadHabitGroupData(update: boolean = false): Promise<any[]> {
-        if (update || !this.habitGroupDataCache) {
+        if (!update && this.habitGroupDataCache) {
+            return this.habitGroupDataCache;
+        }
+        return this.dedupeDataLoad('habitGroup', update, async () => {
             try {
                 const data = await this.loadData(HABIT_GROUP_DATA_FILE);
                 this.habitGroupDataCache = Array.isArray(data) ? data : [];
+                return this.habitGroupDataCache;
             } catch (error) {
                 console.error('Failed to load habit group data:', error);
                 throw error;
             }
-        }
-        return this.habitGroupDataCache;
+        });
     }
 
     /**
@@ -830,20 +910,23 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 加载节假日数据，支持缓存
+     * 加载节假日数据，支持缓存与并发去重
      * @param update 是否强制更新
      */
     public async loadHolidayData(update: boolean = false): Promise<any> {
-        if (update || !this.holidayDataCache) {
+        if (!update && this.holidayDataCache) {
+            return this.holidayDataCache;
+        }
+        return this.dedupeDataLoad('holiday', update, async () => {
             try {
                 const data = await this.loadData(HOLIDAY_DATA_FILE);
                 this.holidayDataCache = data || {};
+                return this.holidayDataCache;
             } catch (error) {
                 console.error('Failed to load holiday data:', error);
                 throw error;
             }
-        }
-        return this.holidayDataCache;
+        });
     }
 
     /**
@@ -936,11 +1019,14 @@ export default class ReminderPlugin extends Plugin {
     }
 
     /**
-     * 加载订阅数据，支持缓存
+     * 加载订阅数据，支持缓存与并发去重
      * @param update 是否强制更新（从文件读取）
      */
     public async loadSubscriptionData(update: boolean = false): Promise<any> {
-        if (update || !this.subscriptionCache) {
+        if (!update && this.subscriptionCache) {
+            return this.subscriptionCache;
+        }
+        return this.dedupeDataLoad('subscription', update, async () => {
             try {
                 // 硬编码文件名以避免循环依赖 "ics-subscriptions.json"
                 const data = await this.loadData("ics-subscriptions.json");
@@ -949,17 +1035,20 @@ export default class ReminderPlugin extends Plugin {
                 console.error('Failed to load subscription data:', error);
                 this.subscriptionCache = { subscriptions: {} };
             }
-        }
-        return this.subscriptionCache;
+            return this.subscriptionCache;
+        });
     }
 
     /**
-     * 加载订阅任务数据，支持缓存
+     * 加载订阅任务数据，支持缓存与并发去重
      * @param id 订阅ID
      * @param update 是否强制更新
      */
     public async loadSubscriptionTasks(id: string, update: boolean = false): Promise<any> {
-        if (update || !this.subscriptionTasksCache[id]) {
+        if (!update && this.subscriptionTasksCache[id]) {
+            return this.subscriptionTasksCache[id];
+        }
+        return this.dedupeDataLoad(`subscription-tasks:${id}`, update, async () => {
             try {
                 // Subscribe/ is a relative directory in the plugin's data folder
                 const filePath = `/data/storage/petal/siyuan-plugin-task-note-management/Subscribe/${id}.json`;
@@ -969,14 +1058,6 @@ export default class ReminderPlugin extends Plugin {
                 let data = {};
                 if (response) {
                     if (typeof response === 'object' && response !== null) {
-                        // getFile can return the parsed JSON object directly if it's JSON
-                        // Or it handles parsing internally? Siyuan API behavior needs care.
-                        // Usually getFile returns the file content (string) or an error/status object?
-                        // If we assume it returns similar to fetch response or the content directly.
-                        // But usually getFile in Siyuan kernel returns JSON object if it's a JSON file?
-                        // Let's assume standard behavior as seen in other plugins or previous code.
-                        // Previous existing code in icsSubscription.ts handled string parsing.
-                        // Let's be safe.
                         if ('code' in response && response.code !== 0) {
                             // error
                             console.warn(`Failed to load subscription file: ${filePath}`, response);
@@ -998,34 +1079,37 @@ export default class ReminderPlugin extends Plugin {
                 console.error(`Failed to load subscription tasks for ${id}:`, error);
                 this.subscriptionTasksCache[id] = {};
             }
-        }
-        return this.subscriptionTasksCache[id];
+            return this.subscriptionTasksCache[id];
+        });
     }
 
     /**
-     * 加载 VIP 授权数据，支持缓存
+     * 加载 VIP 授权数据，支持缓存与并发去重
      * @param update 是否强制更新
      */
     public async loadVipData(update: boolean = false): Promise<any> {
-        if (update || !this.vip || !this.vip.vipKeys || this.vip.vipKeys.length === 0) {
+        if (!update && this.vipDataLoaded && this.vip) {
+            return this.vip;
+        }
+        return this.dedupeDataLoad('vip', update, async () => {
             try {
                 const data = await this.loadData(LICENSE_DATA_FILE);
                 if (data && data.vipKeys && data.vipKeys.length > 0) {
                     this.vip = data;
+                    // 仅在存在激活码时才做云端用户校验与签名验证
+                    const status = await VipManager.checkAndUpdateVipStatus(this);
+                    this.vip.isVip = status.isVip;
+                    this.vip.expireDate = status.expireDate;
                 } else {
                     this.vip = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: data?.freeTrialUsed || false };
                 }
-
-                // 验证状态
-                const status = await VipManager.checkAndUpdateVipStatus(this);
-                this.vip.isVip = status.isVip;
-                this.vip.expireDate = status.expireDate;
+                this.vipDataLoaded = true;
             } catch (error) {
                 console.error('Failed to load VIP data:', error);
                 this.vip = { vipKeys: [], isVip: false, expireDate: '', freeTrialUsed: false };
             }
-        }
-        return this.vip;
+            return this.vip;
+        });
     }
 
     /**
@@ -1034,6 +1118,7 @@ export default class ReminderPlugin extends Plugin {
      */
     public async saveVipData(data: any): Promise<void> {
         this.vip = data;
+        this.vipDataLoaded = true;
         await this.saveData(LICENSE_DATA_FILE, data);
     }
 
@@ -1591,15 +1676,20 @@ export default class ReminderPlugin extends Plugin {
         this.taskNoteDOM = new TaskNoteDOMManager(this);
         await this.initializeUI();
         if (this.storageDisposed) return;
-        try {
-            this.pluginDataChanges.commit(await this.pluginDataChanges.scan());
-        } catch (error) {
+        // 目录快照仅用于后续 onDataChanged 增量比对，后台初始化不阻塞插件启动与侧栏首屏。
+        void this.pluginDataChanges?.scan().then(snapshot => {
+            if (!this.storageDisposed && !this.pluginDataBaselineReady) {
+                this.pluginDataChanges.commit(snapshot);
+                this.pluginDataBaselineReady = true;
+            }
+        }).catch(error => {
             console.warn('Failed to initialize plugin data snapshot:', error);
-        }
+        });
         // 数据加载
         await this.loadSettings();
         if (this.storageDisposed) return;
         const taskNoteWarmupTimer = window.setTimeout(() => {
+            if (this.storageDisposed) return;
             void Promise.allSettled([
                 this.loadReminderData(),
                 this.loadProjectData(),
@@ -1609,9 +1699,12 @@ export default class ReminderPlugin extends Plugin {
             ]);
         }, 800);
         this.addCleanup(() => clearTimeout(taskNoteWarmupTimer));
-        // 检查版本更新提醒
-        ChangelogUtils.checkAndNotify(this);
-
+        // 延迟检查版本更新提醒，避免启动瞬间争抢首屏数据连接
+        const changelogTimer = window.setTimeout(() => {
+            if (this.storageDisposed) return;
+            ChangelogUtils.checkAndNotify(this);
+        }, 1500);
+        this.addCleanup(() => clearTimeout(changelogTimer));
 
         // 后台初始化番茄钟记录管理器，失败也不阻断插件主流程
         const pomodoroRecordManager = PomodoroRecordManager.getInstance(this);
@@ -1619,16 +1712,15 @@ export default class ReminderPlugin extends Plugin {
             console.warn("Failed to initialize pomodoro records (task panels remain available):", error);
         });
 
-        // 初始化上次番茄钟设置缓存，避免第一次设置更新时误判
-        this.lastPomodoroSettings = await this.getPomodoroSettings();
-        if (this.storageDisposed) return;
-
         this.categoryManager = CategoryManager.getInstance(this);
-        await Promise.all([
+        // 初始化上次番茄钟设置缓存与核心分类/项目并行执行
+        const [pomodoroSettings] = await Promise.all([
+            this.getPomodoroSettings(),
             this.categoryManager.initialize(),
             ProjectManager.getInstance(this).initialize(),
         ]);
         if (this.storageDisposed) return;
+        this.lastPomodoroSettings = pomodoroSettings;
 
         // 处理文档中的项目看板链接：siyuan://plugins/<插件名>/project-kanban?projectId=<项目ID>
         const handleOpenSiYuanUrlPlugin = (event: CustomEvent<{ url: string }>) => {
@@ -2084,56 +2176,61 @@ export default class ReminderPlugin extends Plugin {
         showVipDialog(this);
     }
 
-    // 加载设置的封装函数
+    // 加载设置的封装函数（支持并发去重与 VIP 数据并行加载）
     async loadSettings(update: boolean = false) {
         if (!update && this.settings) {
             return this.settings;
         }
 
-        const data = await this.loadData(SETTINGS_FILE) || {};
-        const isFreshInstall = !data || Object.keys(data).length === 0;
+        return this.dedupeDataLoad('settings', update, async () => {
+            // 并行读取设置文件与 VIP 授权文件，避免串行等待
+            const [rawSettings] = await Promise.all([
+                this.loadData(SETTINGS_FILE),
+                this.loadVipData(),
+            ]);
+            const data = rawSettings || {};
+            const isFreshInstall = !data || Object.keys(data).length === 0;
 
-        // 新安装用户默认视为已完成迁移，避免首次启动因迁移写入 settings 文件。
-        const defaultDatatransfer = isFreshInstall
-            ? {
-                ...DEFAULT_SETTINGS.datatransfer,
-                bindblockAddAttr: true,
-                termTypeTransfer: true,
-                randomRestTransfer: true,
-                audioFileTransfer: true,
-                habitCheckinTransfer: true,
-                pomodoroRecordTransfer: true,
-                reminderSkipWeekendModeTransfer: true,
-                filterSettingsFileTransfer: true,
-            }
-            : { ...DEFAULT_SETTINGS.datatransfer };
+            // 新安装用户默认视为已完成迁移，避免首次启动因迁移写入 settings 文件。
+            const defaultDatatransfer = isFreshInstall
+                ? {
+                    ...DEFAULT_SETTINGS.datatransfer,
+                    bindblockAddAttr: true,
+                    termTypeTransfer: true,
+                    randomRestTransfer: true,
+                    audioFileTransfer: true,
+                    habitCheckinTransfer: true,
+                    pomodoroRecordTransfer: true,
+                    reminderSkipWeekendModeTransfer: true,
+                    filterSettingsFileTransfer: true,
+                    repeatInstanceStateTransfer: true,
+                    taskNotesSplitTransfer: true,
+                }
+                : { ...DEFAULT_SETTINGS.datatransfer };
 
-        // 合并默认设置和用户设置，确保所有设置项都有值
-        const settings = {
-            ...DEFAULT_SETTINGS,
-            ...data,
-            datatransfer: {
-                ...defaultDatatransfer,
-                ...(data.datatransfer || {}),
-            },
-        };
+            // 合并默认设置和用户设置，确保所有设置项都有值
+            const settings = {
+                ...DEFAULT_SETTINGS,
+                ...data,
+                datatransfer: {
+                    ...defaultDatatransfer,
+                    ...(data.datatransfer || {}),
+                },
+            };
 
-        settings.icsReminderVisibility = getIcsReminderVisibility(data);
+            settings.icsReminderVisibility = getIcsReminderVisibility(data);
 
-        // 旧版子菜单模式统一迁移为置底，只保留一个手动排序方向。
-        settings.taskListSortMenuMode = settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom';
+            // 旧版子菜单模式统一迁移为置底，只保留一个手动排序方向。
+            settings.taskListSortMenuMode = settings.taskListSortMenuMode === 'top' ? 'top' : 'bottom';
 
-        const rawWeekendMode = Object.prototype.hasOwnProperty.call(data, 'reminderSkipWeekendMode')
-            ? normalizeReminderSkipWeekendMode(data.reminderSkipWeekendMode)
-            : undefined;
-        settings.reminderSkipWeekendMode = rawWeekendMode ||
-            normalizeReminderSkipWeekendMode(data.reminderSkipWeekends) ||
-            'none';
+            const rawWeekendMode = Object.prototype.hasOwnProperty.call(data, 'reminderSkipWeekendMode')
+                ? normalizeReminderSkipWeekendMode(data.reminderSkipWeekendMode)
+                : undefined;
+            settings.reminderSkipWeekendMode = rawWeekendMode ||
+                normalizeReminderSkipWeekendMode(data.reminderSkipWeekends) ||
+                'none';
 
-        // 验证 VIP 状态 (从独立文件加载)
-        await this.loadVipData();
-
-        // 确保 weekStartDay 在加载后是数字（可能以字符串形式保存）
+            // 确保 weekStartDay 在加载后是数字（可能以字符串形式保存）
         if (typeof settings.weekStartDay === 'string') {
             const parsed = parseInt(settings.weekStartDay, 10);
             settings.weekStartDay = isNaN(parsed) ? DEFAULT_SETTINGS.weekStartDay : parsed;
@@ -2252,6 +2349,7 @@ export default class ReminderPlugin extends Plugin {
         setSingleDateDefaultRole(settings.singleDateDefaultRole);
         this.settings = settings;
         return settings;
+        });
     }
 
     /**
@@ -2772,22 +2870,14 @@ export default class ReminderPlugin extends Plugin {
         // 前端只订阅内核提醒事件并展示通知。
         this.startReminderReceiver();
 
-        // 初始化顶栏徽章和停靠栏徽章
-        this.updateBadges();
-        this.updateProjectBadges();
-        this.updateHabitBadges();
+        this.addCleanup(() => {
+            for (const timer of this.badgeUpdateTimers.values()) clearTimeout(timer);
+            this.badgeUpdateTimers.clear();
+        });
 
-        // 延迟一些时间后再次更新徽章，确保停靠栏已渲染
-        const badgeTimer = setTimeout(() => {
-            this.updateBadges();
-            this.updateProjectBadges();
-            this.updateHabitBadges();
-        }, 2000);
-        this.addCleanup(() => clearTimeout(badgeTimer));
-
-        // 监听提醒更新事件，更新徽章
+        // 监听提醒更新事件，防抖更新徽章
         const onReminderUpdated = (event: CustomEvent) => {
-            this.updateBadges();
+            this.scheduleBadgeUpdate('reminder');
             if (event.detail?.source !== 'icsSubscription') this.scheduleHabitPomodoroAutoSync();
             this.taskNoteDOM.addBreadcrumbButtonsToExistingProtyles();
         };
@@ -2821,7 +2911,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 监听项目更新事件，更新项目徽章并重新扫描protyle块按钮
         const onProjectUpdated = () => {
-            this.updateProjectBadges();
+            this.scheduleBadgeUpdate('project');
             this.taskNoteDOM.addBreadcrumbButtonsToExistingProtyles();
         };
         window.addEventListener('projectUpdated', onProjectUpdated);
@@ -2829,7 +2919,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 监听习惯更新事件，更新习惯徽章
         const onHabitUpdated = () => {
-            this.updateHabitBadges();
+            this.scheduleBadgeUpdate('habit');
             this.scheduleHabitPomodoroAutoSync();
         };
         window.addEventListener('habitUpdated', onHabitUpdated);
@@ -2837,7 +2927,7 @@ export default class ReminderPlugin extends Plugin {
 
         // 监听习惯关联番茄完成事件，确保番茄目标类型也能实时刷新徽章，并执行自动打卡逻辑
         const onHabitPomodoroCompleted = async (event: CustomEvent) => {
-            this.updateHabitBadges();
+            this.scheduleBadgeUpdate('habit');
             // 在主要入口处处理自动打卡，确保即使习惯面板未打开也能正常工作
             if (event.detail?.habitId) {
                 await this.handleHabitPomodoroSync(event.detail.habitId);
@@ -2928,6 +3018,20 @@ export default class ReminderPlugin extends Plugin {
         this.taskNoteDOM.initOutlinePrefixObserver();
     }
 
+
+    private scheduleBadgeUpdate(type: 'reminder' | 'project' | 'habit', delayMs: number = 80) {
+        if (this.storageDisposed) return;
+        const existing = this.badgeUpdateTimers.get(type);
+        if (existing) clearTimeout(existing);
+        const timer = setTimeout(() => {
+            this.badgeUpdateTimers.delete(type);
+            if (this.storageDisposed) return;
+            if (type === 'reminder') void this.updateBadges();
+            else if (type === 'project') void this.updateProjectBadges();
+            else void this.updateHabitBadges();
+        }, delayMs);
+        this.badgeUpdateTimers.set(type, timer);
+    }
 
     private async updateBadges() {
         try {
@@ -5325,7 +5429,10 @@ export default class ReminderPlugin extends Plugin {
             }
             await Promise.all(reloads);
             if (this.storageDisposed) return;
-            if (snapshot) this.pluginDataChanges.commit(snapshot);
+            if (snapshot) {
+                this.pluginDataChanges.commit(snapshot);
+                this.pluginDataBaselineReady = true;
+            }
             const habitsChanged = has('habits') || has('habitGroups') || has('settings');
             const remindersChanged = habitsChanged || has('reminders') || has('projects') || has('statuses')
                 || has('categories') || has('subscriptions') || has('pomodoros') || has('holidays');

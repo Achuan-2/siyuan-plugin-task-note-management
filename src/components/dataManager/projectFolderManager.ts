@@ -33,6 +33,8 @@ export class ProjectFolderManager {
     private static instance: ProjectFolderManager;
     private folders: ProjectFolder[] = [];
     private plugin: any;
+    private initialized: boolean = false;
+    private initPromise: Promise<void> | null = null;
 
     private constructor(plugin: any) {
         this.plugin = plugin;
@@ -123,8 +125,10 @@ export class ProjectFolderManager {
     public static getInstance(plugin?: any): ProjectFolderManager {
         if (!ProjectFolderManager.instance) {
             ProjectFolderManager.instance = new ProjectFolderManager(plugin);
-        } else if (plugin && !ProjectFolderManager.instance.plugin) {
+        } else if (plugin && ProjectFolderManager.instance.plugin !== plugin) {
             ProjectFolderManager.instance.plugin = plugin;
+            ProjectFolderManager.instance.initialized = false;
+            ProjectFolderManager.instance.initPromise = null;
         }
         return ProjectFolderManager.instance;
     }
@@ -132,12 +136,23 @@ export class ProjectFolderManager {
     /**
      * 初始化文件夹数据
      */
-    public async initialize(): Promise<void> {
+    public async initialize(force: boolean = false): Promise<void> {
+        if (this.initialized && !force) return;
+        if (!force && this.initPromise) return this.initPromise;
+        const pending = (async () => {
+            try {
+                await this.loadFolders();
+                this.initialized = true;
+            } catch (error) {
+                console.error("Failed to initialize folders:", error);
+                this.folders = [];
+            }
+        })();
+        this.initPromise = pending;
         try {
-            await this.loadFolders();
-        } catch (error) {
-            console.error("Failed to initialize folders:", error);
-            this.folders = [];
+            await pending;
+        } finally {
+            if (this.initPromise === pending) this.initPromise = null;
         }
     }
 

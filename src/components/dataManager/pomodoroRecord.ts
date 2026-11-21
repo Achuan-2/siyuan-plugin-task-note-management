@@ -78,6 +78,10 @@ export class PomodoroRecordManager {
         return PomodoroRecordManager.instance;
     }
 
+    public isReady(): boolean {
+        return this.isInitialized;
+    }
+
     async initialize() {
         if (this.isInitialized) { await this.store?.initialize(); return; }
         if (this.initializing) return this.initializing;
@@ -220,6 +224,10 @@ export class PomodoroRecordManager {
     }
 
     async refreshData(...args: Parameters<PomodoroRecordManager['refreshDataImpl']>) {
+        const [force = false] = args;
+        if (!force && this.isInitialized && this.store && !this.store.needsReload) {
+            return;
+        }
         return this.serialize(() => this.refreshDataImpl(...args));
     }
 

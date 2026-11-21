@@ -316,14 +316,13 @@ export class ProjectPanel {
     private async initializeAsync() {
         if (this.disposed) return;
         this.isMobileClient = getFrontend().endsWith('mobile') || (this.plugin && this.plugin.isInMobileApp);
-        await this.categoryManager.initialize();
-        if (this.disposed) return;
-        await this.statusManager.initialize();
-        if (this.disposed) return;
-        await this.restorePanelSettings();
-        if (this.disposed) return;
         const folderManager = ProjectFolderManager.getInstance(this.plugin);
-        await folderManager.initialize();
+        await Promise.all([
+            this.categoryManager.initialize(),
+            this.statusManager.initialize(),
+            this.restorePanelSettings(),
+            folderManager.initialize(),
+        ]);
         if (this.disposed) return;
         this.initUI();
         this.loadProjects();

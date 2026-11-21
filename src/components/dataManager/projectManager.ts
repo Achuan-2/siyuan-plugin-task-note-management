@@ -99,6 +99,7 @@ export class ProjectManager {
     private projects: Project[] = [];
     private projectColors: { [key: string]: string } = {};
     private statusManager: StatusManager;
+    private initPromise: Promise<void> | null = null;
 
     private constructor(plugin: any) {
         this.plugin = plugin;
@@ -111,15 +112,29 @@ export class ProjectManager {
                 throw new Error('ProjectManager需要plugin实例进行初始化');
             }
             ProjectManager.instance = new ProjectManager(plugin);
-        } else if (plugin && !ProjectManager.instance.plugin) {
+        } else if (plugin && ProjectManager.instance.plugin !== plugin) {
             ProjectManager.instance.plugin = plugin;
+            ProjectManager.instance.statusManager = StatusManager.getInstance(plugin);
+            ProjectManager.instance.initialized = false;
+            ProjectManager.instance.initPromise = null;
         }
         return ProjectManager.instance;
     }
 
-    async initialize() {
-        await this.statusManager.initialize();
-        await this.loadProjects();
+    async initialize(force: boolean = false) {
+        if (this.initialized && !force) return;
+        if (!force && this.initPromise) return this.initPromise;
+        const pending = (async () => {
+            await this.statusManager.initialize(force);
+            await this.loadProjects(force);
+            this.initialized = true;
+        })();
+        this.initPromise = pending;
+        try {
+            await pending;
+        } finally {
+            if (this.initPromise === pending) this.initPromise = null;
+        }
     }
 
     public async setProjectColor(projectId: string, color: string) {
@@ -936,69 +951,80 @@ export class ProjectManager {
     }
 
     /**
+     * 基于已加载的 projectData 同步解析单个项目的看板状态配置，避免列表刷新时逐项目重复异步读取。
+     */
+    public getProjectKanbanStatusesFromData(
+        projectData: any,
+        projectId: string,
+        defaultStatuses?: KanbanStatus[]
+    ): KanbanStatus[] {
+        const defaults = defaultStatuses || this.getDefaultKanbanStatuses();
+        const project = projectData?.[projectId];
+        const customStatuses = project?.kanbanStatuses;
+
+        // 如果有自定义配置，合并默认固定状态和自定义状态
+        if (customStatuses && Array.isArray(customStatuses) && customStatuses.length > 0) {
+            // 分离已保存的固定状态配置和非固定状态
+            const savedFixedConfigs = customStatuses.filter(s => s.isFixed === true);
+            const customNonFixed = customStatuses.filter(s => s.isFixed === false).map(status => {
+                // 如果名称是默认名称，自动更换为 i18n 文本
+                if (this.isDefaultStatusName(status.id, status.name)) {
+                    const defaultStatus = defaults.find(d => d.id === status.id);
+                    if (defaultStatus) {
+                        return { ...status, name: defaultStatus.name };
+                    }
+                }
+                return status;
+            });
+
+            // 合并固定状态：使用默认配置，但应用保存的自定义配置
+            const fixedStatuses = defaults.filter(s => s.isFixed).map(defaultStatus => {
+                const savedConfig = savedFixedConfigs.find(s => s.id === defaultStatus.id);
+                if (savedConfig) {
+                    // 如果保存的名称是默认名称，则使用当前语言的 i18n 文本
+                    const name = this.isDefaultStatusName(defaultStatus.id, savedConfig.name)
+                        ? defaultStatus.name
+                        : savedConfig.name;
+
+                    // 使用保存的图标、颜色和排序
+                    return {
+                        ...defaultStatus,
+                        name: name,
+                        icon: savedConfig.icon,
+                        color: savedConfig.color,
+                        sort: savedConfig.sort
+                    };
+                }
+                return defaultStatus;
+            });
+
+            return [...fixedStatuses, ...customNonFixed].sort((a, b) => a.sort - b.sort);
+        }
+
+        // 返回默认配置
+        return defaults;
+    }
+
+    /**
      * 获取项目的看板状态配置
      * 如果没有自定义配置，返回默认配置
      */
     public async getProjectKanbanStatuses(projectId: string): Promise<KanbanStatus[]> {
         try {
             const projectData = await this.plugin.loadProjectData() || {};
-            const project = projectData[projectId];
-            const customStatuses = project?.kanbanStatuses;
-
-            // 如果有自定义配置，合并默认固定状态和自定义状态
-            if (customStatuses && Array.isArray(customStatuses) && customStatuses.length > 0) {
-                const defaults = this.getDefaultKanbanStatuses();
-
-                // 分离已保存的固定状态配置和非固定状态
-                const savedFixedConfigs = customStatuses.filter(s => s.isFixed === true);
-                const customNonFixed = customStatuses.filter(s => s.isFixed === false).map(status => {
-                    // 如果名称是默认名称，自动更换为 i18n 文本
-                    if (this.isDefaultStatusName(status.id, status.name)) {
-                        const defaultStatus = defaults.find(d => d.id === status.id);
-                        if (defaultStatus) {
-                            return { ...status, name: defaultStatus.name };
-                        }
-                    }
-                    return status;
-                });
-
-                // 合并固定状态：使用默认配置，但应用保存的自定义配置
-                const fixedStatuses = defaults.filter(s => s.isFixed).map(defaultStatus => {
-                    const savedConfig = savedFixedConfigs.find(s => s.id === defaultStatus.id);
-                    if (savedConfig) {
-                        // 如果保存的名称是默认名称，则使用当前语言的 i18n 文本
-                        const name = this.isDefaultStatusName(defaultStatus.id, savedConfig.name)
-                            ? defaultStatus.name
-                            : savedConfig.name;
-
-                        // 使用保存的图标、颜色和排序
-                        return {
-                            ...defaultStatus,
-                            name: name,
-                            icon: savedConfig.icon,
-                            color: savedConfig.color,
-                            sort: savedConfig.sort
-                        };
-                    }
-                    return defaultStatus;
-                });
-
-                return [...fixedStatuses, ...customNonFixed].sort((a, b) => a.sort - b.sort);
-            }
-
-            // 返回默认配置
-            return this.getDefaultKanbanStatuses();
+            return this.getProjectKanbanStatusesFromData(projectData, projectId);
         } catch (error) {
             console.error("Failed to get project kanban statuses:", error);
             return this.getDefaultKanbanStatuses();
         }
     }
 
-    /**
-     * 获取项目看板状态映射，便于按状态 ID 快速读取名称、颜色和图标。
-     */
-    public async getProjectKanbanStatusMap(projectId: string): Promise<Map<string, KanbanStatus>> {
-        const statuses = await this.getProjectKanbanStatuses(projectId);
+    public getProjectKanbanStatusMapFromData(
+        projectData: any,
+        projectId: string,
+        defaultStatuses?: KanbanStatus[]
+    ): Map<string, KanbanStatus> {
+        const statuses = this.getProjectKanbanStatusesFromData(projectData, projectId, defaultStatuses);
         const statusMap = new Map<string, KanbanStatus>();
 
         statuses.forEach((status) => {
@@ -1011,6 +1037,14 @@ export class ProjectManager {
         });
 
         return statusMap;
+    }
+
+    /**
+     * 获取项目看板状态映射，便于按状态 ID 快速读取名称、颜色和图标。
+     */
+    public async getProjectKanbanStatusMap(projectId: string): Promise<Map<string, KanbanStatus>> {
+        const projectData = await this.plugin.loadProjectData() || {};
+        return this.getProjectKanbanStatusMapFromData(projectData, projectId);
     }
 
     /**

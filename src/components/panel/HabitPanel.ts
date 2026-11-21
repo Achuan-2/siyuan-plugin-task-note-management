@@ -109,23 +109,32 @@ export class HabitPanel {
         this.initializeAsync();
     }
 
+    private hasInitializedUI: boolean = false;
+
     private async initializeAsync() {
         if (this.disposed) return;
-        await this.groupManager.initialize();
-        if (this.disposed) return;
-        // 统计读取异常不应阻断习惯列表，也不修改原始番茄钟记录。
-        try {
-            await this.pomodoroRecordManager.initialize();
-        } catch (error) {
-            console.warn("Failed to initialize habit panel pomodoro statistics:", error);
+        // 番茄统计在后台异步初始化，不阻塞习惯列表首屏渲染；就绪后静默补刷。
+        const isPomodoroReady = typeof this.pomodoroRecordManager?.isReady === 'function'
+            && this.pomodoroRecordManager.isReady();
+        if (!isPomodoroReady) {
+            void this.pomodoroRecordManager.initialize().then(() => {
+                if (!this.disposed && this.hasInitializedUI) {
+                    void this.loadHabits();
+                }
+            }).catch((error: any) => {
+                console.warn("Failed to initialize habit panel pomodoro statistics:", error);
+            });
         }
-        if (this.disposed) return;
-        await this.loadCollapseStates();
-        if (this.disposed) return;
-        await this.restorePanelSettings();
+
+        await Promise.all([
+            this.groupManager.initialize(),
+            this.loadCollapseStates(),
+            this.restorePanelSettings(),
+        ]);
         if (this.disposed) return;
 
         this.initUI();
+        this.hasInitializedUI = true;
         this.loadHabits();
 
         window.addEventListener('habitUpdated', this.habitUpdatedHandler);

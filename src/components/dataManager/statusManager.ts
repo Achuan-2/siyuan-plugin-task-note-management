@@ -42,6 +42,8 @@ export class StatusManager {
     private static instance: StatusManager;
     private statuses: Status[] = [];
     private plugin: any;
+    private initialized: boolean = false;
+    private initPromise: Promise<void> | null = null;
 
     private constructor(plugin: any) {
         this.plugin = plugin;
@@ -50,19 +52,33 @@ export class StatusManager {
     public static getInstance(plugin?: any): StatusManager {
         if (!StatusManager.instance) {
             StatusManager.instance = new StatusManager(plugin);
-        } else if (plugin && !StatusManager.instance.plugin) {
+        } else if (plugin && StatusManager.instance.plugin !== plugin) {
             StatusManager.instance.plugin = plugin;
+            StatusManager.instance.initialized = false;
+            StatusManager.instance.initPromise = null;
         }
         return StatusManager.instance;
     }
 
-    public async initialize(): Promise<void> {
+    public async initialize(force: boolean = false): Promise<void> {
+        if (this.initialized && !force) return;
+        if (!force && this.initPromise) return this.initPromise;
+        const pending = (async () => {
+            try {
+                await this.loadStatuses();
+                this.initialized = true;
+            } catch (error) {
+                console.error("Failed to initialize statuses:", error);
+                this.statuses = getLocalizedDefaultStatuses();
+                await this.saveStatuses();
+                this.initialized = true;
+            }
+        })();
+        this.initPromise = pending;
         try {
-            await this.loadStatuses();
-        } catch (error) {
-            console.error("Failed to initialize statuses:", error);
-            this.statuses = getLocalizedDefaultStatuses();
-            await this.saveStatuses();
+            await pending;
+        } finally {
+            if (this.initPromise === pending) this.initPromise = null;
         }
     }
 

@@ -161,9 +161,9 @@ test('禁用先停观察器再销毁面板和 DOM，重复禁用不会重复清�
 });
 
 for (const [name, stages] of [
-    ['ReminderPanel', ['category', 'pomodoro', 'settings', 'refreshReminderSkipDateContext', 'loadSortConfig', 'loadCustomFilters', 'updateFilterSelect', 'loadFilterTab']],
+    ['ReminderPanel', ['category', 'settings', 'refreshReminderSkipDateContext', 'loadSortConfig', 'loadCustomFilters', 'updateFilterSelect', 'loadFilterTab']],
     ['ProjectPanel', ['category', 'status', 'restorePanelSettings', 'folder']],
-    ['HabitPanel', ['group', 'pomodoro', 'loadCollapseStates', 'restorePanelSettings']],
+    ['HabitPanel', ['group', 'loadCollapseStates', 'restorePanelSettings']],
 ]) {
     test(`${name} 在任意初始化阶段关闭后均不重新添加监听器`, async () => {
         for (const stage of [...stages, null]) {
@@ -173,24 +173,29 @@ for (const [name, stages] of [
                 if (key === stage) { reached = true; return pending.promise; }
                 return Promise.resolve({});
             };
-            const window = new EventTarget(), document = new EventTarget();
+            const window = new EventTarget(), document = new EventTarget(), container = new EventTarget();
             const listeners = new Map();
-            for (const target of [window, document]) {
+            for (const target of [window, document, container]) {
                 target.addEventListener = (name, fn) => listeners.set(fn, name);
                 target.removeEventListener = (name, fn) => listeners.delete(fn);
             }
             const Panel = loadMethods(`src/components/panel/${name}.ts`, name, ['initializeAsync', 'destroy'], {
                 window, document, getFrontend: () => 'desktop',
+                normalizePanelViewMode: mode => mode || 'standard',
+                MiniTaskHoverTooltipController: class { destroy() {} },
                 ProjectFolderManager: { getInstance: () => ({ initialize: call('folder') }) },
             });
             const panel = Object.assign(new Panel(), {
-                disposed: false, categoryManager: { initialize: call('category') }, statusManager: { initialize: call('status') },
-                groupManager: { initialize: call('group') }, pomodoroRecordManager: { initialize: call('pomodoro') },
+                disposed: false, hasInitializedUI: false, container, isMobileClient: false,
+                categoryManager: { initialize: call('category') }, statusManager: { initialize: call('status') },
+                groupManager: { initialize: call('group') },
+                pomodoroRecordManager: { isReady: () => true, initialize: async () => {} },
                 plugin: { loadSettings: call('settings') }, pomodoroManager: { cleanupInactiveTimer() {} },
-                completionRemovalTimers: new Map(), reminderLoadVersion: 0, stopDragScroll() {},
+                completionRemovalTimers: new Map(), miniCheckInGlyphImages: new Map(),
+                reminderLoadVersion: 0, stopDragScroll() {},
                 saveCollapseStates() {}, initUI() {}, addReminderDialogStyles() {},
                 reminderUpdatedHandler() {}, projectUpdatedHandler() {}, habitUpdatedHandler() {},
-                sortConfigUpdatedHandler() {}, settingsUpdatedHandler() {},
+                sortConfigUpdatedHandler() {}, settingsUpdatedHandler() {}, miniTaskTouchClickHandler() {},
                 loadReminders: () => { loadsAfterClose++; }, loadProjects: () => { loadsAfterClose++; }, loadHabits: () => { loadsAfterClose++; },
             });
             for (const key of stages.filter(key => !['category', 'status', 'group', 'pomodoro', 'settings', 'folder'].includes(key))) panel[key] = call(key);
@@ -208,34 +213,113 @@ for (const [name, stages] of [
 }
 
 for (const name of ['ReminderPanel', 'HabitPanel']) {
-    test(`${name} 番茄统计初始化失败仍加载列表，关闭后失败不会重新加载`, async () => {
-        for (const closeBeforeFailure of [false, true]) {
+    test(`${name} 番茄统计后台初始化不阻塞首屏，失败仍加载列表，关闭后就绪或失败不会重新加载`, async () => {
+        for (const outcome of ['resolve', 'reject', 'closeBeforeResolve', 'closeBeforeReject']) {
             const pending = deferred(), warnings = [], calls = [];
+            const container = new EventTarget();
             const Panel = loadMethods(`src/components/panel/${name}.ts`, name, ['initializeAsync'], {
                 window: new EventTarget(), document: new EventTarget(),
+                normalizePanelViewMode: mode => mode || 'standard',
+                MiniTaskHoverTooltipController: class { destroy() {} },
                 console: { warn: (...args) => warnings.push(args) },
             });
+            let reminderUpdatedCalls = 0;
             const panel = Object.assign(new Panel(), {
-                disposed: false,
+                disposed: false, hasInitializedUI: false, container, isMobileClient: false,
                 categoryManager: { initialize: async () => {} }, groupManager: { initialize: async () => {} },
-                pomodoroRecordManager: { initialize: async () => { await pending.promise; throw new Error('permission denied'); } },
+                pomodoroRecordManager: {
+                    isReady: () => false,
+                    initialize: async () => {
+                        await pending.promise;
+                        if (outcome === 'reject' || outcome === 'closeBeforeReject') {
+                            throw new Error('permission denied');
+                        }
+                    },
+                },
                 plugin: { loadSettings: async () => ({}) },
                 initUI: () => calls.push('ui'), loadReminders: () => calls.push('tasks'), loadHabits: () => calls.push('habits'),
-                reminderUpdatedHandler() {}, habitUpdatedHandler() {}, sortConfigUpdatedHandler() {}, settingsUpdatedHandler() {},
+                reminderUpdatedHandler: () => { reminderUpdatedCalls++; },
+                habitUpdatedHandler() {}, sortConfigUpdatedHandler() {}, settingsUpdatedHandler() {},
+                projectUpdatedHandler() {}, miniTaskTouchClickHandler() {},
                 addReminderDialogStyles() {},
             });
             for (const method of ['refreshReminderSkipDateContext', 'loadSortConfig', 'loadCustomFilters',
                 'updateFilterSelect', 'loadFilterTab', 'loadCollapseStates', 'restorePanelSettings']) panel[method] = async () => {};
-            const running = panel.initializeAsync();
-            await drain();
-            if (closeBeforeFailure) panel.disposed = true;
+            const listTag = name === 'ReminderPanel' ? 'tasks' : 'habits';
+            await panel.initializeAsync();
+            // 番茄统计尚未结束时，首屏 UI 与列表已经立即渲染（且不重复调用 reminderUpdatedHandler）。
+            assert.deepEqual(calls, ['ui', listTag], outcome);
+            assert.equal(reminderUpdatedCalls, 0, outcome);
+            if (outcome === 'closeBeforeResolve' || outcome === 'closeBeforeReject') panel.disposed = true;
             pending.resolve();
-            await running;
-            assert.equal(warnings.length, 1);
-            assert.deepEqual(calls, closeBeforeFailure ? [] : ['ui', name === 'ReminderPanel' ? 'tasks' : 'habits']);
+            await drain();
+            if (outcome === 'resolve') {
+                assert.deepEqual(calls, ['ui', listTag, listTag]);
+                assert.equal(warnings.length, 0);
+            } else if (outcome === 'reject') {
+                assert.deepEqual(calls, ['ui', listTag]);
+                assert.equal(warnings.length, 1);
+            } else if (outcome === 'closeBeforeResolve') {
+                assert.deepEqual(calls, ['ui', listTag]);
+                assert.equal(warnings.length, 0);
+            } else {
+                assert.deepEqual(calls, ['ui', listTag]);
+                assert.equal(warnings.length, 1);
+            }
         }
     });
 }
+
+test('插件核心数据读取合并并发请求，VIP 无激活码时不请求云端且命中缓存，习惯读取不对空打卡盲发 404', async () => {
+    let dirReads = 0;
+    const readCalls = [];
+    let vipChecks = 0;
+    const Plugin = loadMethods('src/index.ts', 'ReminderPlugin', [
+        'dedupeDataLoad', 'getLegacyHabitFileIds', 'loadReminderData', 'loadHabitData', 'loadVipData',
+        'getHabitCheckinFileName', 'mergeHabitWithCheckinData',
+    ], {
+        REMINDER_DATA_FILE: 'reminder.json',
+        HABIT_DATA_FILE: 'habit.json',
+        HABIT_CHECKIN_DIR: 'habitCheckin',
+        LICENSE_DATA_FILE: 'license.json',
+        buildTaskNoteIndex: () => new Map(),
+        readDir: async () => { dirReads++; return []; },
+        VipManager: { checkAndUpdateVipStatus: async () => { vipChecks++; return { isVip: false, expireDate: '' }; } },
+        console: { error() {}, warn() {} },
+    });
+    const reminderGate = deferred();
+    const plugin = Object.assign(new Plugin(), {
+        name: 'test-plugin',
+        inFlightDataLoads: new Map(),
+        vipDataLoaded: false,
+        legacyHabitDirChecked: false,
+        legacyHabitFileIds: null,
+        protectedStorage: { block() {} },
+        loadData: async file => {
+            readCalls.push(file);
+            if (file === 'reminder.json') return reminderGate.promise;
+            if (file === 'habit.json') return { h1: { id: 'h1' }, h2: { id: 'h2' } };
+            if (file.startsWith('habitCheckin/')) return {};
+            if (file === 'license.json') return { vipKeys: [] };
+            throw new Error(`Unexpected file read: ${file}`);
+        },
+    });
+
+    const p1 = plugin.loadReminderData();
+    const p2 = plugin.loadReminderData();
+    reminderGate.resolve({ a: { id: 'a' } });
+    assert.equal(await p1, await p2);
+    assert.equal(readCalls.filter(f => f === 'reminder.json').length, 1);
+
+    await plugin.loadVipData();
+    await plugin.loadVipData();
+    assert.equal(readCalls.filter(f => f === 'license.json').length, 1);
+    assert.equal(vipChecks, 0);
+
+    await Promise.all([plugin.loadHabitData(), plugin.loadHabitData()]);
+    assert.equal(dirReads, 1);
+    assert.equal(readCalls.filter(f => f.startsWith('habit/')).length, 0);
+});
 
 function icsFixture() {
     const intervals = new Map(), exports = {}, upload = deferred();

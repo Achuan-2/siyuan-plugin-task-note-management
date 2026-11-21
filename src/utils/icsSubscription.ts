@@ -170,8 +170,12 @@ export async function getAllReminders(
     options?: { strict?: boolean }
 ): Promise<any> {
     try {
-        // Load main reminders
-        const mainReminders = (await plugin.loadReminderData(force)) || {};
+        // 并行加载主任务数据与订阅元数据
+        const [rawMainReminders, subscriptionData] = await Promise.all([
+            plugin.loadReminderData(force),
+            loadSubscriptions(plugin),
+        ]);
+        const mainReminders = rawMainReminders || {};
 
         let filteredMainReminders = mainReminders;
         if (projectId) {
@@ -184,23 +188,30 @@ export async function getAllReminders(
             });
         }
 
-        // Load subscription metadata
-        const subscriptionData = await loadSubscriptions(plugin);
-        let subscriptions = Object.values(subscriptionData.subscriptions);
+        let subscriptions = Object.values(subscriptionData?.subscriptions || {}) as IcsSubscription[];
 
         if (projectId) {
             subscriptions = subscriptions.filter(sub => sub.projectId === projectId);
         }
 
+        const activeSubscriptions = subscriptions.filter(subscription => {
+            if (!subscription?.enabled) return false;
+            if (filterType === 'sidebar' && !subscription.showInSidebar) return false;
+            if (filterType === 'matrix' && !subscription.showInMatrix) return false;
+            return true;
+        });
+
         // Load and merge all subscription tasks
         let allReminders = { ...filteredMainReminders };
 
-        for (const subscription of subscriptions) {
-            if (subscription.enabled) {
-                // 根据 context 过滤显示
-                if (filterType === 'sidebar' && !subscription.showInSidebar) continue;
-                if (filterType === 'matrix' && !subscription.showInMatrix) continue;
-                const subTasks = await loadSubscriptionTasks(plugin, subscription.id);
+        if (activeSubscriptions.length > 0) {
+            const loadedSubTasks = await Promise.all(
+                activeSubscriptions.map(subscription => loadSubscriptionTasks(plugin, subscription.id))
+            );
+            const saveSubTasksPromises: Promise<void>[] = [];
+
+            activeSubscriptions.forEach((subscription, idx) => {
+                const subTasks = loadedSubTasks[idx] || {};
                 const updatedSubTasks: any = {};
                 let subTasksUpdated = false;
 
@@ -256,8 +267,12 @@ export async function getAllReminders(
 
                 // Save updated subscription tasks if any were auto-completed
                 if (subTasksUpdated) {
-                    await saveSubscriptionTasks(plugin, subscription.id, updatedSubTasks);
+                    saveSubTasksPromises.push(saveSubscriptionTasks(plugin, subscription.id, updatedSubTasks));
                 }
+            });
+
+            if (saveSubTasksPromises.length > 0) {
+                await Promise.all(saveSubTasksPromises);
             }
         }
 

@@ -182,11 +182,15 @@ export class VipManager {
      * 检查设置中的 VIP 状态
      */
     static async checkAndUpdateVipStatus(target: any): Promise<VIPStatus> {
-        const userId = await this.getUserId();
         // target 可以是插件实例 (target.vip) 或者是直接的 VIP 数据对象 (target.vipKeys)
         const vipKeys = (target.vip?.vipKeys) || (target.vipKeys) || [];
         const freeTrialUsed = (target.vip?.freeTrialUsed) || (target.freeTrialUsed) || false;
 
+        if (!Array.isArray(vipKeys) || vipKeys.length === 0) {
+            return { vipKeys: [], isVip: false, expireDate: '', remainingDays: 0, freeTrialUsed };
+        }
+
+        const userId = await this.getUserId();
         return this.calculateStatus(userId, vipKeys, freeTrialUsed);
     }
 

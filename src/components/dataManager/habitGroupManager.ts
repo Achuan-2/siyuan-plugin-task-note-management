@@ -13,6 +13,7 @@ export class HabitGroupManager {
     private static instance: HabitGroupManager;
     private groups: Map<string, HabitGroup> = new Map();
     private initialized: boolean = false;
+    private initPromise: Promise<void> | null = null;
 
     private constructor() { }
 
@@ -25,31 +26,40 @@ export class HabitGroupManager {
 
     async initialize(force: boolean = false) {
         if (this.initialized && !force) return;
+        if (!force && this.initPromise) return this.initPromise;
 
+        const pending = (async () => {
+            try {
+                // 使用插件实例加载数据
+                const plugin = getPluginInstance();
+                if (!plugin) {
+                    console.warn('HabitGroupManager: plugin instance not found during initialize');
+                    return;
+                }
+                const groupsArray: HabitGroup[] = await plugin.loadHabitGroupData();
+
+                this.groups.clear();
+                if (Array.isArray(groupsArray)) {
+                    groupsArray.forEach(group => {
+                        // 兼容旧数据，如果没有order则默认为0
+                        if (group.order === undefined) {
+                            group.order = 0;
+                        }
+                        this.groups.set(group.id, group);
+                    });
+                }
+                this.initialized = true;
+            } catch (error) {
+                console.error("Failed to initialize habit group manager:", error);
+                this.groups.clear();
+                this.initialized = true;
+            }
+        })();
+        this.initPromise = pending;
         try {
-            // 使用插件实例加载数据
-            const plugin = getPluginInstance();
-            if (!plugin) {
-                console.warn('HabitGroupManager: plugin instance not found during initialize');
-                return;
-            }
-            const groupsArray: HabitGroup[] = await plugin.loadHabitGroupData();
-
-            this.groups.clear();
-            if (Array.isArray(groupsArray)) {
-                groupsArray.forEach(group => {
-                    // 兼容旧数据，如果没有order则默认为0
-                    if (group.order === undefined) {
-                        group.order = 0;
-                    }
-                    this.groups.set(group.id, group);
-                });
-            }
-            this.initialized = true;
-        } catch (error) {
-            console.error("Failed to initialize habit group manager:", error);
-            this.groups.clear();
-            this.initialized = true;
+            await pending;
+        } finally {
+            if (this.initPromise === pending) this.initPromise = null;
         }
     }
 

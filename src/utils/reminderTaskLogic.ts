@@ -43,11 +43,9 @@ export class ReminderTaskLogic {
     }
 
     public static generateAllRemindersWithInstances(reminderData: any, today: string, settings?: any, holidayData: HolidayData = {}): any[] {
-        const reminders = (Object.values(reminderData) as any[]).filter((reminder: any) => {
-            const shouldInclude = reminder && typeof reminder === 'object' && reminder.id &&
-                (reminder.date || reminder.parentId || this.hasChildren(reminder.id, reminderData) || reminder.completed || (!reminder.date && !reminder.parentId));
-            return shouldInclude;
-        });
+        const reminders = (Object.values(reminderData) as any[]).filter((reminder: any) =>
+            !!(reminder && typeof reminder === 'object' && reminder.id)
+        );
 
         const allReminders: any[] = [];
         const originalRemindersMap: { [id: string]: any } = {};
@@ -237,12 +235,6 @@ export class ReminderTaskLogic {
             default:
                 return [];
         }
-    }
-
-    private static hasChildren(reminderId: string, reminderData: any): boolean {
-        return Object.values(reminderData).some((reminder: any) =>
-            reminder && reminder.parentId === reminderId
-        );
     }
 
     private static getReminderKanbanStatusId(reminder: any): string {
