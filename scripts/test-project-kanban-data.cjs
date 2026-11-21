@@ -301,9 +301,9 @@ function milestoneFilterFixture(initial, folder) {
         'getAggregateGroupId', 'getAggregateSafeId', 'isStatusVisibleForGroup', 'getVisibleStatusesForGroup',
         'normalizeGroupVisibleStatusIds', 'hasUngroupedMilestoneFilter', 'shouldDisplayUngroupedColumn',
     ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const Board = new Function('ProjectFolderManager', 'i18n', 'showMessage', 'console', compiled + ';return Board;')(
+    const Board = new Function('ProjectFolderManager', 'i18n', 'showMessage', 'console', 'getEditableSubscriptionProjectIds', compiled + ';return Board;')(
         { getInstance: () => ({ getFolderById: () => state.folder }) }, key => key,
-        message => assert.fail(message), { error: (...args) => state.errors.push(args) },
+        message => assert.fail(message), { error: (...args) => state.errors.push(args) }, async () => new Set(),
     );
     const cached = clone(initial);
     const plugin = {
@@ -1064,6 +1064,8 @@ test('看板切换优先级同步 reminder-priority-* 类名，并共享任务�
 
     const indexScss = fs.readFileSync(path.join(root, 'src/index.scss'), 'utf8');
     assert.match(indexScss, /\.reminder-panel,\s*\.TN-project-kanban-view\s*\{[\s\S]*?\.reminder-item__note\s*\{/);
+    assert.match(indexScss, /\.reminder-item__title\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/);
+    assert.match(indexScss, /\.reminder-item__url-icon\s*\{[^}]*flex-shrink:\s*0;/);
 });
 
 test('分组页签默认统计未完成任务数量（不含放弃），并保留显式模式配置', async () => {
@@ -1078,8 +1080,8 @@ test('分组页签默认统计未完成任务数量（不含放弃），并保�
             return el;
         },
     };
-    const Board = new Function('document', 'i18n', 'showMessage', 'ProjectFolderManager', 'console', compiled + ';return Board;')(
-        doc, key => key, () => {}, { getInstance: () => ({ getFolderById: () => null }) }, { error() {} },
+    const Board = new Function('document', 'i18n', 'showMessage', 'ProjectFolderManager', 'console', 'getEditableSubscriptionProjectIds', compiled + ';return Board;')(
+        doc, key => key, () => {}, { getInstance: () => ({ getFolderById: () => null }) }, { error() {} }, async () => new Set(),
     );
 
     const createBoard = project => Object.assign(new Board(), {

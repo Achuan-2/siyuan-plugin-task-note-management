@@ -1738,6 +1738,8 @@
 }
 
 .reminder-item__title {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-weight: 500;
     cursor: pointer;
     margin-bottom: 0;
@@ -1748,6 +1750,10 @@
         color: var(--b3-theme-primary);
         text-decoration: underline;
     }
+}
+
+.reminder-item__url-icon {
+    flex-shrink: 0;
 }
 
 .reminder-item__time {
