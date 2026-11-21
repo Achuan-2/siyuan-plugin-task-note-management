@@ -250,55 +250,64 @@ function getLeadingTimeClause(text: string): string {
     return text.split(/[，。,.；;！!？?\n]/, 1)[0].trim();
 }
 
-// 初始化全局 chrono 解析器
-const chronoParser: any = chrono.zh.casual.clone();
+// 懒初始化全局 chrono 解析器，避免未调用自然语言解析的入口（如 kernel）因顶层副作用打包整个 chrono-node
+let chronoParser: any = null;
 
-// 配置 chrono 选项
-chronoParser.option = {
-    ...chronoParser.option,
-    forwardDate: false // 优先解析未来日期
-};
+function getChronoParser(): any {
+    if (chronoParser) return chronoParser;
 
-// 添加自定义解析器来处理紧凑日期格式和其他特殊格式
-chronoParser.refiners.push({
-    refine: (_context: any, results: any[]) => {
-        results.forEach(result => {
-            const text = result.text;
+    const parser: any = chrono.zh.casual.clone();
 
-            // 处理YYYYMMDD格式
-            const compactMatch = text.match(/^(\d{8})$/);
-            if (compactMatch) {
-                const dateStr = compactMatch[1];
-                const year = parseInt(dateStr.substring(0, 4));
-                const month = parseInt(dateStr.substring(4, 6));
-                const day = parseInt(dateStr.substring(6, 8));
+    // 配置 chrono 选项
+    parser.option = {
+        ...parser.option,
+        forwardDate: false // 优先解析未来日期
+    };
 
-                // 验证日期有效性
-                if (isValidDate(year, month, day)) {
-                    result.start.assign('year', year);
-                    result.start.assign('month', month);
-                    result.start.assign('day', day);
+    // 添加自定义解析器来处理紧凑日期格式和其他特殊格式
+    parser.refiners.push({
+        refine: (_context: any, results: any[]) => {
+            results.forEach(result => {
+                const text = result.text;
+
+                // 处理YYYYMMDD格式
+                const compactMatch = text.match(/^(\d{8})$/);
+                if (compactMatch) {
+                    const dateStr = compactMatch[1];
+                    const year = parseInt(dateStr.substring(0, 4));
+                    const month = parseInt(dateStr.substring(4, 6));
+                    const day = parseInt(dateStr.substring(6, 8));
+
+                    // 验证日期有效性
+                    if (isValidDate(year, month, day)) {
+                        result.start.assign('year', year);
+                        result.start.assign('month', month);
+                        result.start.assign('day', day);
+                    }
                 }
-            }
 
-            // 处理其他数字格式 (YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD)
-            const standardMatch = text.match(/^(\d{4})[-\/\.年](\d{1,2})[-\/\.月日](\d{1,2})[日号]?$/);
-            if (standardMatch) {
-                const year = parseInt(standardMatch[1]);
-                const month = parseInt(standardMatch[2]);
-                const day = parseInt(standardMatch[3]);
+                // 处理其他数字格式 (YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD)
+                const standardMatch = text.match(/^(\d{4})[-\/\.年](\d{1,2})[-\/\.月日](\d{1,2})[日号]?$/);
+                if (standardMatch) {
+                    const year = parseInt(standardMatch[1]);
+                    const month = parseInt(standardMatch[2]);
+                    const day = parseInt(standardMatch[3]);
 
-                if (isValidDate(year, month, day)) {
-                    result.start.assign('year', year);
-                    result.start.assign('month', month);
-                    result.start.assign('day', day);
+                    if (isValidDate(year, month, day)) {
+                        result.start.assign('year', year);
+                        result.start.assign('month', month);
+                        result.start.assign('day', day);
+                    }
                 }
-            }
-        });
+            });
 
-        return results;
-    }
-});
+            return results;
+        }
+    });
+
+    chronoParser = parser;
+    return chronoParser;
+}
 
 /**
  * 解析自然语言日期时间
@@ -651,7 +660,7 @@ function parseNaturalDateTimeInner(text: string): ParseResult {
         }
 
         // 使用chrono解析其他格式
-        const results = chronoParser.parse(processedText, new Date(), { forwardDate: false });
+        const results = getChronoParser().parse(processedText, new Date(), { forwardDate: false });
 
         if (results.length === 0) {
             return {};

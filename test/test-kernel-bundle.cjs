@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
 
 // 构建后运行，验证完整打包产物，而不是替换调度器或管理器。
 test('内核构建产物没有页面也能启动 Croner、响应文件变更并完整卸载', async t => {
@@ -130,4 +132,39 @@ test('内核构建产物没有页面也能启动 Croner、响应文件变更并�
     t.mock.timers.tick(60_000); await flush();
     assert.equal(sends, 2);
     assert.equal(emails.length, 2);
+});
+
+test('内核轻量农历查表在 1900-2100 全部日期与 lunar-typescript 保持一致', async () => {
+    const load = createKernelLoader();
+    const { solarToLunar, lunarToSolar } = load('src/kernel/utils/lunarUtils.ts');
+    const { Solar } = await import('lunar-typescript');
+
+    const cur = new Date(Date.UTC(1900, 0, 1));
+    const end = new Date(Date.UTC(2100, 11, 31));
+    let checked = 0;
+    while (cur <= end) {
+        const y = cur.getUTCFullYear();
+        const m = cur.getUTCMonth() + 1;
+        const d = cur.getUTCDate();
+        const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const ref = Solar.fromYmd(y, m, d).getLunar();
+        const got = solarToLunar(iso);
+        assert.deepEqual(got, { month: ref.getMonth(), day: ref.getDay() }, `mismatch on ${iso}`);
+        checked++;
+        cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    assert.equal(checked, 73414);
+
+    // 验证闰月与腊月小月回退行为
+    assert.equal(lunarToSolar(2025, 6, 1, true), '2025-07-25');
+    assert.equal(lunarToSolar(2025, 12, 30, false), '2026-02-16');
+});
+
+test('内核构建产物不包含被排除的重量级依赖与全量前端翻译', () => {
+    const distPath = path.resolve(__dirname, '../dist/kernel.js');
+    const code = fs.readFileSync(distPath, 'utf8');
+    assert.ok(Buffer.byteLength(code) < 350 * 1024, `dist/kernel.js 体积异常膨胀: ${Buffer.byteLength(code)} bytes`);
+    assert.ok(!code.includes('ZHHansTimeExpressionParser') && !code.includes('ENCasualDateParser'), '不应打入 chrono-node');
+    assert.ok(!code.includes('彭祖百忌') && !code.includes('lunar-typescript'), '不应打入完整 lunar-typescript');
+    assert.ok(!code.includes('pomodoroAutoStartBreak'), '不应打入未使用的前端全量 i18n 键');
 });
