@@ -5950,8 +5950,11 @@ export class CalendarView {
         if (props.type === 'pomodoroDailySummary') {
             const summary = document.createElement('div');
             summary.className = 'fc-event-main-frame pomodoro-daily-summary-content';
-            summary.innerHTML = renderTaskMetadataIcon('tomato') + ' ';
-            summary.appendChild(document.createTextNode(event.title));
+            summary.innerHTML = renderTaskMetadataIcon('tomato');
+            const text = document.createElement('span');
+            text.className = 'pomodoro-daily-summary-text';
+            text.textContent = event.title;
+            summary.appendChild(text);
             return { domNodes: [summary] };
         }
 

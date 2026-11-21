@@ -594,11 +594,23 @@
                 cursor: default;
 
                 .pomodoro-daily-summary-content {
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    gap: 4px;
                     padding: 3px 4px;
                     font-weight: 600;
                     white-space: nowrap;
                     overflow: hidden;
+                    min-width: 0;
+                }
+
+                .pomodoro-daily-summary-text {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    overflow: hidden;
                     text-overflow: ellipsis;
+                    white-space: nowrap;
                 }
             }
 
