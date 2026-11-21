@@ -166,7 +166,7 @@ export const DEFAULT_SETTINGS = {
     enableGlobalTaskListAutoSort: false, // 未单独设置的任务列表默认是否自动排序
     showTaskListAutoSortMenu: true, // 在任务列表块菜单中显示自动排序开关
     taskListSortMenuMode: 'bottom', // 已完成任务排序方向：bottom | top
-    taskPriorityDisplayStyle: 'background', // 任务卡片优先级显示样式：background | checkboxBorder
+    taskPriorityDisplayStyle: 'checkboxBorder', // 任务卡片优先级显示样式：background | checkboxBorder
     showTaskCardDocumentTitle: true, // 任务卡片是否显示绑定块所属文档标题
     unassignedTasksProjectId: 'inbox', // 无项目的任务归属项目ID，默认'inbox'
 
