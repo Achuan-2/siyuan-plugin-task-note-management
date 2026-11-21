@@ -25,7 +25,7 @@ export class StatusManageDialog {
         this.dialog = new Dialog({
             title: i18n("statusManagement") || "状态管理",
             content: this.createDialogContent(),
-            width: "500px",
+            width: "560px",
             height: "500px"
         });
 
@@ -125,15 +125,24 @@ export class StatusManageDialog {
                     display: flex;
                     align-items: center;
                     flex: 1;
+                    min-width: 0;
+                    margin-right: 8px;
                 }
                 .status-icon {
                     font-size: 16px;
                     margin-right: 8px;
+                    flex-shrink: 0;
+                }
+                .status-name {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
                 }
                 .status-actions {
                     display: flex;
                     align-items: center;
                     gap: 4px;
+                    flex-shrink: 0;
                 }
                 .status-count-switch {
                     display: inline-flex;
@@ -144,6 +153,11 @@ export class StatusManageDialog {
                     color: var(--b3-theme-on-surface);
                     cursor: pointer;
                     user-select: none;
+                    white-space: nowrap;
+                }
+                .status-count-switch.status-switch--disabled {
+                    opacity: 0.65;
+                    cursor: not-allowed;
                 }
                 .status-count-switch input {
                     margin: 0;
@@ -184,13 +198,29 @@ export class StatusManageDialog {
 
     private async updateStatusBadgeSetting(status: StatusWithBadge, includeInBadge: boolean) {
         try {
-            await this.statusManager.updateStatus(status.id, { includeInBadge } as any);
+            await this.statusManager.updateStatus(status.id, { includeInBadge });
             status.includeInBadge = includeInBadge;
             showMessage(includeInBadge ? i18n("projectBadgeIncluded") : i18n("projectBadgeExcluded"));
             window.dispatchEvent(new CustomEvent('projectUpdated'));
         } catch (error) {
             console.error("Failed to update status badge count configuration", error);
             showMessage(i18n("projectBadgeUpdateFailed"));
+            this.renderStatuses();
+        }
+    }
+
+    private async updateStatusArchivedSetting(status: StatusWithBadge, isArchived: boolean) {
+        if (this.statusManager.isBuiltInArchivedStatus(status.id)) {
+            return;
+        }
+        try {
+            await this.statusManager.updateStatus(status.id, { isArchived });
+            status.isArchived = isArchived;
+            showMessage(isArchived ? i18n("projectStatusHiddenInAll") : i18n("projectStatusShownInAll"));
+            window.dispatchEvent(new CustomEvent('projectUpdated'));
+        } catch (error) {
+            console.error("Failed to update status archived hide configuration", error);
+            showMessage(i18n("projectStatusArchiveUpdateFailed"));
             this.renderStatuses();
         }
     }
@@ -216,6 +246,8 @@ export class StatusManageDialog {
     private createStatusElement(status: Status): HTMLElement {
         const statusWithBadge = status as StatusWithBadge;
         const includeInBadge = this.shouldIncludeInBadge(statusWithBadge);
+        const isBuiltInArchived = this.statusManager.isBuiltInArchivedStatus(status.id);
+        const isArchived = isBuiltInArchived || Boolean(status.isArchived);
         const statusEl = document.createElement('div');
         statusEl.className = 'status-item';
         statusEl.draggable = true;
@@ -229,6 +261,10 @@ export class StatusManageDialog {
                 <div class="status-name">${status.name}</div>
             </div>
             <div class="status-actions">
+                <label class="status-count-switch ariaLabel${isBuiltInArchived ? ' status-switch--disabled' : ''}" aria-label="${isBuiltInArchived ? i18n("builtInArchivedStatusAlwaysHidden") : i18n("hideStatusInAllProjectsHint")}">
+                    <input type="checkbox" class="b3-switch" data-action="toggle-archived" ${isArchived ? 'checked' : ''} ${isBuiltInArchived ? 'disabled' : ''}>
+                    <span>${i18n("hideInAllLabel")}</span>
+                </label>
                 <label class="status-count-switch ariaLabel" aria-label="${i18n("includeInProjectBadge")}">
                     <input type="checkbox" class="b3-switch" data-action="toggle-badge" ${includeInBadge ? 'checked' : ''}>
                     <span>${i18n("countLabel")}</span>
@@ -236,7 +272,7 @@ export class StatusManageDialog {
                 <button class="b3-button b3-button--outline status-edit-btn ariaLabel" data-action="edit" data-id="${status.id}" aria-label="${i18n("editStatus") || "编辑状态"}">
                     <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
                 </button>
-                ${!status.isArchived ? `
+                ${!isBuiltInArchived ? `
                 <button class="b3-button b3-button--outline status-delete-btn ariaLabel" data-action="delete" data-id="${status.id}" aria-label="${i18n("deleteStatus") || "删除状态"}">
                     <svg class="b3-button__icon"><use xlink:href="#iconTrashcan"></use></svg>
                 </button>
@@ -248,7 +284,17 @@ export class StatusManageDialog {
 
         const editBtn = statusEl.querySelector('[data-action="edit"]') as HTMLButtonElement;
         const deleteBtn = statusEl.querySelector('[data-action="delete"]') as HTMLButtonElement;
+        const archivedToggle = statusEl.querySelector('[data-action="toggle-archived"]') as HTMLInputElement;
         const badgeToggle = statusEl.querySelector('[data-action="toggle-badge"]') as HTMLInputElement;
+
+        archivedToggle?.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        archivedToggle?.addEventListener('change', (e) => {
+            e.stopPropagation();
+            this.updateStatusArchivedSetting(statusWithBadge, archivedToggle.checked);
+        });
 
         badgeToggle?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -377,7 +423,9 @@ export class StatusManageDialog {
 
     private showEditStatusDialog(status?: Status) {
         const isEdit = !!status;
+        const isBuiltInArchived = isEdit && this.statusManager.isBuiltInArchivedStatus(status?.id);
         const initialIncludeInBadge = isEdit ? this.shouldIncludeInBadge(status as StatusWithBadge) : false;
+        const initialIsArchived = isBuiltInArchived || (isEdit ? Boolean(status?.isArchived) : false);
         const editDialog = new Dialog({
             title: isEdit ? (i18n("editStatus") || "编辑状态") : (i18n("addStatus") || "添加状态"),
             content: `
@@ -396,6 +444,13 @@ export class StatusManageDialog {
                             <label class="status-badge-checkbox">
                                 <input type="checkbox" class="b3-switch" id="statusIncludeInBadge" ${initialIncludeInBadge ? 'checked' : ''}>
                                 <span>${i18n("projectStatusCountsInBadge")}</span>
+                            </label>
+                        </div>
+                        <div class="b3-form__group">
+                            <label class="b3-form__label">${i18n("hideStatusInAllProjectsLabel")}</label>
+                            <label class="status-badge-checkbox${isBuiltInArchived ? ' status-switch--disabled' : ''}">
+                                <input type="checkbox" class="b3-switch" id="statusIsArchived" ${initialIsArchived ? 'checked' : ''} ${isBuiltInArchived ? 'disabled' : ''}>
+                                <span>${isBuiltInArchived ? i18n("builtInArchivedStatusAlwaysHidden") : i18n("projectStatusHiddenInAllDesc")}</span>
                             </label>
                         </div>
                     </div>
@@ -430,13 +485,17 @@ export class StatusManageDialog {
                             cursor: pointer;
                             user-select: none;
                         }
+                        .status-badge-checkbox.status-switch--disabled {
+                            opacity: 0.65;
+                            cursor: not-allowed;
+                        }
                         .status-badge-checkbox input {
                             margin: 0;
                         }
                     </style>
                 </div>
             `,
-            width: "400px"
+            width: "420px"
         });
 
         const nameInput = editDialog.element.querySelector('#statusName') as HTMLInputElement;
@@ -444,6 +503,7 @@ export class StatusManageDialog {
         const cancelBtn = editDialog.element.querySelector('#editCancelBtn') as HTMLButtonElement;
         const confirmBtn = editDialog.element.querySelector('#editConfirmBtn') as HTMLButtonElement;
         const includeInBadgeInput = editDialog.element.querySelector('#statusIncludeInBadge') as HTMLInputElement;
+        const isArchivedInput = editDialog.element.querySelector('#statusIsArchived') as HTMLInputElement;
 
         // 设置初始图标
         if (status?.icon) {
@@ -466,6 +526,7 @@ export class StatusManageDialog {
             const name = nameInput.value.trim();
             const icon = iconDisplay.textContent || '';
             const includeInBadge = includeInBadgeInput?.checked ?? false;
+            const isArchived = isBuiltInArchived ? true : (isArchivedInput?.checked ?? false);
 
             if (!name) {
                 showMessage(i18n("pleaseEnterStatusName") || "请输入状态名称");
@@ -474,10 +535,10 @@ export class StatusManageDialog {
 
             try {
                 if (isEdit && status) {
-                    await this.statusManager.updateStatus(status.id, { name, icon, includeInBadge } as any);
+                    await this.statusManager.updateStatus(status.id, { name, icon, includeInBadge, isArchived });
                     showMessage(i18n("statusUpdated") || "状态已更新");
                 } else {
-                    await this.statusManager.addStatus({ name, icon, includeInBadge } as any);
+                    await this.statusManager.addStatus({ name, icon, includeInBadge, isArchived });
                     showMessage(i18n("statusAdded") || "状态已添加");
                 }
 
@@ -492,7 +553,7 @@ export class StatusManageDialog {
     }
 
     private async deleteStatus(status: Status) {
-        if (status.isArchived) {
+        if (this.statusManager.isBuiltInArchivedStatus(status.id)) {
             showMessage(i18n("cannotDeleteArchivedStatus") || "归档状态不可删除");
             return;
         }
@@ -522,6 +583,7 @@ export class StatusManageDialog {
                     await this.statusManager.resetToDefault();
                     showMessage(i18n("statusesReset") || "状态已重置");
                     this.renderStatuses();
+                    window.dispatchEvent(new CustomEvent('projectUpdated'));
                 } catch (error) {
                     console.error("Failed to reset statuses", error);
                     showMessage(i18n("resetStatusesFailed") || "重置状态失败");
@@ -546,5 +608,3 @@ export class StatusManageDialog {
         });
     }
 }
-
-

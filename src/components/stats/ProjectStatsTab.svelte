@@ -256,6 +256,7 @@
             reminderData = (await getAllReminders(plugin)) || {};
             settings = (await plugin.loadSettings()) || {};
             holidayData = (await plugin.loadHolidayData?.()) || {};
+            statuses = projectManager.getStatusManager()?.getStatuses() || [];
             const projects = projectManager.getProjects().filter((p: any) => p && p.id);
             allStats = await Promise.all(projects.map((p: any) => computeProjectStats(p)));
         } catch (e) {

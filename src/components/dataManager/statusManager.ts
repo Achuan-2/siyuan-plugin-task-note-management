@@ -5,7 +5,8 @@ export interface Status {
     id: string;
     name: string;
     icon?: string;
-    isArchived: boolean; // 标识是否是归档状态
+    isArchived: boolean; // 标识是否是归档状态（默认在全部项目等视图中隐藏）
+    includeInBadge?: boolean; // 是否计入侧栏项目徽章
 }
 
 const DEFAULT_STATUSES: Status[] = [
@@ -120,11 +121,24 @@ export class StatusManager {
         return this.statuses.find(s => s.id === id);
     }
 
-    public async addStatus(status: Omit<Status, 'id' | 'isArchived'>): Promise<Status> {
+    public isBuiltInArchivedStatus(id?: string): boolean {
+        return id === 'archived';
+    }
+
+    public isArchivedStatus(id?: string): boolean {
+        if (!id) return false;
+        const status = this.getStatusById(id);
+        if (status) {
+            return Boolean(status.isArchived);
+        }
+        return id === 'archived';
+    }
+
+    public async addStatus(status: Omit<Status, 'id' | 'isArchived'> & { isArchived?: boolean }): Promise<Status> {
         const newStatus: Status = {
             ...status,
             id: `status_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-            isArchived: false
+            isArchived: Boolean(status.isArchived)
         };
 
         this.statuses.push(newStatus);
@@ -132,13 +146,17 @@ export class StatusManager {
         return newStatus;
     }
 
-    public async updateStatus(id: string, updates: Partial<Omit<Status, 'id' | 'isArchived'>>): Promise<boolean> {
+    public async updateStatus(id: string, updates: Partial<Omit<Status, 'id'>>): Promise<boolean> {
         const index = this.statuses.findIndex(s => s.id === id);
         if (index === -1) {
             return false;
         }
 
-        this.statuses[index] = { ...this.statuses[index], ...updates };
+        const nextStatus: Status = { ...this.statuses[index], ...updates };
+        if (this.isBuiltInArchivedStatus(nextStatus.id)) {
+            nextStatus.isArchived = true;
+        }
+        this.statuses[index] = nextStatus;
         await this.saveStatuses();
         return true;
     }
@@ -149,8 +167,8 @@ export class StatusManager {
             return false;
         }
 
-        // 不允许删除归档状态
-        if (this.statuses[index].isArchived) {
+        // 不允许删除内置归档状态
+        if (this.isBuiltInArchivedStatus(this.statuses[index].id)) {
             return false;
         }
 

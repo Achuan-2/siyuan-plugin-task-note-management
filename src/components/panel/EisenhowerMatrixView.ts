@@ -2985,13 +2985,15 @@ export class EisenhowerMatrixView {
             const groupedProjects = this.projectManager.getProjectsGroupedByStatus();
             const allProjects = [];
 
+            const statusManager = this.projectManager.getStatusManager();
+
             // 收集所有非归档状态的项目
             Object.keys(groupedProjects).forEach(statusKey => {
                 const projects = groupedProjects[statusKey] || [];
                 // 排除已归档的项目
                 projects.forEach(project => {
                     const projectStatus = this.projectManager.getProjectById(project.id)?.status || 'doing';
-                    if (projectStatus !== 'archived') {
+                    if (!statusManager.isArchivedStatus(projectStatus)) {
                         allProjects.push(project);
                     }
                 });
@@ -3009,7 +3011,7 @@ export class EisenhowerMatrixView {
                 const projects = groupedProjects[statusKey] || [];
                 const nonArchivedProjects = projects.filter(project => {
                     const projectStatus = this.projectManager.getProjectById(project.id)?.status || 'doing';
-                    return projectStatus !== 'archived';
+                    return !statusManager.isArchivedStatus(projectStatus);
                 });
 
                 if (nonArchivedProjects.length > 0) {
@@ -4078,9 +4080,10 @@ export class EisenhowerMatrixView {
         // 获取所有项目
         const allProjects = this.projectManager.getProjectsGroupedByStatus();
         const activeProjects: any[] = [];
+        const statusManager = this.projectManager.getStatusManager();
         Object.values(allProjects).forEach((projects: any[]) => {
             if (projects && projects.length > 0) {
-                activeProjects.push(...projects.filter(p => p && p.status !== 'archived'));
+                activeProjects.push(...projects.filter(p => p && !statusManager.isArchivedStatus(p.status)));
             }
         });
 

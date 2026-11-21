@@ -2200,7 +2200,7 @@ export class ProjectPanel {
             if (projectData[projectId]) {
                 projectData[projectId].status = status;
                 // 保持向后兼容
-                projectData[projectId].archived = status === 'archived';
+                projectData[projectId].archived = this.statusManager.isArchivedStatus(status);
                 projectData[projectId].updatedTime = new Date().toISOString();
                 await this.plugin.saveProjectData(projectData);
                 window.dispatchEvent(new CustomEvent('projectUpdated'));

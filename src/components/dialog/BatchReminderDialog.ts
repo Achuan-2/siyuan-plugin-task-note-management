@@ -1398,7 +1398,7 @@ class SmartBatchDialog {
             // 添加项目选项
             Object.keys(groupedProjects).forEach(statusKey => {
                 // 不显示已归档的项目
-                if (statusKey === 'archived') return;
+                if (this.projectManager.getStatusManager().isArchivedStatus(statusKey)) return;
 
                 const projects = groupedProjects[statusKey];
                 if (projects.length > 0) {
@@ -2050,7 +2050,7 @@ class BlockEditDialog {
             // 添加项目选项
             Object.keys(groupedProjects).forEach(statusKey => {
                 // 不显示已归档的项目
-                if (statusKey === 'archived') return;
+                if (this.projectManager.getStatusManager().isArchivedStatus(statusKey)) return;
 
                 const projects = groupedProjects[statusKey];
                 if (projects.length > 0) {

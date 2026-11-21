@@ -296,12 +296,13 @@
         // 获取所有未归档的项目，按状态分组顺序展示（与 QuickReminderDialog 保持一致）
         const groupedProjects = projectManager.getProjectsGroupedByStatus();
         projects = [];
+        const statusManager = projectManager.getStatusManager();
         // 按照 getProjectsGroupedByStatus 返回的顺序遍历，保持与 QuickReminderDialog 一致的展示顺序
         Object.keys(groupedProjects).forEach(statusKey => {
             const statusProjects = groupedProjects[statusKey] || [];
             const nonArchivedProjects = statusProjects.filter(project => {
                 const projectStatus = projectManager.getProjectById(project.id)?.status || 'doing';
-                return projectStatus !== 'archived';
+                return !statusManager.isArchivedStatus(projectStatus);
             });
 
             // 在每个状态组内排序：先按优先级，再按sort字段，再按时间

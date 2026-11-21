@@ -2959,5 +2959,13 @@
     "reminderGroupDueTomorrow": "Due tomorrow",
     "reminderGroupDueFuture": "Due later",
     "reminderGroupNoDeadline": "No due date",
-    "reminderGroupNoPriority": "No priority"
+    "reminderGroupNoPriority": "No priority",
+    "hideInAllLabel": "Hide",
+    "hideStatusInAllProjectsLabel": "Hide by default (archived behavior)",
+    "hideStatusInAllProjectsHint": "Hide in All Projects and selectors like Archived",
+    "projectStatusHiddenInAllDesc": "Hide projects with this status in All Projects and selectors (same as Archived)",
+    "builtInArchivedStatusAlwaysHidden": "Built-in archived status is always hidden by default",
+    "projectStatusHiddenInAll": "Set to hidden by default (same as archived)",
+    "projectStatusShownInAll": "Shown in All Projects again",
+    "projectStatusArchiveUpdateFailed": "Failed to update hide setting. Please try again"
 }

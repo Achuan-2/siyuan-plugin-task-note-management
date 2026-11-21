@@ -2959,5 +2959,13 @@
     "reminderGroupDueTomorrow": "明天截止",
     "reminderGroupDueFuture": "未来截止",
     "reminderGroupNoDeadline": "无截止日期",
-    "reminderGroupNoPriority": "无优先级"
+    "reminderGroupNoPriority": "无优先级",
+    "hideInAllLabel": "隐藏",
+    "hideStatusInAllProjectsLabel": "默认隐藏（归档效果）",
+    "hideStatusInAllProjectsHint": "开启后在全部项目等视图中按已归档效果隐藏",
+    "projectStatusHiddenInAllDesc": "在全部项目及项目选择器中隐藏该状态项目（同已归档效果）",
+    "builtInArchivedStatusAlwaysHidden": "内置已归档状态默认隐藏",
+    "projectStatusHiddenInAll": "已设为默认隐藏（同已归档效果）",
+    "projectStatusShownInAll": "已取消默认隐藏，将在全部项目中显示",
+    "projectStatusArchiveUpdateFailed": "更新隐藏设置失败，请重试"
 }

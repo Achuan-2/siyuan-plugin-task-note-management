@@ -590,7 +590,7 @@ export class ProjectDialog {
                 startDate: startDate,
                 endDate: endDate || null,
                 // 保持向后兼容
-                archived: statusEl.value === 'archived',
+                archived: this.statusManager.isArchivedStatus(statusEl.value),
                 updatedTime: new Date().toISOString(),
             };
 
