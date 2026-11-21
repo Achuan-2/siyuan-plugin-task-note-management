@@ -1470,6 +1470,8 @@
     "deleteSubscriptionTasks": "同时删除订阅的任务",
     "subscriptionTasksDeleted": "已删除订阅的 ${count} 个任务",
     "syncNow": "立即同步",
+    "updateSubscribedCalendars": "更新订阅日历",
+    "allSubscribedCalendars": "全部日历",
     "syncingSubscription": "正在同步...",
     "subscriptionSyncCompleted": "订阅同步完成",
     "syncFinished": "同步完成",

@@ -40,7 +40,15 @@ import { showStatsDialog } from "../stats/ShowStatsDialog";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
-import { getAllReminders, isWritableSubscriptionType, saveReminders } from "../../utils/icsSubscription";
+import {
+    getAllReminders,
+    isWritableSubscriptionType,
+    loadSubscriptions,
+    saveReminders,
+    saveSubscriptions,
+    syncAllSubscriptions,
+    syncSubscription,
+} from "../../utils/icsSubscription";
 import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { isEventPast } from "../../utils/icsImport";
 import { uploadIcsToCloud } from "../../utils/icsExport";
@@ -10941,8 +10949,28 @@ export class ReminderPanel {
     /**
      * 显示更多菜单
      */
-    private showMoreMenu(event: MouseEvent) {
+    private async showMoreMenu(event: MouseEvent) {
         try {
+            // 先在异步操作前捕获触发按钮坐标，避免事件目标失效
+            const triggerRect = event.target instanceof HTMLElement
+                ? event.target.getBoundingClientRect()
+                : null;
+            const fallbackPos = { x: event.clientX, y: event.clientY };
+
+            let enabledSubscriptions: any[] = [];
+            if (!this.selectionOptions) {
+                try {
+                    const subData = await loadSubscriptions(this.plugin);
+                    enabledSubscriptions = Object.values(subData?.subscriptions || {}).filter(
+                        (sub: any) => sub && sub.enabled
+                    );
+                } catch (err) {
+                    console.warn("Failed to load subscriptions for more menu:", err);
+                }
+            }
+
+            if (this.disposed) return;
+
             const menu = new Menu("reminderMoreMenu");
 
             // 显示设置
@@ -11060,6 +11088,77 @@ export class ReminderPanel {
                 click: () => this.showFilterManagement()
             });
 
+            if (!this.selectionOptions && enabledSubscriptions.length > 0) {
+                const subscriptionSubmenu: any[] = [
+                    {
+                        icon: 'iconRefresh',
+                        label: i18n('allSubscribedCalendars') || '全部日历',
+                        click: async () => {
+                            try {
+                                await pushMsg(i18n('syncingSubscription'));
+                                await syncAllSubscriptions(this.plugin);
+                                if (!this.disposed) {
+                                    await this.loadReminders(true);
+                                }
+                            } catch (error) {
+                                console.error('Failed to sync all subscribed calendars:', error);
+                                const message = error instanceof Error ? error.message : String(error);
+                                await pushErrMsg(`${i18n('subscriptionSyncError') || '订阅同步失败'}: ${message}`);
+                            }
+                        }
+                    },
+                    { type: 'separator' },
+                    ...enabledSubscriptions.map((sub: any) => ({
+                        icon: 'iconCalendar',
+                        label: sub.name || sub.url || sub.id,
+                        click: async () => {
+                            try {
+                                await pushMsg(i18n('syncingSubscription'));
+                                const latestData = await loadSubscriptions(this.plugin);
+                                const targetSub = latestData?.subscriptions?.[sub.id] || sub;
+                                const result = await syncSubscription(this.plugin, targetSub);
+
+                                targetSub.lastSync = new Date().toISOString();
+                                targetSub.lastSyncStatus = result.success ? 'success' : 'error';
+                                if (!result.success) {
+                                    targetSub.lastSyncError = result.error;
+                                    if (latestData?.subscriptions) {
+                                        latestData.subscriptions[targetSub.id] = targetSub;
+                                        await saveSubscriptions(this.plugin, latestData);
+                                    }
+                                    await pushErrMsg(
+                                        `${i18n('subscriptionSyncError') || '订阅同步失败'}: ${
+                                            result.error || i18n('parseSubscribedCalendarFailed')
+                                        }`
+                                    );
+                                    return;
+                                }
+
+                                targetSub.lastSyncError = undefined;
+                                if (latestData?.subscriptions) {
+                                    latestData.subscriptions[targetSub.id] = targetSub;
+                                    await saveSubscriptions(this.plugin, latestData);
+                                }
+                                if (!this.disposed) {
+                                    await this.loadReminders(true);
+                                }
+                                await pushMsg(i18n('syncFinished'));
+                            } catch (error) {
+                                console.error('Failed to sync subscribed calendar:', sub?.id, error);
+                                const message = error instanceof Error ? error.message : String(error);
+                                await pushErrMsg(`${i18n('subscriptionSyncError') || '订阅同步失败'}: ${message}`);
+                            }
+                        }
+                    }))
+                ];
+
+                menu.addItem({
+                    icon: 'iconRefresh',
+                    label: i18n('updateSubscribedCalendars') || '更新订阅日历',
+                    submenu: subscriptionSubmenu
+                });
+            }
+
             if (!this.selectionOptions && this.plugin.settings?.icsShowUploadInTaskMenu === true) {
                 menu.addItem({
                     icon: 'iconTNCalendarUpload',
@@ -11095,16 +11194,15 @@ export class ReminderPanel {
             });
 
             // 显示菜单
-            if (event.target instanceof HTMLElement) {
-                const rect = event.target.getBoundingClientRect();
+            if (triggerRect) {
                 menu.open({
-                    x: rect.left,
-                    y: rect.bottom + 4
+                    x: triggerRect.left,
+                    y: triggerRect.bottom + 4
                 });
             } else {
                 menu.open({
-                    x: event.clientX,
-                    y: event.clientY
+                    x: fallbackPos.x,
+                    y: fallbackPos.y
                 });
             }
         } catch (error) {

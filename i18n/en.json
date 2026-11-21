@@ -1470,6 +1470,8 @@
     "deleteSubscriptionTasks": "Also delete subscription tasks",
     "subscriptionTasksDeleted": "Deleted ${count} tasks from subscription",
     "syncNow": "Sync Now",
+    "updateSubscribedCalendars": "Update Subscribed Calendars",
+    "allSubscribedCalendars": "All Calendars",
     "syncingSubscription": "Syncing...",
     "subscriptionSyncCompleted": "Subscription sync completed",
     "syncFinished": "Sync finished",
