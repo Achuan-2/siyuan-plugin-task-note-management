@@ -2702,6 +2702,68 @@
 
 /* 快速提醒对话框样式 */
 .quick-reminder-dialog {
+    &__content {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    & &__content--notes {
+        overflow: hidden;
+
+        .quick-reminder-dialog__form,
+        #quickTaskNotesPanel,
+        #quickReminderNote,
+        .milkdown {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        #quickReminderNote {
+            width: 100%;
+            border: 1px solid var(--b3-theme-surface-lighter);
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .ProseMirror {
+            flex: 1;
+            overflow-y: auto;
+        }
+    }
+
+    &__detail-tabs {
+        display: flex;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        align-items: center;
+        column-gap: 12px;
+        margin: 8px 0 12px;
+        border-bottom: 1px solid var(--b3-border-color);
+
+        > .b3-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 0;
+            border-bottom: 2px solid transparent;
+            padding: 6px 8px;
+            color: var(--b3-theme-on-surface);
+            font-weight: 500;
+
+            &[hidden] {
+                display: none;
+            }
+
+            &[aria-selected="true"] {
+                border-bottom-color: var(--b3-theme-primary);
+                color: var(--b3-theme-primary);
+                background: var(--b3-theme-background);
+            }
+        }
+    }
 
     .b3-form__group {
         margin-bottom: 16px;
