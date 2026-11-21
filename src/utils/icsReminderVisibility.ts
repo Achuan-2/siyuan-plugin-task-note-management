@@ -36,23 +36,45 @@ function completedDates(reminder: any, everyDay: boolean, startDate: string): Se
     for (const [date, completed] of Object.entries(reminder.dailyCompletions || {})) {
         if (completed === true && parseDate(date)) dates.add(date);
     }
-    for (const [originalDate, rawState] of Object.entries(reminder.repeat?.instances || {})) {
+    if (Array.isArray(reminder.dailyDessertCompleted)) {
+        for (const date of reminder.dailyDessertCompleted) {
+            if (typeof date === 'string' && parseDate(date)) dates.add(date);
+        }
+    }
+    if (!reminder.repeat?.enabled) return dates;
+
+    const baseDurationDays = parseDate(reminder.date) && parseDate(reminder.endDate)
+        ? Math.max(0, Math.round((Date.parse(`${reminder.endDate}T00:00:00Z`) - Date.parse(`${reminder.date}T00:00:00Z`)) / 86400000))
+        : 0;
+    const initialEndDate = parseDate(reminder.endDate) ? reminder.endDate : (parseDate(reminder.date) ? reminder.date : undefined);
+
+    for (const [originalDate, rawState] of Object.entries(reminder.repeat.instances || {})) {
         const state = rawState as any;
         if (!state?.completed || state.deleted || state.date === null || !parseDate(originalDate)) continue;
         const actualDate = state.date || originalDate;
         if (!parseDate(actualDate)) continue;
+        const instanceEnd = state.endDate && parseDate(state.endDate)
+            ? (state.endDate >= actualDate ? state.endDate : actualDate)
+            : shiftDay(actualDate, baseDurationDays);
         if (everyDay) {
-            const end = state.endDate || (reminder.date && reminder.endDate
-                ? shiftDay(actualDate, Math.round((Date.parse(`${reminder.endDate}T00:00:00Z`) - Date.parse(`${reminder.date}T00:00:00Z`)) / 86400000))
-                : actualDate);
-            if (!parseDate(end)) continue;
-            for (let date = actualDate; date <= end; date = shiftDay(date, 1)) dates.add(date);
-        } else if (originalDate === reminder.date || actualDate === reminder.date || actualDate === startDate) {
-            // A dated/relative reminder belongs to the task occurrence, even when it fires a day earlier.
+            for (let date = actualDate; date <= instanceEnd; date = shiftDay(date, 1)) dates.add(date);
+        } else if (
+            (startDate >= actualDate && startDate <= instanceEnd) ||
+            ((originalDate === reminder.date || actualDate === reminder.date) && (!initialEndDate || startDate <= initialEndDate))
+        ) {
+            // A dated/relative reminder belongs to the matching occurrence (or fires earlier for the initial occurrence).
             dates.add(startDate);
         }
     }
     return dates;
+}
+
+function isRangeFullyCompleted(firstDate: string, lastDate: string, completed: Set<string>): boolean {
+    if (!parseDate(firstDate) || !parseDate(lastDate) || lastDate < firstDate) return false;
+    for (let date = firstDate; date <= lastDate; date = shiftDay(date, 1)) {
+        if (!completed.has(date)) return false;
+    }
+    return true;
 }
 
 function cloneOccurrence(event: any, date: string): any {
@@ -100,6 +122,9 @@ export function filterIcsReminderEvent(event: any, reminder: any, everyDay: bool
             uid: index === 0 ? event.uid : `${event.uid}-completed-${date}` }));
     }
     if (!showCompleted) {
+        if (lastDate && isRangeFullyCompleted(firstDate, lastDate, completed)) {
+            return [];
+        }
         return [{ ...event, ...(completedInSeries.length ? {
             exclusionDates: [...(event.exclusionDates || []), ...completedInSeries.map(date => [...date.split('-').map(Number), ...event.start.slice(3)])],
         } : {}) }];

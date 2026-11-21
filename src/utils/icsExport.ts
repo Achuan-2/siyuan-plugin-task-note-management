@@ -726,6 +726,8 @@ export async function exportIcsFile(
                                 }
                             }
 
+                            processReminderTimes(child, child.id || id, childTitle, child.completed, events);
+
                             if (!childMatches) continue;
 
                             if (childStartTimeArray) {
@@ -902,8 +904,6 @@ export async function exportIcsFile(
                             } else {
                                 events.push(childEvent);
                             }
-
-                            processReminderTimes(child, child.id || id, childTitle, child.completed, events);
                         } else {
                             const prefix = '\n- ';
                             description += `${prefix}${childTitle}${childNote ? '：' + childNote : ''}`;

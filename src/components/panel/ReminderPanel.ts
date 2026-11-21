@@ -11888,7 +11888,7 @@ export class ReminderPanel {
                 click: () => this.showFilterManagement()
             });
 
-            if (this.plugin.settings?.icsShowUploadInTaskMenu === true) {
+            if (!this.selectionOptions && this.plugin.settings?.icsShowUploadInTaskMenu === true) {
                 menu.addItem({
                     icon: 'iconTNCalendarUpload',
                     label: i18n('uploadIcsToCloud'),

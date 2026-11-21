@@ -282,3 +282,40 @@ test('真实设置加载在默认值合并后仍保留两个旧开关对应的�
         assert.equal((await plugin.loadSettings()).icsReminderVisibility, expected);
     }
 });
+
+test('重复任务完成首日实例不会误隐藏更晚日期的非每日提醒，关闭重复后残留实例也不生效', async () => {
+    const laterReminder = { task: task({ date: '2026-11-10', reminderTimes: [{ time: '2026-11-17T09:00' }],
+        repeat: { enabled: true, type: 'daily', endType: 'never', instances: { '2026-11-10': { completed: true } } } }) };
+    let { events } = await fixture(laterReminder, { icsTaskFilter: 'uncompleted' }).export();
+    assert.equal(reminders(events).length, 1);
+
+    const disabledRepeat = { task: task({ date: '2026-11-17', reminderTimes: [{ time: '2026-11-17T09:00' }],
+        repeat: { enabled: false, type: 'daily', endType: 'never', instances: { '2026-11-17': { completed: true } } } }) };
+    ({ events } = await fixture(disabledRepeat, { icsTaskFilter: 'uncompleted' }).export());
+    assert.equal(reminders(events).length, 1);
+});
+
+test('每日可做任务标记今日完成后隐藏对应提醒，跨天所有日期均完成时不输出空提醒系列', async () => {
+    const dessert = { task: task({ date: '2026-11-17', reminderTimes: [{ time: '2026-11-17T09:00' }],
+        dailyDessertCompleted: ['2026-11-17'] }) };
+    let { events } = await fixture(dessert, { icsTaskFilter: 'uncompleted' }).export();
+    assert.equal(reminders(events).length, 0);
+
+    const allDoneSpan = { task: task({ date: '2026-11-17', endDate: '2026-11-18',
+        reminderTimes: [{ time: '09:00', everyDay: true }],
+        dailyCompletions: { '2026-11-17': true, '2026-11-18': true } }) };
+    ({ events } = await fixture(allDoneSpan, { icsReminderVisibility: 'hideCompleted' }).export());
+    assert.equal(reminders(events).length, 0);
+});
+
+test('仅已完成加显示全部提醒时，跨天子任务的已完成日期历史提醒同样正常导出', async () => {
+    const data = {
+        parent: task({ id: 'parent', reminderTimes: [] }),
+        child: task({ id: 'child', parentId: 'parent', title: '跨天子任务', date: '2026-11-17', endDate: '2026-11-20',
+            reminderTimes: [{ time: '09:00', everyDay: true }], dailyCompletions: { '2026-11-17': true } }),
+    };
+    const { events } = await fixture(data, { icsTaskFilter: 'completed', icsReminderVisibility: 'all' }).export();
+    assert.equal(reminders(events).length, 1);
+    assert.equal(reminders(events)[0].getFirstPropertyValue('summary'), '⏰ 跨天子任务');
+    assert.equal(alarms(reminders(events)[0]).length, 0);
+});
