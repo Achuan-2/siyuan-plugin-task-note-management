@@ -2,6 +2,7 @@ import { pushErrMsg, pushMsg, putFile, getFile, removeFile, forwardProxy } from 
 import { ParsedIcsEvent, parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
 import { deleteCalDavTask, fetchCalDavEvents, putCalDavTask } from './caldavSubscription';
 import {
+    createDidaTask,
     deleteDidaTask,
     fetchDidaTasks,
     syncDidaProjectGroups,
@@ -71,6 +72,39 @@ export function isSubscriptionDeletable(subscription: any): boolean {
         return subscription.caldavDeletable === true;
     }
     return subscription.caldavDeletable !== false;
+}
+
+export async function getEditableSubscriptionProjectIds(plugin: any): Promise<Set<string>> {
+    const result = new Set<string>();
+    try {
+        const subData = await loadSubscriptions(plugin);
+        for (const sub of Object.values(subData?.subscriptions || {}) as IcsSubscription[]) {
+            if (sub && sub.enabled && sub.projectId && isSubscriptionEditable(sub)) {
+                result.add(sub.projectId);
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to load editable subscription project IDs:', error);
+    }
+    return result;
+}
+
+export async function getEditableSubscriptionByProjectId(
+    plugin: any,
+    projectId?: string | null
+): Promise<IcsSubscription | null> {
+    if (!projectId) return null;
+    try {
+        const subData = await loadSubscriptions(plugin);
+        for (const sub of Object.values(subData?.subscriptions || {}) as IcsSubscription[]) {
+            if (sub && sub.enabled && sub.projectId === projectId && isSubscriptionEditable(sub)) {
+                return sub;
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to find editable subscription by projectId:', error);
+    }
+    return null;
 }
 
 export interface IcsSubscriptionData {
@@ -477,13 +511,13 @@ async function syncDidaTaskChanges(
         }
     }
 
-    // Handle updates
+    // Handle creates and updates
     for (const [id, nextTask] of Object.entries(syncedTasks) as [string, any][]) {
         if (nextTask.manualDelete) continue;
         const currentTask = currentTasks?.[id];
-        if (!currentTask || !nextTask.didaTaskId) continue;
+        const isNew = !nextTask.didaTaskId;
 
-        if (isSameReminderPayload(stripRuntimeSubscriptionFields(currentTask), nextTask)) {
+        if (!isNew && currentTask && isSameReminderPayload(stripRuntimeSubscriptionFields(currentTask), nextTask)) {
             continue;
         }
 
@@ -491,8 +525,29 @@ async function syncDidaTaskChanges(
             continue;
         }
 
+        if (isNew) {
+            try {
+                const parentTask = nextTask.parentId ? (syncedTasks[nextTask.parentId] || currentTasks?.[nextTask.parentId]) : undefined;
+                const created = await createDidaTask(subscription, nextTask, parentTask);
+                syncedTasks[id] = {
+                    ...nextTask,
+                    uid: created.uid,
+                    didaTaskId: created.didaTaskId,
+                    didaProjectId: created.didaProjectId,
+                    didaListId: created.didaListId,
+                    didaEtag: created.didaEtag,
+                    customGroupId: nextTask.customGroupId || created.customGroupId,
+                    url: nextTask.url || created.url,
+                    subscriptionType: 'dida',
+                };
+            } catch (e: any) {
+                console.warn(`[Dida365] CREATE failed for task ${id}, keeping local state:`, e?.message || e);
+            }
+            continue;
+        }
+
         try {
-            const result = await updateDidaTask(subscription, currentTask, nextTask);
+            const result = await updateDidaTask(subscription, currentTask || nextTask, nextTask);
             syncedTasks[id] = {
                 ...nextTask,
                 didaProjectId: result.didaProjectId,
@@ -611,15 +666,30 @@ export async function saveReminders(plugin: any, allReminders: any): Promise<voi
 
         // Load subscription data to know which subscriptions exist
         const subscriptionData = await loadSubscriptions(plugin);
+        const editableSubByProjectId = new Map<string, IcsSubscription>();
+        Object.values(subscriptionData?.subscriptions || {}).forEach((sub: any) => {
+            if (sub && sub.enabled && sub.projectId && isSubscriptionEditable(sub)) {
+                editableSubByProjectId.set(sub.projectId, sub);
+            }
+        });
 
         Object.keys(allReminders).forEach(id => {
             const reminder = allReminders[id];
+            if (!reminder) return;
             if (reminder.isSubscribed && reminder.subscriptionId) {
                 if (!subRemindersBySubId[reminder.subscriptionId]) {
                     subRemindersBySubId[reminder.subscriptionId] = {};
                 }
                 // Don't save the extra fields we added during merge
                 subRemindersBySubId[reminder.subscriptionId][id] = stripRuntimeSubscriptionFields(reminder);
+            } else if (reminder.projectId && editableSubByProjectId.has(reminder.projectId)) {
+                // Newly created task (or local task moved into a writable subscription project)
+                // -> route into that subscription so it syncs remotely to Dida365 / CalDAV.
+                const targetSub = editableSubByProjectId.get(reminder.projectId)!;
+                if (!subRemindersBySubId[targetSub.id]) {
+                    subRemindersBySubId[targetSub.id] = {};
+                }
+                subRemindersBySubId[targetSub.id][id] = stripRuntimeSubscriptionFields(reminder);
             } else {
                 localReminders[id] = reminder;
             }
@@ -629,11 +699,19 @@ export async function saveReminders(plugin: any, allReminders: any): Promise<voi
         await plugin.saveReminderData(localReminders);
 
         // Save each subscription's tasks
+        let subscriptionMetaChanged = false;
         for (const subId of Object.keys(subRemindersBySubId)) {
             const subscription = subscriptionData.subscriptions[subId];
             if (subscription) {
+                const prevInboxId = subscription.didaInboxProjectId;
                 await saveSubscriptionReminderTasks(plugin, subscription, subRemindersBySubId[subId]);
+                if (subscription.didaInboxProjectId !== prevInboxId) {
+                    subscriptionMetaChanged = true;
+                }
             }
+        }
+        if (subscriptionMetaChanged) {
+            await saveSubscriptions(plugin, subscriptionData);
         }
     } catch (error) {
         console.error('Failed to save reminders:', error);

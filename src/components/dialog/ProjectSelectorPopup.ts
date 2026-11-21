@@ -1,6 +1,7 @@
 import { ProjectManager, Project } from "../dataManager/projectManager";
 import { ProjectFolderManager } from "../dataManager/projectFolderManager";
 import { i18n } from "../../pluginInstance";
+import { getEditableSubscriptionProjectIds } from "../../utils/icsSubscription";
 
 export interface ProjectSelectorPopupOptions {
     plugin: any;
@@ -60,6 +61,7 @@ export class ProjectSelectorPopup {
     private statusFilter: string = 'all';
     private searchQuery: string = '';
     private collapsedFolders: Set<string> = new Set();
+    private editableSubscriptionProjectIds: Set<string> = new Set();
     
     private statusSelect!: HTMLSelectElement;
     private listContainer!: HTMLElement;
@@ -90,6 +92,9 @@ export class ProjectSelectorPopup {
     public async initialize() {
         await this.projectManager.initialize();
         await this.folderManager.initialize();
+        if (this.excludeSubscription) {
+            this.editableSubscriptionProjectIds = await getEditableSubscriptionProjectIds(this.plugin);
+        }
         
         // Start with everything fully expanded by default, do not load initial collapsed states.
         this.collapsedFolders.clear();
@@ -97,6 +102,10 @@ export class ProjectSelectorPopup {
         this.renderBaseStructure();
         this.renderList();
         this.bindEvents();
+    }
+
+    private isExcludedSubscriptionProject(project: Project): boolean {
+        return !!(this.excludeSubscription && project.isSubscription && !this.editableSubscriptionProjectIds.has(project.id));
     }
     
     private renderBaseStructure() {
@@ -185,7 +194,7 @@ export class ProjectSelectorPopup {
                 const statusInfo = statuses.find(s => s.id === projectStatus);
                 if (statusInfo?.isArchived) return false;
             }
-            if (this.excludeSubscription && project.isSubscription) return false;
+            if (this.isExcludedSubscriptionProject(project)) return false;
             return true;
         });
         
@@ -597,7 +606,7 @@ export class ProjectSelectorPopup {
                     const statusInfo = statuses.find(s => s.id === project.status);
                     if (statusInfo?.isArchived) return false;
                 }
-                if (this.excludeSubscription && project.isSubscription) return false;
+                if (this.isExcludedSubscriptionProject(project)) return false;
                 return true;
             })
             .map(p => p.id);
@@ -674,7 +683,7 @@ export class ProjectSelectorPopup {
                     const statusInfo = statuses.find(s => s.id === project.status);
                     if (statusInfo?.isArchived) return false;
                 }
-                if (this.excludeSubscription && project.isSubscription) return false;
+                if (this.isExcludedSubscriptionProject(project)) return false;
                 return true;
             })
             .map(p => p.id);

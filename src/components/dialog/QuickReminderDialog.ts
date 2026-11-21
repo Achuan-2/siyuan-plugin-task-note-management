@@ -17,7 +17,13 @@ import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
 import { setTaskMetadataText, renderTaskMetadataIcon, renderTaskMetadataText, type TaskMetadataIcon } from "../render/taskMetadataIcons";
 import { collectTaskDeletionIds, deleteTaskTree } from "../../utils/taskTreeDeletion";
-import { getAllReminders, isWritableSubscriptionType } from "../../utils/icsSubscription";
+import {
+    getAllReminders,
+    getEditableSubscriptionByProjectId,
+    isSubscriptionDeletable,
+    isWritableSubscriptionType,
+    saveReminders,
+} from "../../utils/icsSubscription";
 import { showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { LiteProtyleEditor } from "../editor/LiteProtyleEditor";
 import { addAssetCleanupIgnore, reconcileRemovedTaskAssets } from "../../utils/assetCleanupIgnore";
@@ -7338,6 +7344,9 @@ export class QuickReminderDialog {
                 // 创建模式：创建新提醒
                 // 使用之前生成的 tempId，确保乐观更新的 ID 与实际保存的 ID 一致
                 reminderId = tempId;
+                const targetWritableSub = projectId
+                    ? await getEditableSubscriptionByProjectId(this.plugin, projectId)
+                    : null;
                 reminder = {
                     id: reminderId,
                     parentId: this.defaultParentId,
@@ -7350,6 +7359,13 @@ export class QuickReminderDialog {
                     priority: priority,
                     categoryId: categoryId,
                     projectId: projectId,
+                    ...(targetWritableSub ? {
+                        isSubscribed: true,
+                        subscriptionId: targetWritableSub.id,
+                        subscriptionType: targetWritableSub.type || 'caldav',
+                        caldavEditable: true,
+                        caldavDeletable: isSubscriptionDeletable(targetWritableSub),
+                    } : {}),
                     linkedHabitId: linkedHabitId,
                     linkedHabitSyncPomodoroToday: linkedHabitSyncPomodoroToday || undefined,
                     linkedHabitAutoCheckInOnComplete: linkedHabitAutoCheckInOnComplete || undefined,
@@ -7487,8 +7503,10 @@ export class QuickReminderDialog {
             }
 
             reminderData[reminderId] = reminder;
-            if (reminder.isSubscribed) {
-                const { saveReminders } = await import('../../utils/icsSubscription');
+            const targetWritableSub = !reminder.isSubscribed && reminder.projectId
+                ? await getEditableSubscriptionByProjectId(this.plugin, reminder.projectId)
+                : null;
+            if (reminder.isSubscribed || targetWritableSub) {
                 await saveReminders(this.plugin, reminderData);
             } else {
                 await this.plugin.saveReminderData(reminderData);
@@ -7724,6 +7742,8 @@ export class QuickReminderDialog {
 
         try {
             const reminderData = await this.plugin.loadReminderData();
+            const allReminders = reminderData[parentId] ? reminderData : await getAllReminders(this.plugin);
+            const rootParentReminder = allReminders[parentId];
             const nowStr = new Date().toISOString();
             const orderedTempSubtasks: any[] = [];
             const pendingTempSubtasks = [...this.tempSubtasks];
@@ -7758,8 +7778,8 @@ export class QuickReminderDialog {
                 const subtaskId = `reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
                 const parentIdForSubtask = resolveTempParentId(tempSubtask);
-                const parentReminder = reminderData[parentId];
-                const realParent = reminderData[parentIdForSubtask] || parentReminder;
+                const parentReminder = reminderData[parentId] || rootParentReminder;
+                const realParent = reminderData[parentIdForSubtask] || allReminders[parentIdForSubtask] || parentReminder;
                 const parentProjectId = realParent?.projectId || parentReminder?.projectId;
                 const parentCustomGroupId = realParent?.customGroupId;
 
@@ -7834,7 +7854,14 @@ export class QuickReminderDialog {
                 }
             }
 
-            await this.plugin.saveReminderData(reminderData);
+            const parentWritableSub = rootParentReminder?.projectId
+                ? await getEditableSubscriptionByProjectId(this.plugin, rootParentReminder.projectId)
+                : null;
+            if (rootParentReminder?.isSubscribed || parentWritableSub) {
+                await saveReminders(this.plugin, reminderData);
+            } else {
+                await this.plugin.saveReminderData(reminderData);
+            }
             console.log(`Saved ${orderedTempSubtasks.length} subtasks`);
             showMessage(i18n("subtasksSaved"));
 

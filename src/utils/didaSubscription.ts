@@ -620,6 +620,150 @@ function resolveTargetDidaProjectId(
     return listId;
 }
 
+async function ensureInboxRealProjectId(subscription: IcsSubscription): Promise<string | null> {
+    if (subscription.didaInboxProjectId) {
+        return subscription.didaInboxProjectId;
+    }
+    const token = (subscription.didaToken || '').trim();
+    if (!token) return null;
+    try {
+        const data = await didaRequest<DidaProjectDataResponse>(
+            token,
+            `/project/${DIDA_INBOX_LIST_ID}/data`,
+            { method: 'GET' }
+        );
+        const fromTask = Array.isArray(data?.tasks) ? data.tasks.find(t => t?.projectId)?.projectId : undefined;
+        const fromCol = Array.isArray(data?.columns) ? data.columns.find(c => c?.projectId)?.projectId : undefined;
+        const resolved = fromTask || fromCol || null;
+        if (resolved) {
+            subscription.didaInboxProjectId = resolved;
+        }
+        return resolved;
+    } catch (error) {
+        console.warn('Failed to resolve Dida365 inbox projectId:', error);
+        return null;
+    }
+}
+
+function buildDidaTaskPayloadFields(task: any): Record<string, any> {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+    const payload: Record<string, any> = {
+        title: task.title || i18n('unnamedCalendarEvent') || 'Untitled',
+        priority: mapLocalPriorityToDida(task.priority),
+        timeZone,
+    };
+
+    const noteText = task.note ?? getTaskNotePreviewText(task);
+    if (typeof noteText === 'string') {
+        payload.content = noteText;
+    }
+
+    if (task.date) {
+        if (!task.time) {
+            const startIso = formatLocalDateTimeToDidaIso(task.date, '00:00');
+            const endIso = formatLocalDateTimeToDidaIso(task.endDate || task.date, '00:00');
+            payload.isAllDay = true;
+            if (startIso) payload.startDate = startIso;
+            if (endIso) payload.dueDate = endIso;
+        } else {
+            const startIso = formatLocalDateTimeToDidaIso(task.date, task.time);
+            const endIso = formatLocalDateTimeToDidaIso(
+                task.endDate || task.date,
+                task.endTime || task.time
+            );
+            payload.isAllDay = false;
+            if (startIso) payload.startDate = startIso;
+            if (endIso) payload.dueDate = endIso;
+        }
+    } else {
+        payload.startDate = null;
+        payload.dueDate = null;
+        payload.isAllDay = false;
+    }
+
+    return payload;
+}
+
+export async function createDidaTask(
+    subscription: IcsSubscription,
+    task: any,
+    parentTask?: any
+): Promise<{
+    uid: string;
+    didaTaskId: string;
+    didaProjectId: string;
+    didaListId: string;
+    didaEtag?: string;
+    customGroupId: string;
+    url: string;
+}> {
+    const token = (subscription.didaToken || '').trim();
+    if (!token) {
+        throw new Error(i18n('didaTokenRequired') || 'Please enter Dida365 API token');
+    }
+
+    const listId =
+        extractDidaListIdFromGroupId(task?.customGroupId) ||
+        parentTask?.didaListId ||
+        subscription.didaSelectedProjects?.[0]?.id ||
+        DIDA_INBOX_LIST_ID;
+
+    let targetProjectId: string | null = null;
+    if (listId === DIDA_INBOX_LIST_ID) {
+        targetProjectId = await ensureInboxRealProjectId(subscription);
+    } else {
+        targetProjectId = listId;
+    }
+
+    const payload: Record<string, any> = {
+        ...buildDidaTaskPayloadFields(task),
+    };
+    if (targetProjectId) {
+        payload.projectId = targetProjectId;
+    }
+    // Dida365 POST /open/v1/task rejects null date values on create; omit unset dates.
+    if (!task.date) {
+        delete payload.startDate;
+        delete payload.dueDate;
+    }
+
+    const created = await didaRequest<DidaApiTask>(token, '/task', {
+        method: 'POST',
+        body: payload,
+    });
+
+    if (!created?.id) {
+        throw new Error('Dida365 create task returned empty task id');
+    }
+
+    const resolvedProjectId = created.projectId || targetProjectId || listId;
+    if (listId === DIDA_INBOX_LIST_ID && created.projectId) {
+        subscription.didaInboxProjectId = created.projectId;
+    }
+
+    if (task.completed) {
+        try {
+            await didaRequest(
+                token,
+                `/project/${encodeURIComponent(resolvedProjectId)}/task/${encodeURIComponent(created.id)}/complete`,
+                { method: 'POST' }
+            );
+        } catch (error) {
+            console.warn('Failed to mark newly created Dida365 task as completed:', created.id, error);
+        }
+    }
+
+    return {
+        uid: `dida:${created.id}`,
+        didaTaskId: created.id,
+        didaProjectId: resolvedProjectId,
+        didaListId: listId,
+        didaEtag: created.etag,
+        customGroupId: getDidaGroupId(listId),
+        url: `https://dida365.com/webapp/#p/${resolvedProjectId}/tasks/${created.id}`,
+    };
+}
+
 export async function updateDidaTask(
     subscription: IcsSubscription,
     currentTask: any,
@@ -641,7 +785,9 @@ export async function updateDidaTask(
     // 1. Handle cross-group move when user drags task into another Dida list group
     const nextGroupListId = extractDidaListIdFromGroupId(nextTask?.customGroupId);
     if (nextGroupListId && nextGroupListId !== listId) {
-        const targetProjectId = resolveTargetDidaProjectId(subscription, nextGroupListId);
+        const targetProjectId = nextGroupListId === DIDA_INBOX_LIST_ID
+            ? await ensureInboxRealProjectId(subscription)
+            : resolveTargetDidaProjectId(subscription, nextGroupListId);
         if (targetProjectId && targetProjectId !== projectId) {
             await didaRequest(token, '/task/move', {
                 method: 'POST',
@@ -657,42 +803,11 @@ export async function updateDidaTask(
     }
 
     // 2. Build update payload
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
     const payload: Record<string, any> = {
         id: taskId,
         projectId,
-        title: nextTask.title || i18n('unnamedCalendarEvent') || 'Untitled',
-        priority: mapLocalPriorityToDida(nextTask.priority),
-        timeZone,
+        ...buildDidaTaskPayloadFields(nextTask),
     };
-
-    const noteText = nextTask.note ?? getTaskNotePreviewText(nextTask);
-    if (typeof noteText === 'string') {
-        payload.content = noteText;
-    }
-
-    if (nextTask.date) {
-        if (!nextTask.time) {
-            const startIso = formatLocalDateTimeToDidaIso(nextTask.date, '00:00');
-            const endIso = formatLocalDateTimeToDidaIso(nextTask.endDate || nextTask.date, '00:00');
-            payload.isAllDay = true;
-            if (startIso) payload.startDate = startIso;
-            if (endIso) payload.dueDate = endIso;
-        } else {
-            const startIso = formatLocalDateTimeToDidaIso(nextTask.date, nextTask.time);
-            const endIso = formatLocalDateTimeToDidaIso(
-                nextTask.endDate || nextTask.date,
-                nextTask.endTime || nextTask.time
-            );
-            payload.isAllDay = false;
-            if (startIso) payload.startDate = startIso;
-            if (endIso) payload.dueDate = endIso;
-        }
-    } else {
-        payload.startDate = null;
-        payload.dueDate = null;
-        payload.isAllDay = false;
-    }
 
     const wasCompleted = Boolean(currentTask?.completed);
     const isCompleted = Boolean(nextTask?.completed);

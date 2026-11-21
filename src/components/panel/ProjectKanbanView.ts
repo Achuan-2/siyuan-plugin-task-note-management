@@ -48,7 +48,7 @@ import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
 import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
 import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
-import { getAllReminders, isWritableSubscriptionType, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../../utils/icsSubscription';
+import { getAllReminders, getEditableSubscriptionProjectIds, isWritableSubscriptionType, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../../utils/icsSubscription';
 import { VipManager } from "../vip/vip";
 
 import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
@@ -303,12 +303,18 @@ export class ProjectKanbanView {
         return this.isAggregateView ? this.aggregateProjectIdSet.has(projectId) : projectId === this.projectId;
     }
 
+    private editableSubscriptionProjectIds: Set<string> = new Set();
+
+    private isProjectWritableForCreate(project: any): boolean {
+        return Boolean(project && (!project.isSubscription || this.editableSubscriptionProjectIds.has(project.id)));
+    }
+
     private getDefaultProjectIdForCreate(): string {
         if (this.isAggregateView) {
             const firstNormalId = this.aggregateProjectIds.find(projectId => {
                 const context = this.aggregateProjectContext.get(projectId);
                 const proj = context?.project || this.projectManager.getProjectById(projectId);
-                return proj && !proj.isSubscription;
+                return this.isProjectWritableForCreate(proj);
             });
             return firstNormalId || this.aggregateProjectIds[0] || '';
         }
@@ -317,12 +323,12 @@ export class ProjectKanbanView {
 
     private get canCreateTask(): boolean {
         if (!this.isAggregateView) {
-            return !this.project?.isSubscription;
+            return this.isProjectWritableForCreate(this.project);
         }
         return this.aggregateProjectIds.some(projectId => {
             const context = this.aggregateProjectContext.get(projectId);
             const proj = context?.project || this.projectManager.getProjectById(projectId);
-            return proj && !proj.isSubscription;
+            return this.isProjectWritableForCreate(proj);
         });
     }
 
@@ -797,6 +803,7 @@ export class ProjectKanbanView {
                 ? await this.plugin.loadSettings()
                 : this.plugin?.settings || {};
             this.reminderSkipSettings = settings || {};
+            this.editableSubscriptionProjectIds = await getEditableSubscriptionProjectIds(this.plugin);
             const projectData = await this.plugin.loadProjectData();
             if (this.isAggregateView) {
                 this.refreshAggregateProjectContext(projectData || {});
@@ -14869,7 +14876,7 @@ export class ProjectKanbanView {
             };
 
             reminderData[reminderId] = newReminder;
-            await this.plugin.saveReminderData(reminderData);
+            await saveReminders(this.plugin, reminderData);
 
             // Update local cache to prevent task disappearing on next loadTasks
             if (!this.reminderData) {
