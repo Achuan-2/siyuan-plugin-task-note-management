@@ -48,7 +48,7 @@ import { QuickReminderDialog } from "../dialog/QuickReminderDialog";
 import { buildQuickDateMenuItems, openQuickDateEditDialog } from "../menu/QuickDateMenu";
 import { createStatusMenuIcon } from "../menu/StatusMenu";
 import { BlockBindingDialog } from "../dialog/BlockBindingDialog";
-import { getAllReminders, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../../utils/icsSubscription';
+import { getAllReminders, isWritableSubscriptionType, saveReminders, loadSubscriptions, syncSubscription, deleteSubscriptionReminderTask } from '../../utils/icsSubscription';
 import { VipManager } from "../vip/vip";
 
 import { PasteTaskDialog } from "../dialog/PasteTaskDialog";
@@ -8618,7 +8618,7 @@ export class ProjectKanbanView {
                     await this.showBatchContextMenu(e);
                     return;
                 }
-                if (task.isSubscribed && task.subscriptionType !== 'caldav') {
+                if (task.isSubscribed && !isWritableSubscriptionType(task.subscriptionType)) {
                     this.showSubscribedTaskContextMenu(e, task);
                     return;
                 }
@@ -8665,7 +8665,7 @@ export class ProjectKanbanView {
                 }
             },
             onTimeClick: (task: any, e: MouseEvent) => {
-                const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+                const isEditable = !task.isSubscribed || (isWritableSubscriptionType(task.subscriptionType) && task.caldavEditable);
                 if (isEditable) {
                     const getOriginalInstanceDate = () =>
                         (task.id && task.id.includes('_')) ? task.id.split('_').pop()! : task.date;
@@ -8756,7 +8756,7 @@ export class ProjectKanbanView {
                                 (targetGroup !== draggedGroup) ||
                                 (targetPriority !== draggedPriority) ||
                                 (targetParentId !== draggedParentId)) {
-                                if (!this.draggedTask.isSubscribed || this.draggedTask.subscriptionType === 'caldav') {
+                                if (!this.draggedTask.isSubscribed || isWritableSubscriptionType(this.draggedTask.subscriptionType)) {
                                     isStructuralChange = true;
                                 }
                             }
@@ -8879,7 +8879,7 @@ export class ProjectKanbanView {
                                 (targetGroup !== draggedGroup) ||
                                 (targetPriority !== draggedPriority) ||
                                 (targetParentId !== draggedParentId)) {
-                                if (!this.draggedTask.isSubscribed || this.draggedTask.subscriptionType === 'caldav') {
+                                if (!this.draggedTask.isSubscribed || isWritableSubscriptionType(this.draggedTask.subscriptionType)) {
                                     isStructuralChange = true;
                                 }
                             }
@@ -9442,8 +9442,8 @@ export class ProjectKanbanView {
 
         const childTasks = this.tasks.filter(t => t.parentId === task.id);
 
-        const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
-        const isDeletable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavDeletable);
+        const isEditable = !task.isSubscribed || (isWritableSubscriptionType(task.subscriptionType) && task.caldavEditable);
+        const isDeletable = !task.isSubscribed || (isWritableSubscriptionType(task.subscriptionType) && task.caldavDeletable);
 
         // 编辑任务 - 针对周期任务显示不同选项
         if (isEditable) {
@@ -12777,7 +12777,7 @@ export class ProjectKanbanView {
                     void this.showBatchContextMenu(point);
                     return;
                 }
-                if (task.isSubscribed && task.subscriptionType !== 'caldav') {
+                if (task.isSubscribed && !isWritableSubscriptionType(task.subscriptionType)) {
                     this.showSubscribedTaskContextMenu(point, task);
                     return;
                 }
@@ -12811,7 +12811,7 @@ export class ProjectKanbanView {
         const targetStatus = this.kanbanMode === 'custom'
             ? element.closest<HTMLElement>('.custom-status-group')?.dataset.status
             : this.getTaskStatus(target);
-        const structuralChange = (!source.isSubscribed || source.subscriptionType === 'caldav') && (
+        const structuralChange = (!source.isSubscribed || isWritableSubscriptionType(source.subscriptionType)) && (
             (targetStatus && targetStatus !== this.getTaskStatus(source)) ||
             target.customGroupId !== source.customGroupId ||
             (target.priority || 'none') !== (source.priority || 'none') ||

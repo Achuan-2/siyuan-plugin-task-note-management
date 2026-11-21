@@ -212,11 +212,30 @@
         );
     }
 
+    function escapeHtmlAttr(value: string): string {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
     async function showEditSubscriptionDialog(subscription?: any) {
         const isEdit = !!subscription;
         const { saveSubscriptions, updateSubscriptionTaskMetadata } = await import(
             '../../utils/icsSubscription'
         );
+        const { fetchDidaProjects, isValidHexColor, syncDidaProjectGroups } = await import(
+            '../../utils/didaSubscription'
+        );
+
+        const initialDidaSelected: Array<{ id: string; name: string; color?: string; kind?: string }> =
+            Array.isArray(subscription?.didaSelectedProjects)
+                ? subscription.didaSelectedProjects.filter((item: any) => item && item.id)
+                : [];
+        let availableDidaProjects: Array<{ id: string; name: string; color?: string; kind?: string; isInbox?: boolean }> =
+            initialDidaSelected.map(item => ({ ...item }));
+        const selectedDidaIds = new Set<string>(initialDidaSelected.map(item => item.id));
 
         const editDialog = new Dialog({
             title: isEdit ? i18n('editSubscription') : i18n('addSubscription'),
@@ -225,18 +244,19 @@
                     <div class="fn__flex-column" style="gap: 12px;">
                         <div class="b3-label">
                             <div class="b3-label__text">${i18n('subscriptionName')}</div>
-                            <input class="b3-text-field fn__block" id="sub-name" value="${subscription?.name || ''}" placeholder="${i18n('pleaseEnterSubscriptionName')}">
+                            <input class="b3-text-field fn__block" id="sub-name" value="${escapeHtmlAttr(subscription?.name || '')}" placeholder="${escapeHtmlAttr(i18n('pleaseEnterSubscriptionName'))}">
                         </div>
                         <div class="b3-label">
                             <div class="b3-label__text">${i18n('subscriptionType') || '订阅类型'}</div>
                             <select class="b3-select fn__block" id="sub-type">
                                 <option value="ics" ${(!subscription?.type || subscription?.type === 'ics') ? 'selected' : ''}>ICS / iCalendar</option>
                                 <option value="caldav" ${subscription?.type === 'caldav' ? 'selected' : ''}>CalDAV</option>
+                                <option value="dida" ${subscription?.type === 'dida' ? 'selected' : ''}>${i18n('dida365') || '滴答清单'}</option>
                             </select>
                         </div>
                         <div class="b3-label" id="sub-url-container" style="display: ${(!subscription?.type || subscription?.type === 'ics') ? 'block' : 'none'};">
                             <div class="b3-label__text">${i18n('subscriptionUrl')}</div>
-                            <input class="b3-text-field fn__block" id="sub-url" value="${(!subscription?.type || subscription?.type === 'ics') ? (subscription?.url || '') : ''}" placeholder="${i18n('subscriptionUrlPlaceholder') || '输入ICS日历订阅链接'}">
+                            <input class="b3-text-field fn__block" id="sub-url" value="${escapeHtmlAttr((!subscription?.type || subscription?.type === 'ics') ? (subscription?.url || '') : '')}" placeholder="${escapeHtmlAttr(i18n('subscriptionUrlPlaceholder') || '输入ICS日历订阅链接')}">
                         </div>
                         <div class="b3-label" id="sub-provider-container" style="display: ${subscription?.type === 'caldav' ? 'block' : 'none'};">
                             <div class="b3-label__text">${i18n('calendarProvider') || '日历平台'}</div>
@@ -251,20 +271,20 @@
                         </div>
                         <div class="b3-label" id="sub-caldav-server-container" style="display: ${subscription?.type === 'caldav' ? 'block' : 'none'};">
                             <div class="b3-label__text">${i18n('caldavServer') || '服务器地址'}</div>
-                            <input class="b3-text-field fn__block" id="sub-caldav-server" value="${subscription?.type === 'caldav' ? (subscription?.url || '') : ''}" placeholder="${i18n('caldavServerPlaceholder') || '请输入 CalDAV 服务器地址'}">
+                            <input class="b3-text-field fn__block" id="sub-caldav-server" value="${escapeHtmlAttr(subscription?.type === 'caldav' ? (subscription?.url || '') : '')}" placeholder="${escapeHtmlAttr(i18n('caldavServerPlaceholder') || '请输入 CalDAV 服务器地址')}">
                         </div>
                         <div id="sub-caldav-auth-container" style="display: ${subscription?.type === 'caldav' ? 'block' : 'none'};">
                             <div class="b3-label">
                                 <div class="b3-label__text">${i18n('username') || '用户名'}</div>
-                                <input class="b3-text-field fn__block" id="sub-username" value="${subscription?.username || ''}" placeholder="${i18n('username') || '用户名'}">
+                                <input class="b3-text-field fn__block" id="sub-username" value="${escapeHtmlAttr(subscription?.username || '')}" placeholder="${escapeHtmlAttr(i18n('username') || '用户名')}">
                             </div>
                             <div class="b3-label" style="margin-top: 12px;">
                                 <div class="b3-label__text">${i18n('password') || '密码/应用密码'}</div>
                                 <div style="position: relative; display: flex; align-items: center;">
-                                    <input class="b3-text-field fn__block" id="sub-password" type="password" value="${subscription?.password || ''}" placeholder="${i18n('password') || '密码/应用密码'}" style="padding-right: 30px;">
+                                    <input class="b3-text-field fn__block" id="sub-password" type="password" value="${escapeHtmlAttr(subscription?.password || '')}" placeholder="${escapeHtmlAttr(i18n('password') || '密码/应用密码')}" style="padding-right: 30px;">
                                     <svg
                                         class="b3-tooltips b3-tooltips__nw"
-                                        aria-label="${i18n('showPassword') || '显示密码'}"
+                                        aria-label="${escapeHtmlAttr(i18n('showPassword') || '显示密码')}"
                                         id="toggle-password-visibility"
                                         tabindex="0"
                                         role="button"
@@ -275,7 +295,42 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="b3-label" id="sub-caldav-permissions-container" style="display: ${subscription?.type === 'caldav' ? 'block' : 'none'};">
+                        <div id="sub-dida-container" style="display: ${subscription?.type === 'dida' ? 'flex' : 'none'}; flex-direction: column; gap: 12px;">
+                            <div class="b3-label">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                                    <div class="b3-label__text" style="margin: 0;">${i18n('didaApiToken') || 'API 口令'}</div>
+                                    <a href="https://dida365.com/webapp/#q/all/tasks?modalType=settings" target="_blank" rel="noopener noreferrer" style="font-size: 12px; color: var(--b3-theme-primary); text-decoration: none;">${i18n('didaGetTokenLink') || '获取 API 口令'}</a>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div style="position: relative; display: flex; align-items: center; flex: 1;">
+                                        <input class="b3-text-field fn__block" id="sub-dida-token" type="password" value="${escapeHtmlAttr(subscription?.didaToken || '')}" placeholder="${escapeHtmlAttr(i18n('didaApiTokenPlaceholder') || '请输入滴答清单 API 口令（如 dp_...）')}" style="padding-right: 30px;">
+                                        <svg
+                                            class="b3-tooltips b3-tooltips__nw"
+                                            aria-label="${escapeHtmlAttr(i18n('showPassword') || '显示密码')}"
+                                            id="toggle-dida-token-visibility"
+                                            tabindex="0"
+                                            role="button"
+                                            style="position: absolute; right: 8px; cursor: pointer; opacity: 0.5; width: 14px; height: 14px; outline: none;"
+                                        >
+                                            <use xlink:href="#iconEye"></use>
+                                        </svg>
+                                    </div>
+                                    <button type="button" class="b3-button b3-button--outline" id="fetch-dida-lists-btn" style="flex-shrink: 0;">${i18n('didaFetchLists') || '获取清单'}</button>
+                                </div>
+                            </div>
+                            <div class="b3-label">
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                                    <div class="b3-label__text" style="margin: 0;">${i18n('didaSyncLists') || '选择要同步的清单'}</div>
+                                    <div style="display: flex; gap: 8px; font-size: 12px;">
+                                        <button type="button" class="b3-button b3-button--text" id="dida-select-all-btn" style="padding: 0 4px; font-size: 12px; height: auto; line-height: 1.4;">${i18n('didaSelectAll') || '全选'}</button>
+                                        <button type="button" class="b3-button b3-button--text" id="dida-clear-all-btn" style="padding: 0 4px; font-size: 12px; height: auto; line-height: 1.4;">${i18n('didaClearSelection') || '清空'}</button>
+                                    </div>
+                                </div>
+                                <div id="dida-lists-box" style="max-height: 180px; overflow-y: auto; border: 1px solid var(--b3-border-color); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: var(--b3-theme-surface);"></div>
+                                <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 4px; opacity: 0.8;">${i18n('didaListsAutoGroupHint') || '多选的清单将自动成为订阅项目中的分组'}</div>
+                            </div>
+                        </div>
+                        <div class="b3-label" id="sub-caldav-permissions-container" style="display: ${(subscription?.type === 'caldav' || subscription?.type === 'dida') ? 'block' : 'none'};">
                             <div class="b3-label__text">${i18n('caldavPermissions') || '任务操作权限'}</div>
                             <div style="display: flex; gap: 24px; margin-top: 8px;">
                                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
@@ -335,8 +390,8 @@
                         <button class="b3-button b3-button--text" id="confirm-sub">${i18n('save')}</button>
                 </div>
             `,
-            width: '500px',
-            height: "67vh"
+            width: '520px',
+            height: "72vh"
         });
 
         const confirmBtn = editDialog.element.querySelector('#confirm-sub');
@@ -348,21 +403,107 @@
         const providerContainer = editDialog.element.querySelector('#sub-provider-container') as HTMLElement;
         const caldavServerContainer = editDialog.element.querySelector('#sub-caldav-server-container') as HTMLElement;
         const caldavAuthContainer = editDialog.element.querySelector('#sub-caldav-auth-container') as HTMLElement;
+        const didaContainer = editDialog.element.querySelector('#sub-dida-container') as HTMLElement;
+        const didaTokenInput = editDialog.element.querySelector('#sub-dida-token') as HTMLInputElement;
+        const fetchDidaListsBtn = editDialog.element.querySelector('#fetch-dida-lists-btn') as HTMLButtonElement;
+        const didaListsBox = editDialog.element.querySelector('#dida-lists-box') as HTMLElement;
+        const didaSelectAllBtn = editDialog.element.querySelector('#dida-select-all-btn') as HTMLButtonElement;
+        const didaClearAllBtn = editDialog.element.querySelector('#dida-clear-all-btn') as HTMLButtonElement;
         const caldavServerInput = editDialog.element.querySelector('#sub-caldav-server') as HTMLInputElement;
         const caldavEditableInput = editDialog.element.querySelector('#sub-caldav-editable') as HTMLInputElement;
         const caldavDeletableInput = editDialog.element.querySelector('#sub-caldav-deletable') as HTMLInputElement;
         const caldavPermissionsContainer = editDialog.element.querySelector('#sub-caldav-permissions-container') as HTMLElement;
 
+        const renderDidaProjectList = () => {
+            if (!didaListsBox) return;
+            if (availableDidaProjects.length === 0) {
+                didaListsBox.innerHTML = `<div style="font-size: 12px; color: var(--b3-theme-on-surface-light); padding: 8px 4px; opacity: 0.8;">${escapeHtmlAttr(i18n('didaClickFetchListsHint') || '输入 API 口令后点击「获取清单」以多选要同步的清单')}</div>`;
+                return;
+            }
+            didaListsBox.innerHTML = availableDidaProjects.map(item => {
+                const checked = selectedDidaIds.has(item.id) ? 'checked' : '';
+                const dotColor = isValidHexColor(item.color) ? item.color : '#4f46e5';
+                const noteBadge = item.kind === 'NOTE'
+                    ? `<span style="font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--b3-theme-surface-lighter); color: var(--b3-theme-on-surface-light); border: 1px solid var(--b3-border-color);">${escapeHtmlAttr(i18n('didaNoteListBadge') || '笔记')}</span>`
+                    : '';
+                return `
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; cursor: pointer;">
+                        <input type="checkbox" class="b3-checkbox dida-list-checkbox" data-list-id="${escapeHtmlAttr(item.id)}" ${checked}>
+                        <span style="width: 10px; height: 10px; border-radius: 50%; background: ${escapeHtmlAttr(dotColor || '#4f46e5')}; flex-shrink: 0;"></span>
+                        <span style="flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtmlAttr(item.name)}</span>
+                        ${noteBadge}
+                    </label>
+                `;
+            }).join('');
+
+            didaListsBox.querySelectorAll<HTMLInputElement>('.dida-list-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    const listId = checkbox.dataset.listId || '';
+                    if (!listId) return;
+                    if (checkbox.checked) {
+                        selectedDidaIds.add(listId);
+                    } else {
+                        selectedDidaIds.delete(listId);
+                    }
+                });
+            });
+        };
+
+        const loadDidaListsFromApi = async (silent = false) => {
+            const token = didaTokenInput?.value.trim() || '';
+            if (!token) {
+                if (!silent) pushErrMsg(i18n('didaTokenRequired') || '请输入滴答清单 API 口令');
+                return;
+            }
+            if (fetchDidaListsBtn) {
+                fetchDidaListsBtn.disabled = true;
+                fetchDidaListsBtn.textContent = i18n('didaLoadingLists') || '正在获取清单...';
+            }
+            try {
+                const remoteLists = await fetchDidaProjects(token);
+                availableDidaProjects = remoteLists;
+                renderDidaProjectList();
+                if (!silent) {
+                    pushMsg(i18n('didaFetchListsSuccess', { count: String(remoteLists.length) }) || `已获取 ${remoteLists.length} 个清单`);
+                }
+            } catch (error: any) {
+                console.error('Failed to fetch Dida365 projects:', error);
+                if (!silent) {
+                    pushErrMsg(`${i18n('didaFetchListsFailed') || '获取滴答清单列表失败'}: ${error?.message || String(error)}`);
+                }
+            } finally {
+                if (fetchDidaListsBtn) {
+                    fetchDidaListsBtn.disabled = false;
+                    fetchDidaListsBtn.textContent = i18n('didaFetchLists') || '获取清单';
+                }
+            }
+        };
+
         const updateVisibility = () => {
-            const isCalDav = subTypeSelect.value === 'caldav';
-            icsUrlContainer.style.display = isCalDav ? 'none' : 'block';
+            const subType = subTypeSelect.value;
+            const isCalDav = subType === 'caldav';
+            const isDida = subType === 'dida';
+            icsUrlContainer.style.display = (!isCalDav && !isDida) ? 'block' : 'none';
             providerContainer.style.display = isCalDav ? 'block' : 'none';
             caldavServerContainer.style.display = isCalDav ? 'block' : 'none';
             caldavAuthContainer.style.display = isCalDav ? 'block' : 'none';
-            caldavPermissionsContainer.style.display = isCalDav ? 'block' : 'none';
+            didaContainer.style.display = isDida ? 'flex' : 'none';
+            caldavPermissionsContainer.style.display = (isCalDav || isDida) ? 'block' : 'none';
         };
 
         const updateCaldavPermissions = () => {
+            if (subTypeSelect.value === 'dida') {
+                caldavEditableInput.disabled = false;
+                caldavDeletableInput.disabled = false;
+                if (!subscription || subscription.type !== 'dida') {
+                    caldavEditableInput.checked = true;
+                    caldavDeletableInput.checked = true;
+                } else {
+                    caldavEditableInput.checked = subscription.caldavEditable !== false;
+                    caldavDeletableInput.checked = subscription.caldavDeletable !== false;
+                }
+                return;
+            }
             if (subTypeSelect.value === 'caldav') {
                 const provider = subProviderSelect.value;
                 if (provider === 'wecom') {
@@ -436,31 +577,64 @@
             updateCaldavPermissions();
         });
 
-        const togglePasswordVisibility = editDialog.element.querySelector('#toggle-password-visibility') as HTMLElement;
-        const passwordInput = editDialog.element.querySelector('#sub-password') as HTMLInputElement;
+        fetchDidaListsBtn?.addEventListener('click', () => {
+            void loadDidaListsFromApi(false);
+        });
 
-        if (togglePasswordVisibility && passwordInput) {
+        didaTokenInput?.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                void loadDidaListsFromApi(false);
+            }
+        });
+
+        didaSelectAllBtn?.addEventListener('click', () => {
+            availableDidaProjects.forEach(item => selectedDidaIds.add(item.id));
+            renderDidaProjectList();
+        });
+
+        didaClearAllBtn?.addEventListener('click', () => {
+            selectedDidaIds.clear();
+            renderDidaProjectList();
+        });
+
+        const bindPasswordVisibilityToggle = (toggleEl: HTMLElement | null, inputEl: HTMLInputElement | null) => {
+            if (!toggleEl || !inputEl) return;
             const toggleHandler = () => {
-                const isPassword = passwordInput.type === 'password';
-                passwordInput.type = isPassword ? 'text' : 'password';
-                
-                const useElement = togglePasswordVisibility.querySelector('use');
+                const isPassword = inputEl.type === 'password';
+                inputEl.type = isPassword ? 'text' : 'password';
+
+                const useElement = toggleEl.querySelector('use');
                 if (useElement) {
                     useElement.setAttribute('xlink:href', isPassword ? '#iconEyeoff' : '#iconEye');
                 }
-                
-                togglePasswordVisibility.setAttribute('aria-label', isPassword ? (i18n('hidePassword') || '隐藏密码') : (i18n('showPassword') || '显示密码'));
+
+                toggleEl.setAttribute('aria-label', isPassword ? (i18n('hidePassword') || '隐藏密码') : (i18n('showPassword') || '显示密码'));
             };
-            togglePasswordVisibility.addEventListener('click', toggleHandler);
-            togglePasswordVisibility.addEventListener('keydown', (e: KeyboardEvent) => {
+            toggleEl.addEventListener('click', toggleHandler);
+            toggleEl.addEventListener('keydown', (e: KeyboardEvent) => {
                 if (e.key === 'Enter') {
                     toggleHandler();
                 }
             });
-        }
+        };
 
-        // Initialize checkboxes
+        bindPasswordVisibilityToggle(
+            editDialog.element.querySelector('#toggle-password-visibility') as HTMLElement,
+            editDialog.element.querySelector('#sub-password') as HTMLInputElement
+        );
+        bindPasswordVisibilityToggle(
+            editDialog.element.querySelector('#toggle-dida-token-visibility') as HTMLElement,
+            didaTokenInput
+        );
+
+        // Initialize checkboxes and Dida lists
+        updateVisibility();
         updateCaldavPermissions();
+        renderDidaProjectList();
+        if (subscription?.type === 'dida' && subscription?.didaToken) {
+            void loadDidaListsFromApi(true);
+        }
 
         confirmBtn?.addEventListener('click', async () => {
             const name = (
@@ -468,11 +642,22 @@
             ).value.trim();
             const type = (
                 editDialog.element.querySelector('#sub-type') as HTMLSelectElement
-            ).value as 'ics' | 'caldav';
+            ).value as 'ics' | 'caldav' | 'dida';
+            const didaToken = didaTokenInput?.value.trim() || '';
+            const didaSelectedProjects = availableDidaProjects
+                .filter(item => selectedDidaIds.has(item.id))
+                .map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    color: item.color,
+                    kind: item.kind,
+                }));
             const url = (
                 type === 'caldav'
                     ? (editDialog.element.querySelector('#sub-caldav-server') as HTMLInputElement).value.trim()
-                    : (editDialog.element.querySelector('#sub-url') as HTMLInputElement).value.trim()
+                    : type === 'dida'
+                      ? 'https://api.dida365.com/open/v1'
+                      : (editDialog.element.querySelector('#sub-url') as HTMLInputElement).value.trim()
             );
             const provider = (
                 editDialog.element.querySelector('#sub-provider') as HTMLSelectElement
@@ -505,7 +690,16 @@
                 pushErrMsg(i18n('pleaseEnterSubscriptionName'));
                 return;
             }
-            if (!url) {
+            if (type === 'dida') {
+                if (!didaToken) {
+                    pushErrMsg(i18n('didaTokenRequired') || '请输入滴答清单 API 口令');
+                    return;
+                }
+                if (didaSelectedProjects.length === 0) {
+                    pushErrMsg(i18n('didaSelectListsRequired') || '请至少选择一个要同步的滴答清单');
+                    return;
+                }
+            } else if (!url) {
                 pushErrMsg(
                     type === 'caldav'
                         ? (i18n('pleaseEnterCaldavServer') || '请输入服务器地址')
@@ -575,14 +769,23 @@
                 detail: { projectId, project }
             }));
 
+            if (type === 'dida') {
+                await syncDidaProjectGroups(plugin, projectId, didaSelectedProjects, {
+                    preferCustomMode: true,
+                });
+            }
+
             const subData = {
                 id: subId,
                 name,
                 type,
-                provider,
+                provider: type === 'caldav' ? provider : undefined,
                 url,
                 username: type === 'caldav' ? username : undefined,
                 password: type === 'caldav' ? password : undefined,
+                didaToken: type === 'dida' ? didaToken : undefined,
+                didaSelectedProjects: type === 'dida' ? didaSelectedProjects : undefined,
+                didaInboxProjectId: type === 'dida' ? subscription?.didaInboxProjectId : undefined,
                 syncInterval,
                 dailySyncTime,
                 projectId,
@@ -591,8 +794,8 @@
                 showInSidebar,
                 showInMatrix,
                 showNoteInCalendar,
-                caldavEditable: type === 'caldav' ? caldavEditable : undefined,
-                caldavDeletable: type === 'caldav' ? caldavDeletable : undefined,
+                caldavEditable: (type === 'caldav' || type === 'dida') ? caldavEditable : undefined,
+                caldavDeletable: (type === 'caldav' || type === 'dida') ? caldavDeletable : undefined,
                 tagIds: subscription?.tagIds || [],
                 enabled: subscription ? subscription.enabled : true,
                 createdAt: subscription?.createdAt || new Date().toISOString(),
@@ -660,24 +863,35 @@
                     <div class="card-content">
                         <div class="sub-info">
                             <div class="sub-name">{sub.name}</div>
-                            <div class="sub-url ariaLabel" aria-label={sub.url}>
-                                {(sub.type || 'ics').toUpperCase()} · {sub.provider === 'apple'
-                                    ? i18n('appleCalendar') || 'iCloud'
-                                    : sub.provider === 'feishu'
-                                      ? i18n('feishuCalendar') || '飞书日历'
-                                      : sub.provider === 'dingtalk'
-                                        ? i18n('dingtalkCalendar') || '钉钉日历'
-                                        : sub.provider === 'wecom'
-                                          ? i18n('wecomCalendar') || '企业微信日历'
-                                          : sub.provider === 'qq'
-                                            ? i18n('qqCalendar') || 'QQ邮箱日历'
-                                            : i18n('genericCalendar') || '通用日历'}
-                                {#if sub.type === 'caldav'}
+                            <div
+                                class="sub-url ariaLabel"
+                                aria-label={sub.type === 'dida'
+                                    ? (sub.didaSelectedProjects || []).map(p => p.name).join('、') || (i18n('dida365') || '滴答清单')
+                                    : sub.url}
+                            >
+                                {#if sub.type === 'dida'}
+                                    DIDA365 · {i18n('dida365') || '滴答清单'}
                                     ({sub.caldavEditable !== false ? '可编辑' : '不可编辑'} · {sub.caldavDeletable !== false ? '可删除' : '不可删除'})
+                                    · {i18n('didaSelectedListsSummary', { count: String(sub.didaSelectedProjects?.length || 0) }) || `${sub.didaSelectedProjects?.length || 0}`}{#if sub.didaSelectedProjects?.length}: {sub.didaSelectedProjects.map(p => p.name).join('、')}{/if}
                                 {:else}
-                                    ({i18n('readOnly') || '只读'})
+                                    {(sub.type || 'ics').toUpperCase()} · {sub.provider === 'apple'
+                                        ? i18n('appleCalendar') || 'iCloud'
+                                        : sub.provider === 'feishu'
+                                          ? i18n('feishuCalendar') || '飞书日历'
+                                          : sub.provider === 'dingtalk'
+                                            ? i18n('dingtalkCalendar') || '钉钉日历'
+                                            : sub.provider === 'wecom'
+                                              ? i18n('wecomCalendar') || '企业微信日历'
+                                              : sub.provider === 'qq'
+                                                ? i18n('qqCalendar') || 'QQ邮箱日历'
+                                                : i18n('genericCalendar') || '通用日历'}
+                                    {#if sub.type === 'caldav'}
+                                        ({sub.caldavEditable !== false ? '可编辑' : '不可编辑'} · {sub.caldavDeletable !== false ? '可删除' : '不可删除'})
+                                    {:else}
+                                        ({i18n('readOnly') || '只读'})
+                                    {/if}
+                                    · {sub.url}
                                 {/if}
-                                · {sub.url}
                             </div>
                             <div class="sub-meta">
                                 {i18n('subscriptionSyncInterval')}: 

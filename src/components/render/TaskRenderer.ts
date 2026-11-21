@@ -14,7 +14,7 @@ import { i18n } from "../../pluginInstance";
 import { showMessage } from "siyuan";
 import { getLocalDateString, compareDateStrings, getLogicalDateString, getRelativeDateString, getLocaleTag } from "../../utils/dateUtils";
 import { getRepeatDescription, getRepeatInstanceOriginalKey, parseReminderInstanceId, patchRepeatInstanceState } from "../dataManager/repeatUtils";
-import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
+import { getAllReminders, isWritableSubscriptionType, saveReminders } from "../../utils/icsSubscription";
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
 import { shouldTreatStartDateOnlyAsOverdue, isOpenEndedStartDateTask } from "../../utils/startDateOverdue";
 import { applyProjectTagColor } from "../../utils/projectTagColor";
@@ -1033,7 +1033,7 @@ export class TaskRenderer {
         if (isAbandoned) {
             checkbox.classList.add('reminder-task-checkbox--abandoned');
         }
-        const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+        const isEditable = !task.isSubscribed || (isWritableSubscriptionType(task.subscriptionType) && task.caldavEditable);
         if (!isEditable) {
             checkbox.disabled = true;
         }
@@ -1254,7 +1254,7 @@ export class TaskRenderer {
                 setTaskMetadataText(timeEl, (hasNoDate ? '' : '🗓️ ') + timeText);
             }
 
-            const isEditable = !task.isSubscribed || (task.subscriptionType === 'caldav' && task.caldavEditable);
+            const isEditable = !task.isSubscribed || (isWritableSubscriptionType(task.subscriptionType) && task.caldavEditable);
             if (isEditable) {
                 timeEl.style.cursor = 'pointer';
                 timeEl.classList.add('ariaLabel');

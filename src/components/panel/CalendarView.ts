@@ -30,7 +30,7 @@ import { ProjectColorDialog } from "../dialog/ProjectColorDialog";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { i18n } from "../../pluginInstance";
 import { generateRepeatInstances, getDaysDifference, addDaysToDate, resolveRepeatReminderTimes, getMonthlyWeekdayDate, getMonthlyWeekRules, parseReminderInstanceId, getRepeatInstanceOriginalKey, isRepeatInstanceCompleted, getRepeatInstanceCompletedTime, setRepeatInstanceCompletion, setRepeatInstanceOverride, patchRepeatInstanceState, deleteRepeatInstanceState, getRepeatInstanceState, getInstanceField } from "../dataManager/repeatUtils";
-import { getAllReminders, saveReminders, loadHolidays, loadSubscriptions } from "../../utils/icsSubscription";
+import { getAllReminders, isWritableSubscriptionType, saveReminders, loadHolidays, loadSubscriptions } from "../../utils/icsSubscription";
 import {
     applyTaskNoteMetadata,
     copyTaskNote,
@@ -2264,7 +2264,7 @@ export class CalendarView {
                 }
                 // ICS 订阅只读；CalDAV 订阅根据 caldavEditable 决定是否允许编辑。
                 if (draggedEvent.extendedProps.isSubscribed) {
-                    if (draggedEvent.extendedProps.subscriptionType !== 'caldav' || !draggedEvent.extendedProps.caldavEditable) {
+                    if (!isWritableSubscriptionType(draggedEvent.extendedProps.subscriptionType) || !draggedEvent.extendedProps.caldavEditable) {
                         return false;
                     }
                 }
@@ -4378,7 +4378,7 @@ export class CalendarView {
             return;
         }
 
-        if (calendarEvent.extendedProps.isSubscribed && calendarEvent.extendedProps.subscriptionType !== 'caldav') {
+        if (calendarEvent.extendedProps.isSubscribed && !isWritableSubscriptionType(calendarEvent.extendedProps.subscriptionType)) {
             menu.addItem({
                 icon: "iconInfo",
                 label: i18n("subscribedTaskReadOnly"),
@@ -4437,8 +4437,8 @@ export class CalendarView {
             return;
         }
 
-        const isEditable = !calendarEvent.extendedProps.isSubscribed || (calendarEvent.extendedProps.subscriptionType === 'caldav' && calendarEvent.extendedProps.caldavEditable);
-        const isDeletable = !calendarEvent.extendedProps.isSubscribed || (calendarEvent.extendedProps.subscriptionType === 'caldav' && calendarEvent.extendedProps.caldavDeletable);
+        const isEditable = !calendarEvent.extendedProps.isSubscribed || (isWritableSubscriptionType(calendarEvent.extendedProps.subscriptionType) && calendarEvent.extendedProps.caldavEditable);
+        const isDeletable = !calendarEvent.extendedProps.isSubscribed || (isWritableSubscriptionType(calendarEvent.extendedProps.subscriptionType) && calendarEvent.extendedProps.caldavDeletable);
 
         if (isEditable) {
             const startDateStr = calendarEvent.extendedProps.date || calendarEvent.extendedProps.originalDate;
@@ -4534,7 +4534,7 @@ export class CalendarView {
 
             // 对于重复事件实例，提供特殊选项
             if (calendarEvent.extendedProps.isRepeated) {
-                if (!(calendarEvent.extendedProps.isSubscribed && calendarEvent.extendedProps.subscriptionType !== 'caldav')) {
+                if (!(calendarEvent.extendedProps.isSubscribed && !isWritableSubscriptionType(calendarEvent.extendedProps.subscriptionType))) {
                     menu.addItem({
                         icon: "iconEdit",
                         label: i18n("modifyThisInstance"),
@@ -5886,7 +5886,7 @@ export class CalendarView {
                     const blockIds = new Set<string>([reminder.blockId, ...Object.values(completedReminders).map(instance => instance.blockId)].filter(Boolean));
                     // 取消移动端通知
                     await this.plugin.cancelMobileNotification(reminderId);
-                    if (reminder.isSubscribed && reminder.subscriptionType === 'caldav') {
+                    if (reminder.isSubscribed && isWritableSubscriptionType(reminder.subscriptionType)) {
                         const { deleteSubscriptionReminderTask } = await import('../../utils/icsSubscription');
                         await deleteSubscriptionReminderTask(this.plugin, reminder);
                     }
@@ -6925,7 +6925,7 @@ export class CalendarView {
         const props = info.event.extendedProps || {};
         const canSelectForTouchResize = this.isMobileCalendarClient()
             && props.type !== 'pomodoro'
-            && (!props.isSubscribed || (props.subscriptionType === 'caldav' && props.caldavEditable))
+            && (!props.isSubscribed || (isWritableSubscriptionType(props.subscriptionType) && props.caldavEditable))
             && (!props.isHabit || props.type === 'habitReminderTime' || props.type === 'habitCheckInTime');
         const instanceId = info.event?._instance?.instanceId;
         if (canSelectForTouchResize && instanceId && this.getSelectedCalendarEventInstanceId() !== instanceId) {
@@ -9632,8 +9632,8 @@ export class CalendarView {
                     borderColor: 'transparent',
                     textColor: 'var(--b3-theme-on-background)',
                     className: 'completed-task-time-event',
-                    editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
-                    startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                    editable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
+                    startEditable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
                     durationEditable: false,
                     allDay: false,
                     extendedProps: {
@@ -9738,8 +9738,8 @@ export class CalendarView {
                         borderColor: 'transparent',
                         textColor: 'var(--b3-theme-on-background)',
                         className: 'completed-task-time-event',
-                        editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
-                        startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                        editable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
+                        startEditable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
                         durationEditable: false,
                         allDay: false,
                         extendedProps: {
@@ -10281,9 +10281,9 @@ export class CalendarView {
                         borderColor: colors.borderColor,
                         textColor: 'var(--b3-theme-on-background)',
                         className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${isCompletedOnDate || isExpired ? ' completed' : ''}`,
-                        editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
-                        startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
-                        durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                        editable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
+                        startEditable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
+                        durationEditable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
                         allDay: false,
                         display: 'block',
                         extendedProps: {
@@ -10371,9 +10371,9 @@ export class CalendarView {
                 borderColor: colors.borderColor,
                 textColor: 'var(--b3-theme-on-background)',
                 className: `reminder-time-event reminder-priority-${priority}${isRepeated ? ' reminder-repeated' : ''}${isCompletedOnDate || isExpiredReminderTime ? ' completed' : ''}`,
-                editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
-                startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
-                durationEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable),
+                editable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
+                startEditable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
+                durationEditable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable),
                 allDay: false,
                 display: 'block',
                 extendedProps: {
@@ -10542,9 +10542,9 @@ export class CalendarView {
             borderColor: colors.borderColor,
             textColor: 'var(--b3-theme-on-background)',
             className: classNames,
-            editable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
-            startEditable: !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
-            durationEditable: (!reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable)) &&
+            editable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
+            startEditable: !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable), // ICS订阅只读，CalDAV可写
+            durationEditable: (!reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable)) &&
                 (!reminder.isSplitBlock || reminder.splitIndex === 0 || reminder.splitIndex === reminder.splitTotal - 1), // 第一和最后一个分割块允许缩放，中间的不行
             extendedProps: {
                 completed: isCompleted,

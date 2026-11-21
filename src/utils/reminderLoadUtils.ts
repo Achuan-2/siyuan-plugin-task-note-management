@@ -1,9 +1,16 @@
 import { getLogicalDateString } from "./dateUtils";
 import { RepeatInstanceState } from "../components/dialog/RepeatSettingsDialog";
 
+export function isWritableSubscriptionType(subscriptionType?: string): boolean {
+    return subscriptionType === 'caldav' || subscriptionType === 'dida';
+}
+
 export function isSubscriptionEditable(subscription: any): boolean {
-    if (!subscription || subscription.type !== 'caldav') return false;
+    if (!subscription || !isWritableSubscriptionType(subscription.type)) return false;
     if (subscription.readonly === true) return false;
+    if (subscription.type === 'dida') {
+        return subscription.caldavEditable !== false;
+    }
     const provider = subscription.provider || 'generic';
     if (provider === 'wecom') return true;
     if (provider === 'dingtalk') return false;
@@ -13,8 +20,11 @@ export function isSubscriptionEditable(subscription: any): boolean {
 }
 
 export function isSubscriptionDeletable(subscription: any): boolean {
-    if (!subscription || subscription.type !== 'caldav') return false;
+    if (!subscription || !isWritableSubscriptionType(subscription.type)) return false;
     if (subscription.readonly === true) return false;
+    if (subscription.type === 'dida') {
+        return subscription.caldavDeletable !== false;
+    }
     const provider = subscription.provider || 'generic';
     if (provider === 'wecom') return true;
     if (provider === 'qq') return true;
@@ -113,7 +123,8 @@ export async function getEnvironmentSafeAllReminders(
                             caldavDeletable: isSubscriptionDeletable(subscription),
                         };
                     } else {
-                        const isPast = isEventPast(task);
+                        const isDida = (subscription.type || task.subscriptionType) === 'dida';
+                        const isPast = isDida ? false : isEventPast(task);
                         const completed = task.completed || isPast;
 
                         allReminders[key] = {

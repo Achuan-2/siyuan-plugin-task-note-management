@@ -294,7 +294,7 @@ export function isEventPast(event: any): boolean {
 /**
  * 解析RRULE对象（使用 ical.js）
  */
-function parseIcalRRule(rrule: ICAL.Recur): any {
+export function parseIcalRRule(rrule: ICAL.Recur): any {
     try {
         const repeat: any = {
             enabled: true,

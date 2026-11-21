@@ -40,7 +40,7 @@ import { showStatsDialog } from "../stats/ShowStatsDialog";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
 import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
 import { getSolarDateLunarString } from "../../utils/lunarUtils";
-import { getAllReminders, saveReminders } from "../../utils/icsSubscription";
+import { getAllReminders, isWritableSubscriptionType, saveReminders } from "../../utils/icsSubscription";
 import { createCompletedRemindersForDeletion, showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { isEventPast } from "../../utils/icsImport";
 import { uploadIcsToCloud } from "../../utils/icsExport";
@@ -3417,7 +3417,7 @@ export class ReminderPanel {
                 const target = e.target as HTMLElement;
                 if (target.closest('button, input, textarea, select, a, [contenteditable="true"], [contenteditable=""], [data-type="a"]:not(.reminder-item__title), .reminder-item__progress-wrap')) return;
 
-                const isEditable = !r.isSubscribed || (r.subscriptionType === 'caldav' && r.caldavEditable);
+                const isEditable = !r.isSubscribed || (isWritableSubscriptionType(r.subscriptionType) && r.caldavEditable);
                 if (isEditable) {
                     await this.showTimeEditDialog(r);
                 }
@@ -3483,7 +3483,7 @@ export class ReminderPanel {
                 }
             },
             onTimeClick: (r: any) => {
-                const isEditable = !r.isSubscribed || (r.subscriptionType === 'caldav' && r.caldavEditable);
+                const isEditable = !r.isSubscribed || (isWritableSubscriptionType(r.subscriptionType) && r.caldavEditable);
                 if (isEditable) {
                     this.showTimeEditDialog(r);
                 }
@@ -7948,7 +7948,7 @@ export class ReminderPanel {
         });
 
         // --- 订阅任务处理 ---
-        if (reminder.isSubscribed && reminder.subscriptionType !== 'caldav') {
+        if (reminder.isSubscribed && !isWritableSubscriptionType(reminder.subscriptionType)) {
             // 导航选项
             if (reminder.blockId) {
                 menu.addItem({
@@ -8014,8 +8014,8 @@ export class ReminderPanel {
             return;
         }
 
-        const isEditable = !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavEditable);
-        const isDeletable = !reminder.isSubscribed || (reminder.subscriptionType === 'caldav' && reminder.caldavDeletable);
+        const isEditable = !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavEditable);
+        const isDeletable = !reminder.isSubscribed || (isWritableSubscriptionType(reminder.subscriptionType) && reminder.caldavDeletable);
 
         const isSpanningDays = reminder.endDate && reminder.endDate !== reminder.date;
 
@@ -9206,7 +9206,7 @@ export class ReminderPanel {
                         });
                     }
                     notificationIds.push(id);
-                    if (rem.isSubscribed && rem.subscriptionType === 'caldav') {
+                    if (rem.isSubscribed && isWritableSubscriptionType(rem.subscriptionType)) {
                         caldavDeletions.push({ id, rem });
                     }
                     delete reminderData[id];
@@ -9222,7 +9222,7 @@ export class ReminderPanel {
                         if (inst) {
                             if (inst.blockId) affectedBlockIds.add(inst.blockId);
                             notificationIds.push(key);
-                            if (inst.isSubscribed && inst.subscriptionType === 'caldav') {
+                            if (inst.isSubscribed && isWritableSubscriptionType(inst.subscriptionType)) {
                                 caldavDeletions.push({ id: key, rem: inst });
                             }
                             delete reminderData[key];

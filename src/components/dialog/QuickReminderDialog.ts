@@ -17,7 +17,7 @@ import { PomodoroRecordManager } from "../dataManager/pomodoroRecord";
 import { PomodoroSessionsDialog } from "./PomodoroSessionsDialog";
 import { setTaskMetadataText, renderTaskMetadataIcon, renderTaskMetadataText, type TaskMetadataIcon } from "../render/taskMetadataIcons";
 import { collectTaskDeletionIds, deleteTaskTree } from "../../utils/taskTreeDeletion";
-import { getAllReminders } from "../../utils/icsSubscription";
+import { getAllReminders, isWritableSubscriptionType } from "../../utils/icsSubscription";
 import { showDeleteRepeatTaskDialog } from "../../utils/repeatTaskDeletion";
 import { LiteProtyleEditor } from "../editor/LiteProtyleEditor";
 import { addAssetCleanupIgnore, reconcileRemovedTaskAssets } from "../../utils/assetCleanupIgnore";
@@ -597,7 +597,7 @@ export class QuickReminderDialog {
 
         // 自动将不可编辑的订阅任务识别为只读模式
         if (this.mode === 'edit' && this.reminder) {
-            const isEditable = !this.reminder.isSubscribed || (this.reminder.subscriptionType === 'caldav' && this.reminder.caldavEditable);
+            const isEditable = !this.reminder.isSubscribed || (isWritableSubscriptionType(this.reminder.subscriptionType) && this.reminder.caldavEditable);
             if (!isEditable) {
                 this.readOnly = true;
             }

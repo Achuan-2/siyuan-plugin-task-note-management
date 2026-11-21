@@ -1,7 +1,7 @@
 import { updateBindBlockAtrrs } from '../api';
 import { parseReminderInstanceId } from '../components/dataManager/repeatUtils';
 import { i18n } from '../pluginInstance';
-import { deleteSubscriptionReminderTask, getAllReminders } from './icsSubscription';
+import { deleteSubscriptionReminderTask, getAllReminders, isWritableSubscriptionType } from './icsSubscription';
 import { createCompletedRemindersForDeletion } from './repeatTaskDeletion';
 import { TaskActionUndo } from './taskActionUndo';
 import type { HolidayData } from './reminderSkipDate';
@@ -67,7 +67,7 @@ export async function deleteTaskTree(plugin: any, targetId: string, keepComplete
     const effects = [
         ...Array.from(ids, id => () => plugin.cancelMobileNotification?.(id)),
         ...Array.from(blockIds, id => () => updateBindBlockAtrrs(id, plugin)),
-        ...removed.filter(task => task.isSubscribed && task.subscriptionType === 'caldav')
+        ...removed.filter(task => task.isSubscribed && isWritableSubscriptionType(task.subscriptionType))
             .map(task => () => deleteSubscriptionReminderTask(plugin, task)),
     ];
     void Promise.allSettled(effects.map(effect => Promise.resolve().then(effect))).then(results => {

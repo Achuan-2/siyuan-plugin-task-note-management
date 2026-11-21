@@ -1,17 +1,27 @@
 import { pushErrMsg, pushMsg, putFile, getFile, removeFile, forwardProxy } from '../api';
 import { ParsedIcsEvent, parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
 import { deleteCalDavTask, fetchCalDavEvents, putCalDavTask } from './caldavSubscription';
+import {
+    deleteDidaTask,
+    fetchDidaTasks,
+    syncDidaProjectGroups,
+    updateDidaTask,
+    type DidaSelectedProject,
+} from './didaSubscription';
 import { i18n } from "../pluginInstance";
 
 export interface IcsSubscription {
     id: string;
     name: string;
-    type?: 'ics' | 'caldav';
+    type?: 'ics' | 'caldav' | 'dida';
     provider?: 'generic' | 'apple' | 'feishu' | 'dingtalk' | 'wecom' | 'qq';
     readonly?: boolean; // Whether CalDAV write-back is disabled (e.g. DingTalk is read-only)
     url: string;
     username?: string;
     password?: string;
+    didaToken?: string;
+    didaSelectedProjects?: DidaSelectedProject[];
+    didaInboxProjectId?: string;
     projectId: string; // Required - must have a project
     categoryId?: string;
     priority?: 'high' | 'medium' | 'low' | 'none';
@@ -30,9 +40,16 @@ export interface IcsSubscription {
     createdAt: string;
 }
 
+export function isWritableSubscriptionType(subscriptionType?: string): boolean {
+    return subscriptionType === 'caldav' || subscriptionType === 'dida';
+}
+
 export function isSubscriptionEditable(subscription: any): boolean {
-    if (!subscription || subscription.type !== 'caldav') return false;
+    if (!subscription || !isWritableSubscriptionType(subscription.type)) return false;
     if (subscription.readonly === true) return false;
+    if (subscription.type === 'dida') {
+        return subscription.caldavEditable !== false;
+    }
     const provider = subscription.provider || 'generic';
     if (provider === 'wecom') return true;
     if (provider === 'dingtalk') return false;
@@ -42,8 +59,11 @@ export function isSubscriptionEditable(subscription: any): boolean {
 }
 
 export function isSubscriptionDeletable(subscription: any): boolean {
-    if (!subscription || subscription.type !== 'caldav') return false;
+    if (!subscription || !isWritableSubscriptionType(subscription.type)) return false;
     if (subscription.readonly === true) return false;
+    if (subscription.type === 'dida') {
+        return subscription.caldavDeletable !== false;
+    }
     const provider = subscription.provider || 'generic';
     if (provider === 'wecom') return true;
     if (provider === 'qq') return true;
@@ -240,8 +260,9 @@ export async function getAllReminders(
                             caldavDeletable: isSubscriptionDeletable(subscription),
                         };
                     } else {
-                        // 非重复事件的处理逻辑（原有逻辑）
-                        const isPast = isEventPast(task);
+                        // 非重复事件的处理逻辑（滴答清单为待办任务，不因日期过期自动标为已完成）
+                        const isDida = (subscription.type || task.subscriptionType) === 'dida';
+                        const isPast = isDida ? false : isEventPast(task);
                         const completed = task.completed || isPast;
 
                         // If event is past and not already marked as completed, update the JSON file
@@ -312,6 +333,10 @@ function isSameReminderPayload(a: any, b: any): boolean {
 
 function isCalDavSubscription(subscription: IcsSubscription | undefined): boolean {
     return subscription?.type === 'caldav';
+}
+
+function isDidaSubscription(subscription: IcsSubscription | undefined): boolean {
+    return subscription?.type === 'dida';
 }
 
 interface CalDavCapabilities {
@@ -420,6 +445,69 @@ async function syncCalDavTaskChanges(
     return syncedTasks;
 }
 
+async function syncDidaTaskChanges(
+    subscription: IcsSubscription,
+    currentTasks: any,
+    nextTasks: any
+): Promise<any> {
+    const canEdit = isSubscriptionEditable(subscription);
+    const canDelete = isSubscriptionDeletable(subscription);
+    const syncedTasks = { ...(nextTasks || {}) };
+
+    // Preserve any existing manualDelete markers
+    for (const [id, task] of Object.entries(currentTasks || {}) as [string, any][]) {
+        if (task.manualDelete && !syncedTasks[id]) {
+            syncedTasks[id] = task;
+        }
+    }
+
+    // Handle deletions
+    for (const [id, currentTask] of Object.entries(currentTasks || {}) as [string, any][]) {
+        if (currentTask.manualDelete) continue;
+        if (syncedTasks[id] && !syncedTasks[id].manualDelete) continue;
+
+        if (canDelete && currentTask.didaTaskId && currentTask.didaProjectId) {
+            try {
+                await deleteDidaTask(subscription, currentTask);
+            } catch (e: any) {
+                console.warn(`[Dida365] DELETE failed for task ${id}, skipping:`, e?.message || e);
+            }
+        } else {
+            syncedTasks[id] = { ...currentTask, manualDelete: true };
+        }
+    }
+
+    // Handle updates
+    for (const [id, nextTask] of Object.entries(syncedTasks) as [string, any][]) {
+        if (nextTask.manualDelete) continue;
+        const currentTask = currentTasks?.[id];
+        if (!currentTask || !nextTask.didaTaskId) continue;
+
+        if (isSameReminderPayload(stripRuntimeSubscriptionFields(currentTask), nextTask)) {
+            continue;
+        }
+
+        if (!canEdit) {
+            continue;
+        }
+
+        try {
+            const result = await updateDidaTask(subscription, currentTask, nextTask);
+            syncedTasks[id] = {
+                ...nextTask,
+                didaProjectId: result.didaProjectId,
+                didaListId: result.didaListId,
+                didaEtag: result.didaEtag,
+                subscriptionType: 'dida',
+            };
+        } catch (e: any) {
+            console.warn(`[Dida365] UPDATE failed for task ${id}, keeping local state:`, e?.message || e);
+        }
+    }
+
+    return syncedTasks;
+}
+
 async function saveSubscriptionReminderTasks(
     plugin: any,
     subscription: IcsSubscription,
@@ -437,6 +525,8 @@ async function saveSubscriptionReminderTasks(
 
     if (isCalDavSubscription(subscription)) {
         tasksToSave = await syncCalDavTaskChanges(subscription, currentTasks, tasksToSave);
+    } else if (isDidaSubscription(subscription)) {
+        tasksToSave = await syncDidaTaskChanges(subscription, currentTasks, tasksToSave);
     }
 
     if (
@@ -483,7 +573,27 @@ export async function deleteSubscriptionReminderTask(plugin: any, reminder: any)
         return;
     }
 
-    // Non-CalDAV (plain ICS): just remove from local file
+    if (isDidaSubscription(subscription)) {
+        if (isSubscriptionDeletable(subscription)) {
+            try {
+                await deleteDidaTask(subscription, reminder);
+            } catch (e: any) {
+                console.warn('[Dida365] DELETE failed, removing locally anyway:', e?.message || e);
+            }
+            if (currentTasks && currentTasks[reminder.id]) {
+                delete currentTasks[reminder.id];
+                await saveSubscriptionTasks(plugin, reminder.subscriptionId, currentTasks);
+            }
+        } else {
+            if (currentTasks && currentTasks[reminder.id]) {
+                currentTasks[reminder.id] = { ...currentTasks[reminder.id], manualDelete: true };
+                await saveSubscriptionTasks(plugin, reminder.subscriptionId, currentTasks);
+            }
+        }
+        return;
+    }
+
+    // Non-CalDAV/Dida (plain ICS): just remove from local file
     if (currentTasks && currentTasks[reminder.id]) {
         delete currentTasks[reminder.id];
         await saveSubscriptionTasks(plugin, reminder.subscriptionId, currentTasks);
@@ -618,27 +728,35 @@ async function buildTasksFromSubscriptionEvents(
     const defaultKanbanStatus = await resolveDefaultKanbanStatus(plugin, subscription.projectId);
     const tasks: any = {};
     const subscriptionType = subscription.type || 'ics';
+    const isDida = subscriptionType === 'dida';
+    const didaTaskIdToLocalId = new Map<string, string>();
 
     for (const event of events) {
         // Skip events the user has manually deleted locally
         if (event.uid && manuallyDeletedUids.has(event.uid)) continue;
 
         const existingTask = event.uid ? existingTasksByUid.get(event.uid) : undefined;
-        const preserveCompleted = existingTask?.completed === true;
+        const preserveCompleted = !isDida && existingTask?.completed === true;
 
         const id =
             existingTask?.id ||
             window.Lute?.NewNodeID?.() ||
             `${subscription.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-        const isPast = isEventPast(event);
-        const isCompleted = preserveCompleted ? existingTask.completed : event.completed || isPast;
+        if (isDida && event.didaTaskId) {
+            didaTaskIdToLocalId.set(event.didaTaskId, id);
+        }
+
+        const isPast = isDida ? false : isEventPast(event);
+        const isCompleted = isDida
+            ? Boolean(event.completed)
+            : (preserveCompleted ? existingTask.completed : event.completed || isPast);
 
         if (existingTask) {
             const shouldSyncRemoteNote =
-                subscriptionType === 'caldav' &&
-                event.description !== undefined &&
-                existingTask.notes !== true;
+                (subscriptionType === 'caldav' || subscriptionType === 'dida') &&
+                existingTask.notes !== true &&
+                (event.description !== undefined || subscriptionType === 'dida');
             tasks[id] = {
                 ...existingTask,
                 title: event.title,
@@ -647,12 +765,25 @@ async function buildTasksFromSubscriptionEvents(
                 endDate: event.endDate,
                 endTime: event.endTime,
                 repeat: event.repeat,
-                ...(shouldSyncRemoteNote ? { note: event.description } : {}),
+                ...(shouldSyncRemoteNote ? { note: event.description || '' } : {}),
+                ...(event.priority ? { priority: event.priority } : {}),
+                ...(event.customGroupId ? { customGroupId: event.customGroupId } : {}),
+                ...(event.url ? { url: event.url } : {}),
                 ...(event.caldavHref ? { caldavHref: event.caldavHref } : {}),
                 ...(event.caldavEtag !== undefined ? { caldavEtag: event.caldavEtag } : {}),
                 ...(event.caldavRawIcs ? { caldavRawIcs: event.caldavRawIcs } : {}),
+                ...(event.didaTaskId ? { didaTaskId: event.didaTaskId } : {}),
+                ...(event.didaProjectId ? { didaProjectId: event.didaProjectId } : {}),
+                ...(event.didaListId ? { didaListId: event.didaListId } : {}),
+                ...(event.didaParentTaskId !== undefined ? { didaParentTaskId: event.didaParentTaskId } : {}),
+                ...(event.didaEtag !== undefined ? { didaEtag: event.didaEtag } : {}),
+                ...(event.didaKind !== undefined ? { didaKind: event.didaKind } : {}),
+                ...(event.didaItems !== undefined ? { didaItems: event.didaItems } : {}),
+                ...(event.didaTags !== undefined ? { didaTags: event.didaTags } : {}),
                 completed: isCompleted,
-                completedAt: preserveCompleted ? existingTask.completedAt : undefined,
+                completedAt: isDida
+                    ? (isCompleted ? (event.completedAt || existingTask.completedAt) : undefined)
+                    : (preserveCompleted ? existingTask.completedAt : undefined),
                 kanbanStatus: isCompleted ? 'completed' : (existingTask.kanbanStatus === 'completed' ? defaultKanbanStatus : existingTask.kanbanStatus),
                 subscriptionId: subscription.id,
                 subscriptionType,
@@ -668,10 +799,10 @@ async function buildTasksFromSubscriptionEvents(
                 note: event.description,
                 projectId: subscription.projectId,
                 categoryId: subscription.categoryId,
-                priority: subscription.priority || 'none',
+                priority: event.priority || subscription.priority || 'none',
                 tagIds: subscription.tagIds || [],
                 completed: isCompleted,
-                completedAt: undefined,
+                completedAt: isDida && isCompleted ? event.completedAt : undefined,
                 kanbanStatus: isCompleted ? 'completed' : defaultKanbanStatus,
                 createdAt: event.createdAt || new Date().toISOString(),
                 subscriptionId: subscription.id,
@@ -682,6 +813,23 @@ async function buildTasksFromSubscriptionEvents(
                 caldavDeletable: isSubscriptionDeletable(subscription),
             };
         }
+    }
+
+    // Link Dida365 subtasks to their parent tasks within the same subscription
+    if (isDida && didaTaskIdToLocalId.size > 0) {
+        Object.values(tasks).forEach((task: any) => {
+            if (!task || task.manualDelete) return;
+            if (task.didaParentTaskId) {
+                const mappedParentId = didaTaskIdToLocalId.get(task.didaParentTaskId);
+                if (mappedParentId && mappedParentId !== task.id) {
+                    task.parentId = mappedParentId;
+                } else {
+                    delete task.parentId;
+                }
+            } else if (task.parentId && !tasks[task.parentId]) {
+                delete task.parentId;
+            }
+        });
     }
 
     // Re-attach manually deleted tasks so the markers persist across syncs
@@ -713,6 +861,21 @@ export async function syncSubscription(
                 caldavEtag: remoteEvent.etag,
                 caldavRawIcs: remoteEvent.rawIcs
             }));
+        } else if (subscriptionType === 'dida') {
+            const didaResult = await fetchDidaTasks(subscription);
+            events = didaResult.events;
+            subscription.didaSelectedProjects = didaResult.updatedSelectedProjects;
+            if (didaResult.inboxRealProjectId) {
+                subscription.didaInboxProjectId = didaResult.inboxRealProjectId;
+            }
+            if (subscription.projectId) {
+                await syncDidaProjectGroups(
+                    plugin,
+                    subscription.projectId,
+                    didaResult.updatedSelectedProjects,
+                    { preferCustomMode: true }
+                );
+            }
         } else {
             const icsContent = await fetchIcsContent(subscription.url);
             events = await parseIcsFile(icsContent);

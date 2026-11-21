@@ -70,7 +70,8 @@ function detachCompletedReminder(reminder: any): any {
     for (const field of [
         'repeat', 'isRepeated', 'isRepeatedInstance', 'isRepeatInstance', 'originalId', 'instanceId', 'instanceDate',
         'deleted', 'modifiedAt', 'preservedFromSeriesEdit', 'isSubscribed', 'subscriptionId', 'subscriptionType',
-        'caldavEditable', 'caldavDeletable', 'caldavHref', 'caldavEtag', 'caldavRawIcs', 'noteId',
+        'caldavEditable', 'caldavDeletable', 'caldavHref', 'caldavEtag', 'caldavRawIcs',
+        'didaTaskId', 'didaProjectId', 'didaListId', 'didaParentTaskId', 'didaEtag', 'didaKind', 'didaItems', 'didaTags', 'noteId',
     ]) {
         delete snapshot[field];
     }
