@@ -108,6 +108,14 @@ export function registerCustomIcons(plugin: Plugin) {
                     <path d="M16 10v6"/>
                 </g>
             </symbol>
+            <symbol id="iconTNParent" viewBox="0 0 24 24">
+                <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 0 6h-6.5"/>
+                    <rect x="11" y="14" width="9" height="6" rx="3"/>
+                    <path d="M11 17H8.5A2.5 2.5 0 0 1 6 14.5v-5"/>
+                    <path d="M3.8 11.7 6 9.5l2.2 2.2"/>
+                </g>
+            </symbol>
         `);
 
     plugin.addIcons(`

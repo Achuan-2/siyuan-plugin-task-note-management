@@ -11,7 +11,7 @@ const paths = {
     timer: '<path d="M10 2h4M12 14v-4m-8-7 3 3"/><circle cx="12" cy="14" r="8"/>',
     duration: '<path d="M512 512m-292.571429 0a292.571429 292.571429 0 1 0 585.142858 0 292.571429 292.571429 0 1 0-585.142858 0Z" fill="#001029" fill-opacity=".156"/><path d="M512 999.643429A487.643429 487.643429 0 1 1 512 24.429714a487.643429 487.643429 0 0 1 0 975.213715z m0-97.572572A390.070857 390.070857 0 1 0 512 121.929143a390.070857 390.070857 0 0 0 0 780.141714zM560.786286 512h194.998857v97.499429h-219.428572a73.142857 73.142857 0 0 1-73.142857-73.142858V268.214857h97.572572V512z" fill="#001029" fill-opacity=".65"/>',
     document: '<path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9ZM14 2v7h7M7 13h10m-10 4h7"/>',
-    parent: '<path d="M4 3v9a4 4 0 0 0 4 4h12m-5-5 5 5-5 5"/>',
+    parent: '<use href="#iconTNParent"/>',
     check: '<rect x="3" y="3" width="18" height="18" rx="3" fill="#4caf50"/><path d="m7 12 3 3 7-7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>',
     unchecked: '<rect x="3" y="3" width="18" height="18" rx="3"/>',
     checkOutline: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 12 3 3 7-7"/>',
@@ -36,7 +36,7 @@ export type TaskMetadataIcon = keyof typeof paths;
 
 export function renderTaskMetadataIcon(name: TaskMetadataIcon, size = 14): string {
     // 将绘制样式放在内部组中，隔离宿主或主题对根 svg 的填充和描边设置。
-    const content = name === 'tomato' || name === 'project' || name === 'duration' || name === 'check'
+    const content = name === 'tomato' || name === 'project' || name === 'parent' || name === 'duration' || name === 'check'
         ? paths[name]
         : `<g fill="none" stroke="currentColor" stroke-width="${name === 'tag' || name === 'calendarHeart' || name === 'calendarCheck' || name === 'folderOpen' || name === 'progress' ? 2 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${paths[name]}</g>`;
     const viewBox = name === 'duration' ? '0 0 1024 1024' : '0 0 24 24';
