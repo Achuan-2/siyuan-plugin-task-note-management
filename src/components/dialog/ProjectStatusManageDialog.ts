@@ -47,9 +47,6 @@ export class StatusManageDialog {
                             ${i18n("resetToDefault") || "重置为默认"}
                         </button>
                     </div>
-                    <div class="status-drag-hint">
-                        <span>💡 ${i18n("dragHint")}</span>
-                    </div>
                     <div class="statuses-list" id="statusesList">
                         <!-- 状态列表将在这里渲染 -->
                     </div>
@@ -62,14 +59,10 @@ export class StatusManageDialog {
                 .status-manage-dialog {
                     max-height: 580px;
                 }
-                .status-drag-hint {
-                    padding: 8px 16px;
-                    background: rgba(52, 152, 219, 0.1);
-                    border-radius: 4px;
+                .status-toolbar {
+                    display: flex;
+                    gap: 8px;
                     margin-bottom: 12px;
-                    font-size: 12px;
-                    color: #666;
-                    text-align: center;
                 }
                 .statuses-list {
                     overflow-y: auto;
