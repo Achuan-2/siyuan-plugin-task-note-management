@@ -23,7 +23,7 @@ interface InlineSubtaskTitle {
     afterTaskId?: string;
     task?: any;
     wasDraggable: boolean;
-    pending?: Promise<boolean>;
+    committed?: boolean;
 }
 
 type SubtaskDropPosition = 'before' | 'after' | 'inside';
@@ -67,6 +67,7 @@ export class SubtasksDialog {
     private pendingTitleSave?: Promise<boolean>;
     private subtaskRenderPending = false;
     private movingInlineDraft = false;
+    private parentTaskCache?: any;
 
     constructor(
         parentId: string,
@@ -269,6 +270,10 @@ export class SubtasksDialog {
         const reminderData = await this.plugin.loadReminderData() || {};
         const allTasks = Object.values(reminderData) as any[];
         const { targetParentId, instanceDate } = this.parseInstanceParentId(this.parentId);
+        const parentTemplate = reminderData[this.parentId] || reminderData[targetParentId];
+        this.parentTaskCache = parentTemplate
+            ? (instanceDate ? { ...parentTemplate, ...getRepeatInstanceState(parentTemplate, instanceDate) } : parentTemplate)
+            : undefined;
         const combined: any[] = [];
         const seen = new Set<string>();
 
@@ -1026,7 +1031,7 @@ export class SubtasksDialog {
             if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopPropagation();
-                if (editor.pending) return;
+                if (editor.committed) return;
                 this.closeInlineTitle(editor);
                 if (this.subtaskRenderPending) this.renderSubtasks();
                 if (!input.isConnected) {
@@ -1098,7 +1103,7 @@ export class SubtasksDialog {
     }
 
     private async handleInlineTitleTab(editor: InlineSubtaskTitle, outdent: boolean) {
-        if (this.readOnly || this.closed || editor.pending || this.pendingSubtaskDrop || this.pendingSubtaskDeletion) return;
+        if (this.readOnly || this.closed || editor.committed || this.pendingSubtaskDrop || this.pendingSubtaskDeletion) return;
 
         const selectionStart = editor.input.selectionStart;
         const selectionEnd = editor.input.selectionEnd;
@@ -1207,48 +1212,70 @@ export class SubtasksDialog {
     private finishInlineTitles(): Promise<boolean> | undefined {
         const editors = new Set(this.dirtyInlineTitles);
         if (this.inlineTitle) editors.add(this.inlineTitle);
-        if (!editors.size) return this.pendingTitleSave;
-        return Promise.all([...editors].map(editor => this.finishInlineTitle(editor))).then(results => results.every(Boolean));
+        const promises: Array<Promise<boolean>> = [];
+        if (this.pendingTitleSave) promises.push(this.pendingTitleSave);
+        for (const editor of editors) {
+            promises.push(this.finishInlineTitle(editor));
+        }
+        if (!promises.length) return undefined;
+        return Promise.all(promises).then(results => results.every(Boolean));
     }
 
-    private finishInlineTitle(editor: InlineSubtaskTitle, createNext = false): Promise<boolean> {
-        if (editor.pending) return editor.pending;
-        this.dirtyInlineTitles.add(editor);
-        const save = () => this.saveInlineTitle(editor, createNext);
-        const pending = this.pendingTitleSave ? this.pendingTitleSave.then(save, save) : save();
-        editor.pending = this.pendingTitleSave = pending;
+    private enqueueTitlePersistence(task: () => Promise<boolean>): Promise<boolean> {
+        const previous = this.pendingTitleSave;
+        const pending = previous ? previous.then(task, task) : task();
+        this.pendingTitleSave = pending;
         const clearPending = () => {
-            editor.pending = undefined;
             if (this.pendingTitleSave === pending) this.pendingTitleSave = undefined;
         };
         void pending.then(clearPending, clearPending);
         return pending;
     }
 
-    private closeInlineTitle(editor: InlineSubtaskTitle) {
-        if (this.inlineTitle === editor) this.inlineTitle = undefined;
-        this.dirtyInlineTitles.delete(editor);
-        if (editor.task) editor.input.value = editor.task.title ?? '';
-        else editor.row.remove();
+    private getOptimisticParentTask(parentId: string): any | null {
+        if (this.isTempMode) {
+            return parentId === '__TEMP_PARENT__'
+                ? this.getResolvedTempParentTask()
+                : (this.subtasks.find(item => item.id === parentId) ?? null);
+        }
+        if (parentId === this.parentId) return this.parentTaskCache ?? null;
+        return this.subtasks.find(item => item.id === parentId) ?? this.parentTaskCache ?? null;
     }
 
-    private async saveInlineTitle(editor: InlineSubtaskTitle, createNext: boolean): Promise<boolean> {
+    private finishInlineTitle(editor: InlineSubtaskTitle, createNext = false): Promise<boolean> {
+        if (editor.committed) return this.pendingTitleSave ?? Promise.resolve(true);
+
         const title = editor.input.value.trim();
         const previousTitle = String(editor.task?.title ?? '').trim();
         const changed = !!title && title !== previousTitle;
+        const continueEditing = createNext && document.activeElement === editor.input;
+
+        if (!editor.task) {
+            editor.committed = true;
+        }
+
+        let optimisticTask: any;
+        const rawPreviousTitle = editor.task?.title;
         if (changed) {
-            editor.input.readOnly = true;
-            try {
-                await this.writeInlineTitle(editor, title);
-            } catch (error) {
-                console.error('Failed to save inline subtask title:', error);
-                showMessage(i18n(editor.task ? 'updateReminderFailed' : 'createFailed'), 3000, 'error');
-                return false;
-            } finally {
-                editor.input.readOnly = false;
+            if (editor.task) {
+                editor.task.title = title;
+                const visibleTask = this.subtasks.find(item => item.id === editor.task.id);
+                if (visibleTask) visibleTask.title = title;
+            } else {
+                const parent = this.getOptimisticParentTask(editor.parentId);
+                if (this.isTempMode && editor.parentId !== '__TEMP_PARENT__' && !parent) {
+                    showMessage(i18n('createFailed'), 3000, 'error');
+                    editor.committed = false;
+                    return Promise.resolve(false);
+                }
+                const built = this.buildInlineSubtask(editor.id, title, editor.parentId, parent);
+                optimisticTask = this.isTempMode ? { ...built, isTempSubtask: true } : built;
+                const sortChanges = this.placeInlineSubtask(optimisticTask, editor.afterTaskId);
+                this.applyInlineSortChanges(sortChanges);
+                this.subtasks.push(optimisticTask);
             }
         }
-        const continueEditing = createNext && document.activeElement === editor.input;
+
         const pendingRender = this.subtaskRenderPending;
         this.closeInlineTitle(editor);
         const titleSort = changed && editor.task && this.getActiveSortCriteria().some(criterion => criterion.method === 'title');
@@ -1259,17 +1286,39 @@ export class SubtasksDialog {
             const afterTaskId = this.getActiveSortCriteria().length === 0 ? editor.id : undefined;
             this.openSubtaskDraft(editor.parentId, afterTaskId);
         }
-        if (changed) {
-            if (this.isTempMode) this.onTempSubtasksUpdate?.([...this.subtasks]);
+
+        if (!changed) return Promise.resolve(true);
+
+        if (this.isTempMode) {
+            this.onTempSubtasksUpdate?.([...this.subtasks]);
             this.onUpdate?.();
+            return Promise.resolve(true);
         }
-        return true;
+
+        const payload = {
+            id: editor.id,
+            task: editor.task,
+            parentId: editor.parentId,
+            afterTaskId: editor.afterTaskId,
+            title,
+            optimisticTask,
+            previousTitle: rawPreviousTitle,
+        };
+        return this.enqueueTitlePersistence(() => this.persistInlineTitle(payload));
     }
 
-    private buildInlineSubtask(id: string, title: string, parentId: string, parent: any, savedTasks: any[] = []) {
+    private closeInlineTitle(editor: InlineSubtaskTitle) {
+        if (this.inlineTitle === editor) this.inlineTitle = undefined;
+        this.dirtyInlineTitles.delete(editor);
+        if (editor.task) editor.input.value = editor.task.title ?? '';
+        else editor.row.remove();
+    }
+
+    private buildInlineSubtask(id: string, title: string, parentId: string, parent: any, savedTasks?: any[]) {
         const { instanceDate } = this.parseInstanceParentId(parentId);
-        const sort = [...savedTasks, ...this.subtasks]
-            .reduce((max, task) => task?.parentId === parentId ? Math.max(max, this.getReminderSortValue(task)) : max, 0) + 1000;
+        const sourceTasks = savedTasks ?? this.subtasks;
+        const sort = sourceTasks
+            .reduce((max, task) => task?.id !== id && task?.parentId === parentId ? Math.max(max, this.getReminderSortValue(task)) : max, 0) + 1000;
         const parentStatus = parent?.kanbanStatus;
         const kanbanStatus = parentStatus && parentStatus !== 'completed' && parentStatus !== 'abandoned' ? parentStatus : 'doing';
         return {
@@ -1337,73 +1386,104 @@ export class SubtasksDialog {
         }
     }
 
-    private async writeInlineTitle({ id, task, parentId, afterTaskId }: InlineSubtaskTitle, title: string) {
-        if (this.isTempMode) {
+    private async persistInlineTitle(payload: {
+        id: string;
+        task?: any;
+        parentId: string;
+        afterTaskId?: string;
+        title: string;
+        optimisticTask?: any;
+        previousTitle?: string;
+    }): Promise<boolean> {
+        const { id, task, parentId, afterTaskId, title, optimisticTask, previousTitle } = payload;
+        try {
+            const data = await this.plugin.loadReminderData(true) || {};
+            let savedTask: any;
+            let original: any;
+            let sortChanges = new Map<string, number>();
+
             if (task) {
-                task.title = title;
-            } else {
-                const parent = parentId === '__TEMP_PARENT__' ? this.getResolvedTempParentTask() : this.subtasks.find(task => task.id === parentId);
-                if (parentId !== '__TEMP_PARENT__' && !parent) throw new Error('The parent task no longer exists');
-                const newTask = { ...this.buildInlineSubtask(id, title, parentId, parent), isTempSubtask: true };
-                const sortChanges = this.placeInlineSubtask(newTask, afterTaskId);
-                this.applyInlineSortChanges(sortChanges);
-                this.subtasks.push(newTask);
-            }
-            return;
-        }
-
-        const data = await this.plugin.loadReminderData(true) || {};
-        let savedTask: any;
-        let original: any;
-        let sortChanges = new Map<string, number>();
-        if (task) {
-            const direct = data[task.id];
-            original = direct || data[this.getSubtaskStorageId(task)!];
-            if (!original) throw new Error('The subtask no longer exists');
-            savedTask = structuredClone(original);
-            const { instanceDate } = this.parseInstanceParentId(task.id);
-            if (!direct && instanceDate) {
-                if (original.repeat?.excludeDates?.includes(instanceDate) || getRepeatInstanceState(original, instanceDate)?.deleted) {
-                    throw new Error('The subtask instance is no longer visible');
+                const direct = data[task.id];
+                original = direct || data[this.getSubtaskStorageId(task)!];
+                if (!original) throw new Error('The subtask no longer exists');
+                savedTask = structuredClone(original);
+                const { instanceDate } = this.parseInstanceParentId(task.id);
+                if (!direct && instanceDate) {
+                    if (original.repeat?.excludeDates?.includes(instanceDate) || getRepeatInstanceState(original, instanceDate)?.deleted) {
+                        throw new Error('The subtask instance is no longer visible');
+                    }
+                    patchRepeatInstanceState(savedTask, instanceDate, { title });
+                } else {
+                    savedTask.title = title;
+                    savedTask.updatedAt = new Date().toISOString();
                 }
-                patchRepeatInstanceState(savedTask, instanceDate, { title });
             } else {
-                savedTask.title = title;
-                savedTask.updatedAt = new Date().toISOString();
+                const { targetParentId, instanceDate } = this.parseInstanceParentId(parentId);
+                const template = data[parentId] || data[targetParentId];
+                if (!template) throw new Error('The parent task no longer exists');
+                const parent = instanceDate ? { ...template, ...getRepeatInstanceState(template, instanceDate) } : template;
+                if (data[id]) {
+                    savedTask = { ...data[id], title };
+                } else {
+                    savedTask = this.buildInlineSubtask(id, title, parentId, parent, Object.values(data));
+                    if (optimisticTask?.createdAt) savedTask.createdAt = optimisticTask.createdAt;
+                    sortChanges = this.placeInlineSubtask(savedTask, afterTaskId, data);
+                }
             }
-        } else {
-            const { targetParentId, instanceDate } = this.parseInstanceParentId(parentId);
-            const template = data[parentId] || data[targetParentId];
-            if (!template) throw new Error('The parent task no longer exists');
-            const parent = instanceDate ? { ...template, ...getRepeatInstanceState(template, instanceDate) } : template;
-            savedTask = data[id] ? { ...data[id], title } : this.buildInlineSubtask(id, title, parentId, parent, Object.values(data));
-            if (!data[id]) sortChanges = this.placeInlineSubtask(savedTask, afterTaskId, data);
-        }
 
-        const nextData = { ...data, [savedTask.id]: savedTask };
-        for (const [siblingId, sort] of sortChanges) {
-            if (nextData[siblingId]) {
-                nextData[siblingId] = { ...nextData[siblingId], sort };
-            } else {
-                const { targetParentId, instanceDate } = this.parseInstanceParentId(siblingId);
-                const template = structuredClone(nextData[targetParentId]);
-                patchRepeatInstanceState(template, instanceDate!, { sort });
-                nextData[targetParentId] = template;
+            const nextData = { ...data, [savedTask.id]: savedTask };
+            for (const [siblingId, sort] of sortChanges) {
+                if (nextData[siblingId]) {
+                    nextData[siblingId] = { ...nextData[siblingId], sort };
+                } else {
+                    const { targetParentId, instanceDate } = this.parseInstanceParentId(siblingId);
+                    const template = nextData[targetParentId] ? structuredClone(nextData[targetParentId]) : undefined;
+                    if (template && instanceDate) {
+                        patchRepeatInstanceState(template, instanceDate, { sort });
+                        nextData[targetParentId] = template;
+                    }
+                }
             }
+            await this.plugin.saveReminderData(nextData);
+            if (sortChanges.size) this.applyInlineSortChanges(sortChanges);
+            if (!task) {
+                const visibleTask = this.subtasks.find(item => item.id === savedTask.id);
+                if (visibleTask) {
+                    const currentTitle = visibleTask.title;
+                    Object.assign(visibleTask, savedTask, { title: currentTitle });
+                } else {
+                    this.subtasks.push(savedTask);
+                }
+            }
+            window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { projectId: task?.projectId || savedTask.projectId } }));
+            void this.plugin.updateMobileNotification?.(savedTask, original)?.catch((error: unknown) => {
+                console.warn('Failed to update subtask notifications:', error);
+            });
+            if (!this.closed) {
+                this.onUpdate?.();
+            }
+            return true;
+        } catch (error) {
+            console.error('Failed to save inline subtask title:', error);
+            showMessage(i18n(task ? 'updateReminderFailed' : 'createFailed'), 3000, 'error');
+            if (!this.closed) {
+                if (task) {
+                    if (task.title === title) task.title = previousTitle ?? '';
+                    const visibleTask = this.subtasks.find(item => item.id === task.id);
+                    if (visibleTask && visibleTask.title === title) visibleTask.title = previousTitle ?? '';
+                    const input = this.getRootElement().querySelector<HTMLTextAreaElement>(
+                        `[data-task-id="${CSS.escape(task.id)}"] .subtasks-dialog__title`
+                    );
+                    if (input && document.activeElement !== input && input.value.trim() === title) {
+                        input.value = previousTitle ?? '';
+                    }
+                } else {
+                    this.subtasks = this.subtasks.filter(item => item.id !== id);
+                    this.renderSubtasks();
+                }
+            }
+            return false;
         }
-        await this.plugin.saveReminderData(nextData);
-        if (sortChanges.size) this.applyInlineSortChanges(sortChanges);
-        if (task) {
-            task.title = title;
-            const visibleTask = this.subtasks.find(item => item.id === task.id);
-            if (visibleTask) visibleTask.title = title;
-        } else if (!this.subtasks.some(item => item.id === savedTask.id)) {
-            this.subtasks.push(savedTask);
-        }
-        window.dispatchEvent(new CustomEvent('reminderUpdated', { detail: { projectId: task?.projectId || savedTask.projectId } }));
-        void this.plugin.updateMobileNotification?.(savedTask, original)?.catch((error: unknown) => {
-            console.warn('Failed to update subtask notifications:', error);
-        });
     }
 
     private async editSubtask(task: any) {
