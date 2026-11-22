@@ -16,6 +16,8 @@ function fixture() {
         didaToken: 'fixture-token', didaSelectedProjects: [{ id: 'list', name: 'List' }],
     };
     const remote = new Map();
+    const completed = new Map();
+    const completions = [];
     const writes = [];
     const deletes = [];
     const deleteStatuses = new Map();
@@ -23,13 +25,56 @@ function fixture() {
     let local = {};
     let localReminders = {};
     let nextWriteStatus = 200;
+    let nextCompletionStatus = 200;
+    let loseNextCompletionResponse = false;
+    let failNextProjectRead = false;
     let createdSortOrder;
 
     const fetch = async (url, { method, body }) => {
         const endpoint = new URL(url).pathname.replace('/open/v1', '');
         if (endpoint === '/project') return Response.json(subscription.didaSelectedProjects);
-        if (endpoint === '/project/list/data') return Response.json({ tasks: [...remote.values()] });
-        if (endpoint === '/task/completed') return Response.json([]);
+        if (endpoint === '/project/list/data') {
+            if (failNextProjectRead) {
+                failNextProjectRead = false;
+                return Response.json({}, { status: 503 });
+            }
+            return Response.json({ tasks: [...remote.values()] });
+        }
+        if (endpoint === '/task/completed') return Response.json([...completed.values()]);
+        const taskEndpoint = endpoint.match(/^\/project\/list\/task\/([^/]+)(\/complete)?$/);
+        if (taskEndpoint && method === 'GET') {
+            const task = remote.get(taskEndpoint[1]) || completed.get(taskEndpoint[1]);
+            return task ? Response.json(task) : Response.json({}, { status: 404 });
+        }
+        if (taskEndpoint?.[2] && method === 'POST') {
+            const id = taskEndpoint[1];
+            const task = remote.get(id);
+            assert.ok(task?.repeatFlag);
+            const date = task.startDate.slice(0, 10);
+            completions.push(date);
+            const status = nextCompletionStatus;
+            nextCompletionStatus = 200;
+            if (status !== 200) return Response.json({ errorMessage: 'Completion failed' }, { status });
+            const count = Number(task.repeatFlag.match(/COUNT=(\d+)/)?.[1]);
+            const done = { ...task, status: 2, completedTime: new Date().toISOString() };
+            if (count === 1) {
+                remote.delete(id);
+                completed.set(id, done);
+            } else {
+                const historyId = `completed-${date}`;
+                completed.set(historyId, { ...done, id: historyId, repeatFlag: undefined });
+                const nextDate = new Date(new Date(task.startDate).getTime() + 86400000).toISOString();
+                remote.set(id, {
+                    ...task, startDate: nextDate, dueDate: nextDate, etag: `after-${date}`,
+                    repeatFlag: count ? `RRULE:FREQ=DAILY;COUNT=${count - 1}` : task.repeatFlag,
+                });
+            }
+            if (loseNextCompletionResponse) {
+                loseNextCompletionResponse = false;
+                throw new TypeError('Failed to fetch');
+            }
+            return new Response(null, { status: 200 });
+        }
         if (method === 'DELETE') {
             const [, projectId, taskId] = endpoint.match(/^\/project\/([^/]+)\/task\/([^/]+)$/);
             deletes.push([projectId, taskId]);
@@ -61,7 +106,11 @@ function fixture() {
         },
         '../pluginInstance': { i18n: () => '' },
         '../components/dataManager/repeatUtils': { parseReminderInstanceId: () => null },
-        './icsImport': { resolveDefaultKanbanStatus: async () => 'todo' },
+        './icsImport': {
+            resolveDefaultKanbanStatus: async () => 'todo',
+            formatDate: date => date.toISOString().slice(0, 10),
+            parseIcalRRule: rrule => ({ enabled: true, type: 'daily', endCount: rrule.count || undefined }),
+        },
         './caldavSubscription': {},
         './repeatTaskDeletion': {},
         './taskActionUndo': {},
@@ -99,15 +148,107 @@ function fixture() {
         loadProjectData: async () => ({}),
     };
     return {
-        remote, writes, deletes, deleteStatuses, blockUpdates, subscription, plugin, api,
+        remote, writes, deletes, deleteStatuses, blockUpdates, subscription, plugin, api, completions,
         collectTaskDeletionIds: load('./taskTreeDeletion').collectTaskDeletionIds,
         sync: async () => assert.equal((await api.syncSubscription(plugin, subscription)).success, true),
         get: id => Object.values(local).find(task => task.didaTaskId === id),
+        seedStoredTask: task => { local[task.id] = task; },
         save: task => api.saveReminders(plugin, { [task.id]: task }),
         rateLimitNextWrite: () => { nextWriteStatus = 429; },
+        rateLimitNextCompletion: () => { nextCompletionStatus = 429; },
+        loseNextCompletionResponse: () => { loseNextCompletionResponse = true; },
+        failNextProjectRead: () => { failNextProjectRead = true; },
         setCreatedSortOrder: value => { createdSortOrder = value; },
     };
 }
+
+async function recurringDidaFixture(repeatFlag = 'RRULE:FREQ=DAILY;COUNT=2') {
+    const f = fixture();
+    f.remote.set('series', {
+        id: 'series', projectId: 'list', title: '重复任务', status: 0, etag: 'initial',
+        repeatFlag, isAllDay: true, startDate: '2026-11-22T00:00:00Z', dueDate: '2026-11-22T00:00:00Z',
+    });
+    await f.sync();
+    return f;
+}
+
+function markOccurrenceCompleted(task, date = task.date) {
+    return { ...task, repeat: { ...task.repeat, instances: {
+        ...task.repeat.instances, [date]: { ...task.repeat.instances?.[date], completed: true },
+    } } };
+}
+
+test('连续完成滴答重复实例会推进远端日期，重新同步保留独立的完成记录', async () => {
+    const f = await recurringDidaFixture();
+    const task = f.get('series');
+    const checked = markOccurrenceCompleted(task);
+    await Promise.all([f.save(checked), f.sync(), f.save(checked)]);
+    const next = f.get('series');
+    assert.equal(next.id, task.id);
+    assert.equal(next.date, '2026-11-23');
+    assert.equal(next.repeat.endCount, 1);
+    assert.deepEqual(f.completions, ['2026-11-22']);
+    assert.equal(f.get('completed-2026-11-22').completed, true);
+    assert.equal(next.repeat.instances['2026-11-22'].completed, undefined);
+
+    await f.save(markOccurrenceCompleted(next));
+    await f.sync();
+    assert.deepEqual(f.completions, ['2026-11-22', '2026-11-23']);
+    assert.equal(f.writes.length, 0);
+    assert.equal(f.get('series').completed, true);
+    assert.equal(f.get('series').repeat, undefined);
+});
+
+test('滴答拒绝完成请求时回滚勾选，重试后可以完成', async () => {
+    const f = await recurringDidaFixture();
+    f.rateLimitNextCompletion();
+    await assert.rejects(f.save(markOccurrenceCompleted(f.get('series'))), /429/);
+    assert.equal(f.get('series').repeat.instances, undefined);
+    await f.save(markOccurrenceCompleted(f.get('series')));
+    assert.equal(f.get('series').date, '2026-11-23');
+});
+
+test('滴答完成成功但拉取失败时，等待重同步且不重复完成', async () => {
+    const f = await recurringDidaFixture();
+    const checked = markOccurrenceCompleted(f.get('series'));
+    f.failNextProjectRead();
+    await f.save(checked);
+    assert.equal(f.get('series').repeat.instances['2026-11-22'].completed, true);
+    await f.save(checked);
+    await f.sync();
+    assert.deepEqual(f.completions, ['2026-11-22']);
+    assert.equal(f.get('series').date, '2026-11-23');
+    assert.equal(f.get('completed-2026-11-22').completed, true);
+});
+
+test('滴答已处理但浏览器丢失响应时，不经代理重复提交完成', async () => {
+    const f = await recurringDidaFixture();
+    f.loseNextCompletionResponse();
+    await f.save(markOccurrenceCompleted(f.get('series')));
+    assert.deepEqual(f.completions, ['2026-11-22']);
+    assert.equal(f.get('series').date, '2026-11-23');
+});
+
+test('完成预览中的未来日期时，不会提前完成远端当前实例', async () => {
+    const f = await recurringDidaFixture();
+    await assert.rejects(f.save(markOccurrenceCompleted(f.get('series'), '2026-11-23')));
+    assert.deepEqual(f.completions, []);
+    assert.equal(f.get('series').date, '2026-11-22');
+    assert.equal(f.get('series').repeat.instances, undefined);
+});
+
+test('旧版留下的本地勾选可在同步后重新完成，保留该实例的备注', async () => {
+    const f = await recurringDidaFixture();
+    const oldTask = markOccurrenceCompleted(f.get('series'));
+    oldTask.repeat.instances[oldTask.date].note = '实例备注';
+    f.seedStoredTask(oldTask);
+    await f.sync();
+    const restored = f.get('series');
+    assert.deepEqual(restored.repeat.instances[restored.date], { note: '实例备注' });
+    await f.save(markOccurrenceCompleted(restored));
+    assert.equal(f.get('series').date, '2026-11-23');
+    assert.deepEqual(f.completions, ['2026-11-22']);
+});
 
 test('绑定任务创建、换绑和解绑只更新滴答详情里的思源链接', async () => {
     const f = fixture();

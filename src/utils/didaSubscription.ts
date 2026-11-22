@@ -5,6 +5,7 @@ import { formatDate, formatTime, parseIcalRRule } from './icsImport';
 import type { IcsSubscription } from './icsSubscription';
 import { getTaskNotePreviewText, loadTaskNote } from './taskNoteStorage';
 import { getTaskBoundBlockId, parseSiyuanTaskTitle } from './taskTitleLinks';
+import type { RepeatConfig } from '../components/dialog/RepeatSettingsDialog';
 
 const DIDA_API_BASE_URL = 'https://api.dida365.com/open/v1';
 const DIDA_REQUEST_TIMEOUT_MS = 30000;
@@ -101,7 +102,7 @@ export interface DidaRemoteTaskEvent {
     completed: boolean;
     completedAt?: string;
     priority?: 'high' | 'medium' | 'low' | 'none';
-    repeat?: any;
+    repeat?: RepeatConfig;
     createdAt?: string;
     sort?: number;
     customGroupId: string;
@@ -159,7 +160,7 @@ function parseDidaErrorMessage(status: number, bodyText: string, fallback: strin
 async function didaRequest<T>(
     token: string,
     endpoint: string,
-    options: { method?: string; body?: any } = {}
+    options: { method?: string; body?: any; shouldRetryViaProxy?: () => Promise<boolean> } = {}
 ): Promise<T> {
     const cleanToken = String(token || '').trim();
     if (!cleanToken) {
@@ -206,6 +207,9 @@ async function didaRequest<T>(
             }
             if (!isLikelyCorsOrNetworkError(directError)) {
                 throw directError;
+            }
+            if (options.shouldRetryViaProxy && !await options.shouldRetryViaProxy()) {
+                return null as T;
             }
 
             console.warn('Direct Dida365 fetch failed, falling back to forwardProxy:', endpoint, directError);
@@ -284,7 +288,7 @@ function parseDidaTimestamp(value?: string): Date | null {
     return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
 
-function parseDidaRepeatFlag(repeatFlag?: string): any {
+function parseDidaRepeatFlag(repeatFlag?: string): RepeatConfig | undefined {
     if (!repeatFlag || typeof repeatFlag !== 'string') return undefined;
     const cleaned = repeatFlag.trim().replace(/^RRULE:/i, '');
     if (!cleaned) return undefined;
@@ -392,7 +396,7 @@ function convertDidaTaskToEvent(
         completed,
         completedAt: completed ? (completedDt?.toISOString() || task.completedTime) : undefined,
         priority,
-        repeat: parseDidaRepeatFlag(task.repeatFlag),
+        repeat: completed ? undefined : parseDidaRepeatFlag(task.repeatFlag),
         createdAt: createdDt?.toISOString(),
         sort: getLocalDidaTaskSort(task.sortOrder),
         customGroupId: getDidaGroupId(listId),
@@ -750,6 +754,34 @@ export function hasDidaRemoteTaskChanged(currentTask: any, nextTask: any): boole
     if (currentListId !== nextListId) return true;
 
     return false;
+}
+
+export async function completeDidaRepeatOccurrence(
+    subscription: IcsSubscription,
+    task: { didaProjectId: string; didaTaskId: string; didaListId: string },
+    date: string
+): Promise<void> {
+    const token = subscription.didaToken || '';
+    const endpoint = `/project/${encodeURIComponent(task.didaProjectId)}/task/${encodeURIComponent(task.didaTaskId)}`;
+    const readCurrent = async () => convertDidaTaskToEvent(
+        await didaRequest<DidaApiTask>(token, endpoint), task.didaListId
+    );
+    const current = await readCurrent();
+    if (!current?.repeat?.enabled || current.date !== date) {
+        throw new Error(i18n('didaRepeatCompleteCurrentOnly'));
+    }
+    await didaRequest(token, `${endpoint}/complete`, {
+        method: 'POST',
+        // A failed browser request may have reached Dida365. Never retry a completion against the next occurrence.
+        shouldRetryViaProxy: async () => {
+            const latest = await readCurrent();
+            if (latest?.completed || (latest?.date && latest.date !== date)) return false;
+            if (!latest?.repeat?.enabled || latest.didaEtag !== current.didaEtag) {
+                throw new Error(i18n('didaRepeatCompleteCurrentOnly'));
+            }
+            return true;
+        },
+    });
 }
 
 export async function createDidaTask(

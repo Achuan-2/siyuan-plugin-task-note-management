@@ -1446,6 +1446,8 @@
     "didaSelectAll": "Select All",
     "didaClearSelection": "Clear",
     "didaTokenRequired": "Please enter the Dida365 API token",
+    "didaRepeatCompleteCurrentOnly": "Only the current Dida365 occurrence can be completed. Refresh the list and try again.",
+    "didaRepeatCompletionPending": "Dida365 has completed this occurrence. Refresh the list to get the latest status.",
     "didaSelectListsRequired": "Please select at least one Dida365 list to sync",
     "didaFetchListsFailed": "Failed to load Dida365 lists",
     "didaFetchListsSuccess": "Loaded ${count} lists",

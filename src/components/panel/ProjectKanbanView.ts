@@ -10247,7 +10247,7 @@ export class ProjectKanbanView {
                 return;
             }
 
-            const instanceDate = task.date;
+            const instanceDate = getRepeatInstanceOriginalKey(task);
 
             const completedTaskIds: string[] = [];
             if (completed) {
@@ -10320,7 +10320,8 @@ export class ProjectKanbanView {
             undo.show(completed ? i18n("taskCompleted") : i18n("taskUncompleted"));
         } catch (error) {
             console.error("Failed to toggle repeat instance completion:", error);
-            showMessage(i18n("operationFailedRetry"));
+            showMessage(task.subscriptionType === 'dida' && error instanceof Error ? error.message : i18n("operationFailedRetry"));
+            this.queueLoadTasks();
         }
     }
 

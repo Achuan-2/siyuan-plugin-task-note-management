@@ -2,17 +2,35 @@ import { pushErrMsg, pushMsg, putFile, getFile, removeFile, forwardProxy, getBlo
 import { ParsedIcsEvent, parseIcsFile, isEventPast, resolveDefaultKanbanStatus } from './icsImport';
 import { deleteCalDavTask, fetchCalDavEvents, hasCalDavRemoteTaskChanged, putCalDavTask } from './caldavSubscription';
 import {
+    completeDidaRepeatOccurrence,
     createDidaTask,
     deleteDidaTask,
     fetchDidaTasks,
     hasDidaRemoteTaskChanged,
     syncDidaProjectGroups,
     updateDidaTask,
+    type DidaRemoteTaskEvent,
     type DidaSelectedProject,
 } from './didaSubscription';
 import { i18n } from "../pluginInstance";
 import { getTaskBoundBlockId } from './taskTitleLinks';
 import { TaskHierarchyIndex } from './taskHierarchy';
+
+const didaSubscriptionOperations = new WeakMap<object, Map<string, Promise<unknown>>>();
+
+function runDidaSubscriptionOperation<T>(plugin: object, id: string, operation: () => Promise<T>): Promise<T> {
+    let operations = didaSubscriptionOperations.get(plugin);
+    if (!operations) {
+        operations = new Map();
+        didaSubscriptionOperations.set(plugin, operations);
+    }
+    const previous = operations.get(id) || Promise.resolve();
+    const pending = previous.then(operation, operation);
+    operations.set(id, pending);
+    return pending.finally(() => {
+        if (operations.get(id) === pending) operations.delete(id);
+    });
+}
 
 export interface IcsSubscription {
     id: string;
@@ -488,16 +506,27 @@ async function syncCalDavTaskChanges(
     return syncedTasks;
 }
 
+export function getNewDidaRepeatCompletions(currentTask: any, nextTask: any): string[] {
+    if (!currentTask?.didaTaskId || !currentTask.repeat?.enabled) return [];
+    const instances: NonNullable<DidaRemoteTaskEvent['repeat']>['instances'] = nextTask?.repeat?.instances;
+    return Object.keys(instances || {}).filter(date =>
+        instances?.[date]?.completed === true && currentTask.repeat.instances?.[date]?.completed !== true
+    );
+}
+
 async function syncDidaTaskChanges(
     plugin: any,
     subscription: IcsSubscription,
     currentTasks: any,
     nextTasks: any,
     touchedIds?: Set<string>
-): Promise<any> {
+): Promise<{ tasks: any; refresh: boolean; completionError?: unknown }> {
     const canEdit = isSubscriptionEditable(subscription);
     const canDelete = isSubscriptionDeletable(subscription);
     const syncedTasks = { ...(nextTasks || {}) };
+    let refresh = false;
+    let completionError: unknown;
+    let rateLimited = false;
 
     // Preserve any existing manualDelete markers
     for (const [id, task] of Object.entries(currentTasks || {}) as [string, any][]) {
@@ -526,14 +555,15 @@ async function syncDidaTaskChanges(
         }
     }
 
-    // Handle creates and updates: only inspect tasks in the incoming change payload,
-    // and process newly created tasks before updates.
+    // Handle occurrence completions first, then create new tasks before ordinary updates.
     const candidateEntries = (Object.entries(syncedTasks) as [string, any][])
-        .filter(([id, nextTask]) => !nextTask?.manualDelete && (!touchedIds || touchedIds.has(id)));
-    candidateEntries.sort(([, a], [, b]) => Number(Boolean(a.didaTaskId)) - Number(Boolean(b.didaTaskId)));
+        .filter(([id, nextTask]) => !nextTask?.manualDelete && (!touchedIds || touchedIds.has(id)))
+        .map(([id, task]) => ({ id, task, completionDates: getNewDidaRepeatCompletions(currentTasks?.[id], task) }));
+    candidateEntries.sort((a, b) => Number(Boolean(b.completionDates.length)) - Number(Boolean(a.completionDates.length)) ||
+        Number(Boolean(a.task.didaTaskId)) - Number(Boolean(b.task.didaTaskId)));
 
     // A rate-limited batch can stop before it reaches a changed binding. Keep it pending in that case too.
-    for (const [id, task] of candidateEntries) {
+    for (const { id, task } of candidateEntries) {
         const currentTask = currentTasks?.[id];
         if (canEdit && currentTask?.didaTaskId && (
             currentTask.didaBlockSyncPending || getTaskBoundBlockId(currentTask) !== getTaskBoundBlockId(task)
@@ -542,10 +572,50 @@ async function syncDidaTaskChanges(
         }
     }
 
-    for (const [id] of candidateEntries) {
+    for (const { id, completionDates } of candidateEntries) {
         const nextTask = syncedTasks[id];
         const currentTask = currentTasks?.[id];
         const isNew = !nextTask.didaTaskId;
+
+        // A save can contain a full view snapshot taken before another completion advanced the series.
+        if (currentTask?.didaTaskId && nextTask.didaTaskId === currentTask.didaTaskId &&
+            (currentTask.repeat?.enabled || nextTask.repeat?.enabled) &&
+            (currentTask.date !== nextTask.date || currentTask.completed !== nextTask.completed) &&
+            currentTask.didaEtag !== nextTask.didaEtag) {
+            syncedTasks[id] = currentTask;
+            continue;
+        }
+
+        if (currentTask?.didaCompletedOccurrence) {
+            syncedTasks[id] = currentTask;
+            refresh = true;
+            if (nextTask.repeat?.instances?.[currentTask.didaCompletedOccurrence]?.completed === false) {
+                completionError ??= new Error(i18n('didaRepeatCompletionPending'));
+            }
+            continue;
+        }
+
+        if (completionDates.length > 0 && canEdit) {
+            if (rateLimited) {
+                syncedTasks[id] = currentTask;
+                continue;
+            }
+            refresh = true;
+            try {
+                if (completionDates.length !== 1 || completionDates[0] !== currentTask.date) {
+                    throw new Error(i18n('didaRepeatCompleteCurrentOnly'));
+                }
+                await completeDidaRepeatOccurrence(subscription, currentTask, currentTask.date);
+                syncedTasks[id] = { ...nextTask, didaCompletedOccurrence: currentTask.date };
+            } catch (error) {
+                syncedTasks[id] = currentTask;
+                completionError ??= error;
+                rateLimited = (error as { status?: number })?.status === 429;
+            }
+            continue;
+        }
+
+        if (rateLimited) break;
 
         if (!isNew && currentTask && !nextTask.didaBlockSyncPending && !hasDidaRemoteTaskChanged(currentTask, nextTask)) {
             continue;
@@ -601,7 +671,7 @@ async function syncDidaTaskChanges(
         }
     }
 
-    return syncedTasks;
+    return { tasks: syncedTasks, refresh, completionError };
 }
 
 async function refreshDidaBlockBindings(plugin: any, before: any, after: any): Promise<void> {
@@ -634,6 +704,18 @@ async function saveSubscriptionReminderTasks(
     subscription: IcsSubscription,
     nextTasks: any
 ): Promise<void> {
+    if (isDidaSubscription(subscription)) {
+        return runDidaSubscriptionOperation(plugin, subscription.id, () =>
+            saveSubscriptionReminderTasksInternal(plugin, subscription, nextTasks));
+    }
+    return saveSubscriptionReminderTasksInternal(plugin, subscription, nextTasks);
+}
+
+async function saveSubscriptionReminderTasksInternal(
+    plugin: any,
+    subscription: IcsSubscription,
+    nextTasks: any
+): Promise<void> {
     const currentTasks = await loadSubscriptionTasks(plugin, subscription.id);
     const touchedIds = new Set<string>(Object.keys(nextTasks || {}));
     
@@ -644,11 +726,13 @@ async function saveSubscriptionReminderTasks(
     });
 
     let tasksToSave = mergedTasks;
+    let didaResult: Awaited<ReturnType<typeof syncDidaTaskChanges>> | undefined;
 
     if (isCalDavSubscription(subscription)) {
         tasksToSave = await syncCalDavTaskChanges(subscription, currentTasks, tasksToSave, touchedIds);
     } else if (isDidaSubscription(subscription)) {
-        tasksToSave = await syncDidaTaskChanges(plugin, subscription, currentTasks, tasksToSave, touchedIds);
+        didaResult = await syncDidaTaskChanges(plugin, subscription, currentTasks, tasksToSave, touchedIds);
+        tasksToSave = didaResult.tasks;
     }
 
     if (
@@ -660,6 +744,8 @@ async function saveSubscriptionReminderTasks(
         await saveSubscriptionTasks(plugin, subscription.id, tasksToSave);
         if (isDidaSubscription(subscription)) await refreshDidaBlockBindings(plugin, currentTasks, tasksToSave);
     }
+    if (didaResult?.refresh) await syncSubscriptionInternal(plugin, subscription);
+    if (didaResult?.completionError) throw didaResult.completionError;
 }
 
 export async function deleteSubscriptionReminderTask(plugin: any, reminder: any): Promise<void> {
@@ -901,6 +987,24 @@ async function fetchIcsContent(url: string): Promise<string> {
     }
 }
 
+function mergeDidaRepeatState(event: DidaRemoteTaskEvent, existingTask: any): DidaRemoteTaskEvent['repeat'] {
+    if (!event.repeat) return undefined;
+    const storedInstances: NonNullable<DidaRemoteTaskEvent['repeat']>['instances'] = existingTask.repeat?.instances;
+    if (!storedInstances) return event.repeat;
+
+    const instances = { ...storedInstances };
+    for (const [date, state] of Object.entries(storedInstances)) {
+        if (!state.completed || (date === event.date && date === existingTask.didaCompletedOccurrence)) continue;
+        // Dida365 returns past completions as separate tasks. Reset unsynced checkmarks from older plugin versions.
+        const instance = { ...state };
+        delete instance.completed;
+        delete instance.completedTime;
+        if (instance.kanbanStatus === 'completed') delete instance.kanbanStatus;
+        instances[date] = instance;
+    }
+    return { ...event.repeat, instances };
+}
+
 async function buildTasksFromSubscriptionEvents(
     plugin: any,
     subscription: IcsSubscription,
@@ -984,7 +1088,7 @@ async function buildTasksFromSubscriptionEvents(
                 time: event.time,
                 endDate: event.endDate,
                 endTime: event.endTime,
-                repeat: event.repeat,
+                repeat: isDida ? mergeDidaRepeatState(event as DidaRemoteTaskEvent, existingTask) : event.repeat,
                 ...(shouldSyncRemoteNote ? { note: event.description || '' } : {}),
                 ...(event.priority ? { priority: event.priority } : {}),
                 ...(event.customGroupId ? { customGroupId: event.customGroupId } : {}),
@@ -1001,7 +1105,11 @@ async function buildTasksFromSubscriptionEvents(
                 ...(event.didaItems !== undefined ? { didaItems: event.didaItems } : {}),
                 ...(event.didaTags !== undefined ? { didaTags: event.didaTags } : {}),
                 ...(isDida && event.sort !== undefined ? { sort: event.sort } : {}),
-                ...(isDida ? { didaNoteFields: event.didaNoteFields } : {}),
+                ...(isDida ? {
+                    didaNoteFields: event.didaNoteFields,
+                    didaCompletedOccurrence: event.repeat?.enabled && event.date === existingTask.didaCompletedOccurrence
+                        ? existingTask.didaCompletedOccurrence : undefined,
+                } : {}),
                 completed: isCompleted,
                 completedAt: isDida
                     ? (isCompleted ? (event.completedAt || existingTask.completedAt) : undefined)
@@ -1065,6 +1173,16 @@ async function buildTasksFromSubscriptionEvents(
  * Sync a single ICS subscription
  */
 export async function syncSubscription(
+    plugin: any,
+    subscription: IcsSubscription
+): Promise<{ success: boolean; error?: string; eventsCount?: number }> {
+    if (isDidaSubscription(subscription)) {
+        return runDidaSubscriptionOperation(plugin, subscription.id, () => syncSubscriptionInternal(plugin, subscription));
+    }
+    return syncSubscriptionInternal(plugin, subscription);
+}
+
+async function syncSubscriptionInternal(
     plugin: any,
     subscription: IcsSubscription
 ): Promise<{ success: boolean; error?: string; eventsCount?: number }> {

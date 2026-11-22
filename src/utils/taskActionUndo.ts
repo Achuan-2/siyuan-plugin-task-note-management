@@ -2,7 +2,7 @@ import { showTaskUndoToast } from './taskUndoToast';
 import { showMessage } from 'siyuan';
 import { updateBindBlockAtrrs } from '../api';
 import { i18n } from '../pluginInstance';
-import { getAllReminders, saveReminders } from './icsSubscription';
+import { getAllReminders, getNewDidaRepeatCompletions, saveReminders } from './icsSubscription';
 import { cleanReminderItem } from './reminderLoadUtils';
 import { applyTaskUndoPatches, cloneTaskData, createTaskUndoPatches, type TaskUndoPatch } from './taskUndoPatch';
 import {
@@ -30,6 +30,7 @@ export class TaskActionUndo {
     private before: any;
     private patches: TaskUndoPatch[] = [];
     private touchesSubscription = false;
+    private completesDidaOccurrence = false;
     private saveInProgress = false;
     private deletedNotesSnapshot = new Map<string, string>();
 
@@ -47,13 +48,16 @@ export class TaskActionUndo {
             const patches = createTaskUndoPatches(this.before, after);
             this.touchesSubscription = patches.some(({ path }) =>
                 [this.before[path[0]], after[path[0]]].some(task => task?.isSubscribed && task.subscriptionId));
+            this.completesDidaOccurrence = Object.keys(after).some(id =>
+                after[id]?.subscriptionType === 'dida' && getNewDidaRepeatCompletions(this.before[id], after[id]).length > 0);
             // 删除任务前拍摄待删除备注快照，便于点击撤回时恢复 notes/<任务ID>.md 及 assets-cleanup-ignore。
             const { removedTasks } = diffRemovedTasksAndInstances(this.before, after);
             if (removedTasks.length > 0) {
                 this.deletedNotesSnapshot = await snapshotTaskNotes(this.plugin, removedTasks);
             }
             await this.saveChanges(data);
-            this.patches = patches;
+            // Completing a Dida365 occurrence advances the remote series. A local undo cannot reverse that operation.
+            this.patches = this.completesDidaOccurrence ? [] : patches;
             this.before = null;
         } finally {
             this.saveInProgress = false;
@@ -122,6 +126,10 @@ export class TaskActionUndo {
     }
 
     show(message: string): void {
+        if (this.completesDidaOccurrence && !this.plugin.storageDisposed) {
+            showMessage(message);
+            return;
+        }
         if (this.patches.length === 0 || this.plugin.storageDisposed) return;
         showTaskUndoToast(this.plugin, message, () => this.undo());
     }

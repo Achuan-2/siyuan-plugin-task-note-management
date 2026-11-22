@@ -1446,6 +1446,8 @@
     "didaSelectAll": "全选",
     "didaClearSelection": "清空",
     "didaTokenRequired": "请输入滴答清单 API 口令",
+    "didaRepeatCompleteCurrentOnly": "只能完成滴答清单的当前实例。请刷新后重试。",
+    "didaRepeatCompletionPending": "滴答清单已完成本次实例，请刷新列表获取最新状态。",
     "didaSelectListsRequired": "请至少选择一个要同步的滴答清单",
     "didaFetchListsFailed": "获取滴答清单列表失败",
     "didaFetchListsSuccess": "已获取 ${count} 个清单",
