@@ -23,6 +23,8 @@ AI知识库问答：https://zhida.zhihu.com/repositories/7611936317241043831
 - [手机日历等其他软件如何订阅插件日程](https://zhuanlan.zhihu.com/p/2011496948599898861)
 - [移动端如何开启系统通知，哪怕思源笔记关闭，也能接收通知，不怕错过任务提醒](https://zhuanlan.zhihu.com/p/2016661256182989821)
 - [如何接入插件MCP，让 AI 成为你的任务管家](https://zhuanlan.zhihu.com/p/2059438327711929050)
+- [如何增强在笔记里使用任务列表管理任务的体验](https://zhuanlan.zhihu.com/p/2102544201837699322)
+- [如何同步滴答清单？](https://zhuanlan.zhihu.com/p/2107807776399422457)
 
 **任务管理经验分享**
 
