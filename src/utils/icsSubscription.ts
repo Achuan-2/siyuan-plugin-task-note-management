@@ -15,6 +15,7 @@ import {
 import { i18n } from "../pluginInstance";
 import { getTaskBoundBlockId } from './taskTitleLinks';
 import { TaskHierarchyIndex } from './taskHierarchy';
+import { cloneTaskData } from './taskUndoPatch';
 
 const didaSubscriptionOperations = new WeakMap<object, Map<string, Promise<unknown>>>();
 
@@ -307,6 +308,8 @@ export async function getAllReminders(
 
                         allReminders[key] = {
                             ...task,
+                            // Instance edits must not mutate the cached baseline used for write-back.
+                            repeat: cloneTaskData(task.repeat),
                             isSubscribed: true,
                             subscriptionId: subscription.id,
                             subscriptionType: subscription.type || task.subscriptionType || 'ics',

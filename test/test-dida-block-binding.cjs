@@ -23,6 +23,7 @@ function fixture() {
     const deleteStatuses = new Map();
     const blockUpdates = [];
     let local = {};
+    let subscriptionTasksCache;
     let localReminders = {};
     let nextWriteStatus = 200;
     let nextCompletionStatus = 200;
@@ -142,7 +143,10 @@ function fixture() {
     const api = load('./icsSubscription');
     const plugin = {
         loadSubscriptionData: async () => ({ subscriptions: { [subscription.id]: subscription } }),
-        loadSubscriptionTasks: async () => structuredClone(local),
+        loadSubscriptionTasks: async (_id, update = false) => {
+            if (update || !subscriptionTasksCache) subscriptionTasksCache = structuredClone(local);
+            return subscriptionTasksCache;
+        },
         loadReminderData: async () => structuredClone(localReminders),
         saveReminderData: async value => { localReminders = structuredClone(value); },
         loadProjectData: async () => ({}),
@@ -151,8 +155,13 @@ function fixture() {
         remote, writes, deletes, deleteStatuses, blockUpdates, subscription, plugin, api, completions,
         collectTaskDeletionIds: load('./taskTreeDeletion').collectTaskDeletionIds,
         sync: async () => assert.equal((await api.syncSubscription(plugin, subscription)).success, true),
-        get: id => Object.values(local).find(task => task.didaTaskId === id),
-        seedStoredTask: task => { local[task.id] = task; },
+        get: id => structuredClone(Object.values(local).find(task => task.didaTaskId === id)),
+        seedStoredTask: task => {
+            local[task.id] = task;
+            subscriptionTasksCache = undefined;
+        },
+        getReminders: () => api.getAllReminders(plugin),
+        getEnvironmentSafeReminders: () => load('./reminderLoadUtils').getEnvironmentSafeAllReminders(plugin),
         save: task => api.saveReminders(plugin, { [task.id]: task }),
         rateLimitNextWrite: () => { nextWriteStatus = 429; },
         rateLimitNextCompletion: () => { nextCompletionStatus = 429; },
@@ -176,6 +185,23 @@ function markOccurrenceCompleted(task, date = task.date) {
     return { ...task, repeat: { ...task.repeat, instances: {
         ...task.repeat.instances, [date]: { ...task.repeat.instances?.[date], completed: true },
     } } };
+}
+
+for (const loadReminders of ['getReminders', 'getEnvironmentSafeReminders']) {
+    test(`${loadReminders} 返回的重复任务可原地勾选，订阅缓存仍能检测并写回滴答`, async () => {
+        const f = await recurringDidaFixture();
+        const current = f.get('series');
+        const reminders = await f[loadReminders]();
+        const task = reminders[current.id];
+        task.repeat.instances ??= {};
+        task.repeat.instances[task.date] = { completed: true };
+
+        await f.api.saveReminders(f.plugin, reminders);
+        await f.sync();
+        assert.deepEqual(f.completions, ['2026-11-22']);
+        assert.equal(f.get('series').date, '2026-11-23');
+        assert.equal(f.get('completed-2026-11-22').completed, true);
+    });
 }
 
 test('连续完成滴答重复实例会推进远端日期，重新同步保留独立的完成记录', async () => {

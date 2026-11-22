@@ -1,5 +1,6 @@
 import { getLogicalDateString } from "./dateUtils";
 import { RepeatInstanceState } from "../components/dialog/RepeatSettingsDialog";
+import { cloneTaskData } from './taskUndoPatch';
 
 export function isWritableSubscriptionType(subscriptionType?: string): boolean {
     return subscriptionType === 'caldav' || subscriptionType === 'dida';
@@ -115,6 +116,7 @@ export async function getEnvironmentSafeAllReminders(
                     if (task.repeat && task.repeat.enabled) {
                         allReminders[key] = {
                             ...task,
+                            repeat: cloneTaskData(task.repeat),
                             isSubscribed: true,
                             subscriptionId: subscription.id,
                             subscriptionType: subscription.type || task.subscriptionType || 'ics',
