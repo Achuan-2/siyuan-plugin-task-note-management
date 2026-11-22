@@ -40,6 +40,85 @@ const code = ts.transpileModule(`${persistence}\n${repeatHelpers}\nclass Board {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
+function coldBoardFixture({ linkedHabit = false } = {}) {
+    const compiled = ts.transpileModule(`class Board { ${extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
+        'loadTasks', 'loadTaskPomodoroStats', 'refreshInitialPomodoroStats',
+    ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const Board = new Function('getLogicalDateString', 'showMessage', compiled + ';return Board;')(
+        () => '2026-11-22', message => assert.fail(message),
+    );
+    let resolveHistory;
+    let ready = false;
+    const history = new Promise(resolve => { resolveHistory = resolve; });
+    const renders = [];
+    const habit = { id: 'habit', title: 'Habit' };
+    let habitReads = 0;
+    const board = Object.assign(new Board(), {
+        projectId: 'project', kanbanMode: 'status', kanbanStatuses: [{ id: 'doing' }],
+        plugin: { loadHabitData: async () => { habitReads++; return { habit }; } },
+        pomodoroRecordManager: {
+            isReady: () => ready,
+            initialize: () => history,
+            async resolveReminderPomodoroStatsBatch(tasks) {
+                await history;
+                return new Map(tasks.map(task => [task.id, {
+                    pomodoroCount: 3, focusTime: 75, totalRepeatingPomodoroCount: 0, totalRepeatingFocusTime: 0,
+                }]));
+            },
+        },
+        captureScrollState() {}, refreshReminderSkipDateContext() {}, buildMilestoneMap() {}, sortTasks() {},
+        async getReminders() {
+            return { task: { id: 'task', projectId: 'project', kanbanStatus: 'doing', linkedHabitId: linkedHabit ? 'habit' : undefined } };
+        },
+        isProjectInCurrentView: projectId => projectId === 'project',
+        filterArchivedGroupTasks: tasks => tasks,
+        getTaskStatus: task => task.kanbanStatus,
+        toViewTask: task => task,
+        completedSubtaskCollapse: { sync() {} },
+        taskCollapseOverrides: new Map(),
+        selectedDateFilters: new Set(), selectedFilterMilestones: new Map(), archivedMilestonesByStatus: new Map(),
+        collapsedTasks: new Set(), pageIndexMap: {},
+        yieldToMainThread: async () => {},
+        async renderKanban() { renders.push(clone(this.tasks)); },
+    });
+    return {
+        board, renders, habit, habitReads: () => habitReads,
+        finishHistory: () => { ready = true; resolveHistory(); },
+    };
+}
+
+test('番茄历史仍在加载时先渲染项目任务，统计就绪后补刷且不读无关习惯', async () => {
+    const fixture = coldBoardFixture();
+    const loading = fixture.board.loadTasks();
+    await new Promise(setImmediate);
+    try {
+        assert.deepEqual(fixture.renders.map(tasks => tasks[0].pomodoroCount), [0]);
+        assert.equal(fixture.habitReads(), 0);
+    } finally {
+        fixture.finishHistory();
+        await loading;
+    }
+    await new Promise(setImmediate);
+    assert.deepEqual(fixture.renders.map(tasks => tasks[0].pomodoroCount), [0, 3]);
+    assert.equal(fixture.board.tasks[0].focusTime, 75);
+});
+
+test('关联习惯在首屏可用，关闭看板后番茄统计结束也不会重绘', async () => {
+    const fixture = coldBoardFixture({ linkedHabit: true });
+    const loading = fixture.board.loadTasks();
+    await new Promise(setImmediate);
+    try {
+        assert.deepEqual(fixture.renders[0]?.[0].linkedHabit, fixture.habit);
+        assert.equal(fixture.habitReads(), 1);
+    } finally {
+        fixture.board.disposed = true;
+        fixture.finishHistory();
+        await loading;
+    }
+    await new Promise(setImmediate);
+    assert.equal(fixture.renders.length, 1);
+});
+
 function sortFixture() {
     const sortMethods = extract('src/components/panel/ProjectKanbanView.ts', 'ProjectKanbanView', [
         'showSortMenu', 'getKanbanSortAvailableMethods', 'getActiveSortCriteria', 'normalizeKanbanSortCriteria',
@@ -357,7 +436,7 @@ function milestoneFilterFixture(initial, folder) {
         'normalizeGroupVisibleStatusIds', 'hasUngroupedMilestoneFilter', 'shouldDisplayUngroupedColumn',
     ])} }`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
     const Board = new Function('ProjectFolderManager', 'i18n', 'showMessage', 'console', 'getEditableSubscriptionProjectIds', compiled + ';return Board;')(
-        { getInstance: () => ({ getFolderById: () => state.folder }) }, key => key,
+        { getInstance: () => ({ initialize: async () => {}, getFolderById: () => state.folder }) }, key => key,
         message => assert.fail(message), { error: (...args) => state.errors.push(args) }, async () => new Set(),
     );
     const cached = clone(initial);

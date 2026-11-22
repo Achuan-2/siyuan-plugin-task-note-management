@@ -7,6 +7,7 @@ import { compareDateStrings, getLocalDateTimeString, getLocaleTag } from '../../
 import { i18n } from '../../pluginInstance';
 import { solarToLunar, formatLunarMonth, formatLunarDay } from '../../utils/lunarUtils';
 import { normalizeReminderSkipWeekendMode, type HolidayData, type ReminderSkipWeekendMode, shouldSkipReminderOnDate } from '../../utils/reminderSkipDate';
+import type { TaskHierarchyIndex } from '../../utils/taskHierarchy';
 
 export interface RepeatInstance {
     title?: string; // 实例标题（可选，覆盖原始标题）
@@ -1026,10 +1027,11 @@ export function generateSubtreeInstances(
     instanceDate: string,
     targetList: any[],
     reminderData: any,
-    parentCompletionTime?: number
+    parentCompletionTime?: number,
+    hierarchy?: TaskHierarchyIndex
 ) {
-    // Find all tasks with this original parent ID
-    const directChildren = (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === originalParentId);
+    const directChildren = hierarchy?.children(originalParentId) ??
+        (Object.values(reminderData) as any[]).filter((r: any) => r.parentId === originalParentId);
 
     directChildren.forEach((child: any) => {
         // If parent instance is completed, skip children created after completion
@@ -1111,6 +1113,6 @@ export function generateSubtreeInstances(
 
         // Recurse to children's children
         // Use the same parentCompletionTime for the entire subtree to maintain the snapshot at completion
-        generateSubtreeInstances(child.id, instanceId, instanceDate, targetList, reminderData, parentCompletionTime);
+        generateSubtreeInstances(child.id, instanceId, instanceDate, targetList, reminderData, parentCompletionTime, hierarchy);
     });
 }

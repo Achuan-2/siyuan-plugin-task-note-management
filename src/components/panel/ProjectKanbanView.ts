@@ -24,7 +24,7 @@ import { CategoryManager } from "../dataManager/categoryManager";
 import { ProjectManager, type GroupTabCountMode, type CustomGroupStatusDisplayMode, type KanbanMilestoneFilterState, type Milestone, type ProjectGroup } from "../dataManager/projectManager";
 import { PomodoroTimer } from "./PomodoroTimer";
 import { PomodoroManager } from "../dataManager/pomodoroManager";
-import { PomodoroRecordManager } from "../dataManager/pomodoroRecord"; // Add import
+import { PomodoroRecordManager, type PomodoroStats } from "../dataManager/pomodoroRecord";
 import {
     generateRepeatInstances,
     generateRepeatInstancesWithFutureGuarantee,
@@ -731,15 +731,10 @@ export class ProjectKanbanView {
 
     private async initializeAsync() {
         if (this.disposed) return;
-        await this.categoryManager.initialize();
-        if (this.disposed) return;
-        await this.loadProject();
-        if (this.disposed) return;
-        await this.loadKanbanMode();
+        await Promise.all([this.categoryManager.initialize(), this.loadProject()]);
         if (this.disposed) return;
 
-        // 加载项目排序设置（兼容旧版单条件）
-        await this.loadKanbanSortConfig();
+        await Promise.all([this.loadKanbanMode(), this.loadKanbanSortConfig()]);
         if (this.disposed) return;
 
         this.initUI();
@@ -804,12 +799,16 @@ export class ProjectKanbanView {
 
     public async loadProject() {
         try {
-            const settings = typeof this.plugin?.loadSettings === 'function'
-                ? await this.plugin.loadSettings()
-                : this.plugin?.settings || {};
+            const folderId = this.viewOptions?.folderId;
+            const folderManager = folderId ? ProjectFolderManager.getInstance(this.plugin) : undefined;
+            const [settings, editableSubscriptionProjectIds, projectData] = await Promise.all([
+                typeof this.plugin?.loadSettings === 'function' ? this.plugin.loadSettings() : this.plugin?.settings || {},
+                getEditableSubscriptionProjectIds(this.plugin),
+                this.plugin.loadProjectData(),
+                folderManager?.initialize(),
+            ]);
             this.reminderSkipSettings = settings || {};
-            this.editableSubscriptionProjectIds = await getEditableSubscriptionProjectIds(this.plugin);
-            const projectData = await this.plugin.loadProjectData();
+            this.editableSubscriptionProjectIds = editableSubscriptionProjectIds;
             if (this.isAggregateView) {
                 this.refreshAggregateProjectContext(projectData || {});
                 const firstProject = this.aggregateProjectIds.length > 0
@@ -817,9 +816,8 @@ export class ProjectKanbanView {
                     : null;
                 // 从文件夹加载持久化的看板设置
                 let folderKanbanSettings: FolderKanbanSettings | undefined;
-                if (this.viewOptions.folderId) {
-                    const folderManager = ProjectFolderManager.getInstance(this.plugin);
-                    const folder = folderManager.getFolderById(this.viewOptions.folderId);
+                if (folderManager && folderId) {
+                    const folder = folderManager.getFolderById(folderId);
                     folderKanbanSettings = folder?.kanbanSettings;
                 }
                 this.project = {
@@ -911,8 +909,8 @@ export class ProjectKanbanView {
                     || (firstProjectId ? await projectManager.getProjectKanbanMode(firstProjectId) : 'status');
 
                 const statusMap = new Map<string, import('../dataManager/projectManager').KanbanStatus>();
-                for (const projectId of this.aggregateProjectIds) {
-                    const statuses = await projectManager.getProjectKanbanStatuses(projectId);
+                const projectStatuses = await Promise.all(this.aggregateProjectIds.map(id => projectManager.getProjectKanbanStatuses(id)));
+                for (const statuses of projectStatuses) {
                     statuses.forEach(status => {
                         if (!statusMap.has(status.id)) {
                             statusMap.set(status.id, { ...status });
@@ -924,9 +922,10 @@ export class ProjectKanbanView {
                     this.kanbanStatuses = this.projectManager.getDefaultKanbanStatuses();
                 }
             } else {
-                this.kanbanMode = await projectManager.getProjectKanbanMode(this.projectId);
-                // 同时加载看板状态配置
-                this.kanbanStatuses = await projectManager.getProjectKanbanStatuses(this.projectId);
+                [this.kanbanMode, this.kanbanStatuses] = await Promise.all([
+                    projectManager.getProjectKanbanMode(this.projectId),
+                    projectManager.getProjectKanbanStatuses(this.projectId),
+                ]);
             }
         } catch (error) {
             console.error("Failed to load kanban mode:", error);
@@ -3290,33 +3289,53 @@ export class ProjectKanbanView {
         });
     }
 
-    private async loadTasks() {
-        if (this.disposed) return;
-        if (this.disposed || this.isLoading) {
-            return;
+    private async loadTaskPomodoroStats(tasks: any[], reminderData: any): Promise<Map<string, PomodoroStats>> {
+        try {
+            return await this.pomodoroRecordManager.resolveReminderPomodoroStatsBatch(tasks, reminderData);
+        } catch (error) {
+            console.warn('Failed to load kanban pomodoro statistics:', error);
+            return new Map();
         }
+    }
+
+    private async refreshInitialPomodoroStats(tasks: any[], reminderData: any, firstRender: Promise<void>): Promise<void> {
+        try {
+            await Promise.all([firstRender, this.pomodoroRecordManager.initialize()]);
+            if (this.disposed || this.isLoading || this.tasks !== tasks) return;
+            const stats = await this.loadTaskPomodoroStats(tasks, reminderData);
+            if (this.disposed || this.isLoading || this.tasks !== tasks) return;
+
+            let hasVisibleStats = false;
+            for (const task of tasks) {
+                const entry = stats.get(task.id);
+                if (!entry || !(entry.pomodoroCount || entry.focusTime || entry.totalRepeatingPomodoroCount || entry.totalRepeatingFocusTime)) continue;
+                task.pomodoroCount = entry.pomodoroCount;
+                task.focusTime = entry.focusTime;
+                task.totalRepeatingPomodoroCount = entry.totalRepeatingPomodoroCount;
+                task.totalRepeatingFocusTime = entry.totalRepeatingFocusTime;
+                hasVisibleStats = true;
+            }
+            if (hasVisibleStats && !this.isDragging && !this.draggedGroupId && !this.draggedGroupTabId) {
+                await this.renderKanban();
+            }
+        } catch (error) {
+            console.warn('Failed to refresh initial kanban pomodoro statistics:', error);
+        }
+    }
+
+    private async loadTasks() {
+        if (this.disposed || this.isLoading) return;
 
         this.mobileTaskDrag?.cancel();
         this.isLoading = true;
         try {
             // 保存当前滚动状态，避免界面刷新时丢失滚动位置
             this.captureScrollState();
-            await this.refreshReminderSkipDateContext();
-            if (this.disposed) return;
-
-            // 构造里程碑映射
-            await this.buildMilestoneMap();
-            if (this.disposed) return;
-
-            const reminderData = await this.getReminders();
-            if (this.disposed) return;
-            let habitData: Record<string, any> = {};
-            try {
-                habitData = await this.plugin.loadHabitData();
-            } catch (error) {
-                console.warn("Failed to load habit data:", error);
-                habitData = {};
-            }
+            const [reminderData] = await Promise.all([
+                this.getReminders(),
+                this.refreshReminderSkipDateContext(),
+                this.buildMilestoneMap(),
+            ]);
             if (this.disposed) return;
             // 判断当前看板项目是否为「无项目任务归属项目」
             // 如果是，则额外纳入 projectId 为空的任务（即尚未归属任何项目的任务）
@@ -3366,6 +3385,8 @@ export class ProjectKanbanView {
                 });
             }
             const taskMap = new Map(projectTasks.map((t: any) => [t.id, { ...t }]));
+            let hierarchy: TaskHierarchyIndex | undefined;
+            const getHierarchy = () => hierarchy ??= new TaskHierarchyIndex(Object.values(reminderData));
             // 根据日期自动将到期（今天或过去）且未完成的父任务设置为 doing，并级联到所有后代
             try {
                 const todayForDateCheck = getLogicalDateString();
@@ -3408,7 +3429,7 @@ export class ProjectKanbanView {
 
                             // 级联到后代
                             try {
-                                const descendantIds = this.getAllDescendantIds(t.id, reminderData);
+                                const descendantIds = getHierarchy().descendantIds(t.id);
                                 for (const did of descendantIds) {
                                     const desc = reminderData[did];
                                     if (!desc) continue;
@@ -3519,7 +3540,7 @@ export class ProjectKanbanView {
                             } else if (isInstanceResolved) {
                                 cutoffTime = new Date(`${pickedInstance.date}T23:59:59`).getTime();
                             }
-                            generateSubtreeInstances(reminder.id, instanceTask.id, pickedInstance.date, allTasksWithInstances, reminderData, cutoffTime);
+                            generateSubtreeInstances(reminder.id, instanceTask.id, pickedInstance.date, allTasksWithInstances, reminderData, cutoffTime, getHierarchy());
                         }
                         return;
                     }
@@ -3592,7 +3613,7 @@ export class ProjectKanbanView {
                         }
 
                         // [NEW] 递归处理子任务的 ghost 实例
-                        generateSubtreeInstances(reminder.id, instanceTask.id, instance.date, targetSubList, reminderData, cutoffTime);
+                        generateSubtreeInstances(reminder.id, instanceTask.id, instance.date, targetSubList, reminderData, cutoffTime, getHierarchy());
                     });
 
                     // 在合并前按 sort 排序，确保实例层的 sort 被应用
@@ -3628,7 +3649,17 @@ export class ProjectKanbanView {
                 }
             });
 
-            const pomodoroStats = await this.pomodoroRecordManager.resolveReminderPomodoroStatsBatch(allTasksWithInstances, reminderData);
+            // 番茄钟历史统计冷启动时先画任务，就绪后使用已经加载的任务补画统计。
+            const deferPomodoroStats = allTasksWithInstances.length > 0 && !this.pomodoroRecordManager.isReady();
+            const [habitData, pomodoroStats] = await Promise.all([
+                allTasksWithInstances.some(task => task.linkedHabitId)
+                    ? this.plugin.loadHabitData().catch((error: unknown) => {
+                        console.warn('Failed to load habit data:', error);
+                        return {};
+                    })
+                    : {},
+                deferPomodoroStats ? undefined : this.loadTaskPomodoroStats(allTasksWithInstances, reminderData),
+            ]);
             if (this.disposed) return;
             this.tasks = allTasksWithInstances.map((reminder: any) => {
                 let status;
@@ -3640,16 +3671,16 @@ export class ProjectKanbanView {
                     status = this.getTaskStatus(reminder);
                 }
                 // 获取番茄钟计数（支持重复实例的单独计数）
-                const stats = pomodoroStats.get(reminder.id)!;
+                const stats = pomodoroStats?.get(reminder.id);
 
                 return this.toViewTask({
                     ...reminder,
                     status: status,
-                    pomodoroCount: stats.pomodoroCount,
-                    focusTime: stats.focusTime || 0,
+                    pomodoroCount: stats?.pomodoroCount ?? 0,
+                    focusTime: stats?.focusTime ?? 0,
                     linkedHabit: reminder.linkedHabitId ? (habitData?.[reminder.linkedHabitId] || null) : null,
-                    totalRepeatingPomodoroCount: stats.totalRepeatingPomodoroCount,
-                    totalRepeatingFocusTime: stats.totalRepeatingFocusTime
+                    totalRepeatingPomodoroCount: stats?.totalRepeatingPomodoroCount ?? 0,
+                    totalRepeatingFocusTime: stats?.totalRepeatingFocusTime ?? 0
                 });
             });
 
@@ -3963,11 +3994,10 @@ export class ProjectKanbanView {
                 }
 
                 // 收集父任务及其子任务
-                const parentMap = new Map<string, any[]>();
+                const parentIds = new Set<string>();
                 this.tasks.forEach(t => {
                     if (t.parentId && taskIds.has(t.parentId)) {
-                        if (!parentMap.has(t.parentId)) parentMap.set(t.parentId, []);
-                        parentMap.get(t.parentId)!.push(t);
+                        parentIds.add(t.parentId);
                     }
                     // 初始化折叠状态：如果任务有明确的 fold 属性，则根据该属性设置
                     if (t.fold === true) {
@@ -3981,9 +4011,7 @@ export class ProjectKanbanView {
                 // 且当前 collapsedTasks 为空时，才应用默认折叠策略
                 const hasExplicitFold = this.tasks.some(t => t.fold !== undefined);
                 if (!this._defaultCollapseApplied && !hasExplicitFold && this.collapsedTasks.size === 0) {
-                    parentMap.forEach((_children, parentId) => {
-                        const parent = this.tasks.find(p => p.id === parentId);
-                        if (!parent) return;
+                    parentIds.forEach(parentId => {
                         // 默认折叠所有父任务
                         this.collapsedTasks.add(parentId);
                     });
@@ -3996,22 +4024,23 @@ export class ProjectKanbanView {
 
             // 校验状态列已加载批次数，不误删分组/列表模式的加载深度缓存
             try {
-                const topLevelTasks = this.tasks.filter(
-                    t => !t.parentId || !this.tasks.find(tt => tt.id === t.parentId)
-                );
+                if (Object.keys(this.pageIndexMap).length > 0) {
+                    const taskIds = new Set(this.tasks.map(t => t.id));
+                    const topLevelTasks = this.tasks.filter(t => !t.parentId || !taskIds.has(t.parentId));
 
-                this.kanbanStatuses.forEach(statusConfig => {
-                    const statusId = statusConfig.id;
-                    if (this.pageIndexMap[statusId] === undefined) return;
-                    const totalTop =
-                        statusId === 'completed'
-                            ? topLevelTasks.filter(t => t.completed).length
-                            : topLevelTasks.filter(
-                                t => !t.completed && this.getTaskStatus(t) === statusId
-                            ).length;
-                    const totalPages = Math.max(1, Math.ceil(totalTop / this.pageSize));
-                    this.pageIndexMap[statusId] = Math.min(Math.max(1, this.pageIndexMap[statusId]), totalPages);
-                });
+                    this.kanbanStatuses.forEach(statusConfig => {
+                        const statusId = statusConfig.id;
+                        if (this.pageIndexMap[statusId] === undefined) return;
+                        const totalTop =
+                            statusId === 'completed'
+                                ? topLevelTasks.filter(t => t.completed).length
+                                : topLevelTasks.filter(
+                                    t => !t.completed && this.getTaskStatus(t) === statusId
+                                ).length;
+                        const totalPages = Math.max(1, Math.ceil(totalTop / this.pageSize));
+                        this.pageIndexMap[statusId] = Math.min(Math.max(1, this.pageIndexMap[statusId]), totalPages);
+                    });
+                }
             } catch (err) {
                 // ignore
             }
@@ -4020,7 +4049,12 @@ export class ProjectKanbanView {
             await this.yieldToMainThread();
 
             if (this.disposed) return;
-            this.renderKanban();
+            const rendering = this.renderKanban();
+            if (deferPomodoroStats) {
+                void this.refreshInitialPomodoroStats(this.tasks, reminderData, rendering);
+            } else {
+                void rendering.catch(error => console.error('Failed to render kanban:', error));
+            }
         } catch (error) {
             console.error("Failed to load tasks:", error);
             showMessage(i18n("loadTasksFailed"));
