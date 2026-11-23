@@ -18,6 +18,7 @@ export interface ProjectSelectorPopupOptions {
     excludeArchived?: boolean; // defaults to true
     allowedProjectIds?: string[];
     includeNoProject?: boolean; // render "No Project" item
+    emptySelectionLabel?: string; // override the single-select empty value label
     excludeSubscription?: boolean;
     maxListHeight?: string;
     
@@ -49,6 +50,7 @@ export class ProjectSelectorPopup {
     private excludeArchived: boolean;
     private allowedProjectIds?: string[];
     private includeNoProject: boolean;
+    private emptySelectionLabel?: string;
     private excludeSubscription: boolean;
     private maxListHeight: string;
     
@@ -66,6 +68,8 @@ export class ProjectSelectorPopup {
     private statusSelect!: HTMLSelectElement;
     private listContainer!: HTMLElement;
     private innerSearchInput?: HTMLInputElement;
+    private hideTimer?: ReturnType<typeof setTimeout>;
+    private disposed = false;
     
     constructor(options: ProjectSelectorPopupOptions) {
         this.plugin = options.plugin;
@@ -79,6 +83,7 @@ export class ProjectSelectorPopup {
         this.excludeArchived = options.excludeArchived !== false;
         this.allowedProjectIds = options.allowedProjectIds;
         this.includeNoProject = options.includeNoProject !== false;
+        this.emptySelectionLabel = !this.isMultiSelect ? options.emptySelectionLabel : undefined;
         this.excludeSubscription = !!options.excludeSubscription;
         this.maxListHeight = options.maxListHeight || '250px';
         
@@ -95,6 +100,7 @@ export class ProjectSelectorPopup {
         if (this.excludeSubscription) {
             this.editableSubscriptionProjectIds = await getEditableSubscriptionProjectIds(this.plugin);
         }
+        if (this.disposed) return;
         
         // Start with everything fully expanded by default, do not load initial collapsed states.
         this.collapsedFolders.clear();
@@ -102,6 +108,11 @@ export class ProjectSelectorPopup {
         this.renderBaseStructure();
         this.renderList();
         this.bindEvents();
+    }
+
+    public dispose() {
+        this.disposed = true;
+        clearTimeout(this.hideTimer);
     }
 
     private isExcludedSubscriptionProject(project: Project): boolean {
@@ -244,6 +255,12 @@ export class ProjectSelectorPopup {
         };
         
         const folderTree = buildNodeTree('', 0);
+        if (this.includeNoProject && (this.emptySelectionLabel || !terms.length)) {
+            const id = this.isMultiSelect ? 'none' : '';
+            const name = this.emptySelectionLabel || i18n('noProject') || '无项目';
+            const title = this.emptySelectionLabel ? name : '🚫 ' + name;
+            this.listContainer.appendChild(this.createProjectListElement({ id, name }, 0, title));
+        }
         
         if (terms.length > 0) {
             const filterNode = (node: FolderNode): boolean => {
@@ -278,23 +295,6 @@ export class ProjectSelectorPopup {
                 this.listContainer.appendChild(this.createProjectListElement(p, 0));
             });
         } else {
-            if (this.includeNoProject) {
-                const noProjId = this.isMultiSelect ? 'none' : '';
-                const checked = this.isMultiSelect ? (this.selectedIds.has('all') || this.selectedIds.has(noProjId)) : (this.selectedId === noProjId);
-                const noProjectEl = document.createElement('div');
-                noProjectEl.className = 'project-item project-item--list';
-                noProjectEl.dataset.value = noProjId;
-                noProjectEl.dataset.label = i18n('noProject') || '无项目';
-                noProjectEl.style.paddingLeft = `${this.getDocumentTreeIndent(0)}px`;
-                noProjectEl.innerHTML = `
-                    <div class="project-item__content" style="padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; width: 100%; cursor: pointer;">
-                        ${this.isMultiSelect ? `<input type="checkbox" class="project-selector-checkbox" style="margin-right: 8px;" ${checked ? 'checked' : ''}>` : ''}
-                        <span class="project-item__title" style="flex: 1;">🚫 ${i18n('noProject') || '无项目'}</span>
-                    </div>
-                `;
-                this.listContainer.appendChild(noProjectEl);
-            }
-            
             folderTree.forEach(node => {
                 this.listContainer.appendChild(this.createFolderGroupElement(node, 0));
             });
@@ -417,7 +417,7 @@ export class ProjectSelectorPopup {
         return groupEl;
     }
     
-    private createProjectListElement(project: Project, depth: number): HTMLElement {
+    private createProjectListElement(project: Pick<Project, 'id' | 'name'>, depth: number, title = project.name): HTMLElement {
         const checked = this.isMultiSelect ? (this.selectedIds.has('all') || this.selectedIds.has(project.id)) : (this.selectedId === project.id);
         const itemEl = document.createElement('div');
         itemEl.className = 'project-item project-item--list';
@@ -426,12 +426,23 @@ export class ProjectSelectorPopup {
         
         this.applyDocumentTreeRowIndent(itemEl, depth);
         
-        itemEl.innerHTML = `
-            <div class="project-item__content" style="padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; width: 100%; cursor: pointer;">
-                ${this.isMultiSelect ? `<input type="checkbox" class="project-selector-checkbox" style="margin-right: 8px;" ${checked ? 'checked' : ''}>` : ''}
-                <span class="project-item__title" style="flex: 1;">${project.name}</span>
-            </div>
-        `;
+        const content = document.createElement('div');
+        content.className = 'project-item__content';
+        content.style.cssText = 'padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; width: 100%; cursor: pointer;';
+        if (this.isMultiSelect) {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'project-selector-checkbox';
+            checkbox.style.marginRight = '8px';
+            checkbox.checked = checked;
+            content.appendChild(checkbox);
+        }
+        const label = document.createElement('span');
+        label.className = 'project-item__title';
+        label.style.flex = '1';
+        label.textContent = title;
+        content.appendChild(label);
+        itemEl.appendChild(content);
         
         return itemEl;
     }
@@ -555,19 +566,25 @@ export class ProjectSelectorPopup {
     }
     
     private showQuery(query: string) {
-        this.searchQuery = query;
-        this.container.style.display = 'block';
-        this.renderList();
+        this.show(query);
     }
     
-    public show() {
+    public show(query?: string) {
+        if (this.disposed) return;
+        clearTimeout(this.hideTimer);
+        this.searchQuery = query ?? this.searchQuery;
         this.container.style.display = 'block';
+        this.searchInput?.setAttribute('aria-expanded', 'true');
         this.renderList();
     }
     
     public hide() {
-        setTimeout(() => {
+        if (this.disposed) return;
+        clearTimeout(this.hideTimer);
+        this.hideTimer = setTimeout(() => {
             this.container.style.display = 'none';
+            this.searchInput?.setAttribute('aria-expanded', 'false');
+            if (this.searchInput) this.searchQuery = '';
             if (this.valueInput && this.searchInput) {
                 const currentId = this.valueInput.value;
                 const matchingProj = this.projectManager.getProjectById(currentId);

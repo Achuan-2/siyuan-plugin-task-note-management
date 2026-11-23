@@ -5,6 +5,7 @@ import { i18n } from '../../pluginInstance';
 import type { ReminderItem } from '../../types/reminder';
 import type { Project } from '../dataManager/projectManager';
 import { QuickReminderDialog } from '../dialog/QuickReminderDialog';
+import { ProjectSelectorPopup } from '../dialog/ProjectSelectorPopup';
 import {
     DEFAULT_TASK_VIEW_FILTERS, getTaskViewRows, getTaskViewTitle, parseTaskViewFilters, serializeTaskView,
     TASK_VIEW_CONTENT_PREFIX, TASK_VIEW_TYPE, type TaskViewFilters,
@@ -179,7 +180,21 @@ export class TaskViewBlock {
         search.placeholder = i18n('searchTasks');
         search.setAttribute('aria-label', search.placeholder);
         search.value = queries.get(id) || '';
-        const project = this.select(doc, i18n('project'), [['', i18n('allProjects')]]);
+        const projectFilter = doc.createElement('div');
+        projectFilter.className = 'task-view-block__project-filter';
+        const project = doc.createElement('input');
+        project.type = 'text';
+        project.className = 'b3-text-field';
+        project.autocomplete = 'off';
+        project.spellcheck = false;
+        project.setAttribute('aria-label', i18n('searchProject'));
+        project.setAttribute('aria-expanded', 'false');
+        const projectValue = doc.createElement('input');
+        projectValue.type = 'hidden';
+        const projectMenu = doc.createElement('div');
+        projectMenu.className = 'b3-menu task-view-block__project-menu';
+        projectMenu.style.display = 'none';
+        projectFilter.append(project, projectValue, projectMenu);
         const status = this.select(doc, i18n('taskStatus'), [
             ['all', i18n('all')], ['open', i18n('unfinished')], ['completed', i18n('completed')],
         ]);
@@ -193,7 +208,7 @@ export class TaskViewBlock {
         feedback.setAttribute('role', 'status');
         const more = this.button(doc, 'iconDown', i18n('taskViewShowMore'));
         more.hidden = true;
-        toolbar.append(search, project, status, start, end, add);
+        toolbar.append(search, projectFilter, status, start, end, add);
         element.classList.add('task-view-block');
         element.append(toolbar, list, feedback, more);
 
@@ -203,6 +218,8 @@ export class TaskViewBlock {
         let loading = true;
         let refreshVersion = 0;
         let saving = false;
+        let projectPopup: ProjectSelectorPopup | undefined;
+        let projectPopupReady = false;
 
         const renderRows = () => {
             const editable = canEdit();
@@ -258,14 +275,13 @@ export class TaskViewBlock {
             feedback.textContent = loading ? i18n('loadingReminders') : i18n(snapshot ? 'noTasks' : 'loadFailed');
         };
 
-        const setControlValues = () => {
-            const projects: Array<[string, string]> = [['', i18n('allProjects')]];
-            for (const { id, name } of snapshot?.projects || []) projects.push([id, name]);
-            if (filters.projectId && !projects.some(([key]) => key === filters.projectId)) {
-                projects.push([filters.projectId, i18n('projectNotExist')]);
+        const setControlValues = (resetProject = false) => {
+            if (resetProject || (projectMenu.style.display === 'none' && doc.activeElement !== project)) {
+                project.placeholder = i18n(filters.projectId && snapshot ? 'projectNotExist' : 'allProjects');
+                projectValue.value = filters.projectId;
+                if (projectPopupReady) projectPopup.updateSelection(filters.projectId);
+                else project.value = snapshot?.projects.find(item => item.id === filters.projectId)?.name || '';
             }
-            project.replaceChildren(...this.options(doc, projects));
-            project.value = filters.projectId;
             status.value = filters.status;
             start.value = filters.start;
             end.value = filters.end;
@@ -284,9 +300,41 @@ export class TaskViewBlock {
             } finally {
                 saving = false;
                 if (active) {
-                    setControlValues();
+                    setControlValues(true);
                     renderRows();
                 }
+            }
+        };
+        const loadProjectPopup = async () => {
+            if (projectPopup || !canEdit()) return;
+            const initialInput = project.value;
+            const popup = new ProjectSelectorPopup({
+                plugin: this.plugin,
+                container: projectMenu,
+                searchInput: project,
+                valueInput: projectValue,
+                selectedId: filters.projectId,
+                emptySelectionLabel: i18n('allProjects'),
+                excludeArchived: false,
+                maxListHeight: 'min(250px, 40vh)',
+                onSelect: projectId => {
+                    if (projectId !== filters.projectId) return saveFilters({ projectId });
+                },
+            });
+            projectPopup = popup;
+            try {
+                await popup.initialize();
+                if (!active) return;
+                projectPopupReady = true;
+                if (doc.activeElement === project && canEdit()) {
+                    popup.show(project.value !== initialInput ? project.value : '');
+                } else {
+                    setControlValues(true);
+                }
+            } catch (error) {
+                popup.dispose();
+                projectPopup = undefined;
+                if (active) this.report(error);
             }
         };
         search.oninput = () => {
@@ -295,7 +343,7 @@ export class TaskViewBlock {
             limit = PAGE_SIZE;
             renderRows();
         };
-        project.onchange = () => void saveFilters({ projectId: project.value });
+        project.onfocus = project.onclick = () => void loadProjectPopup();
         status.onchange = () => void saveFilters({ status: status.value as TaskViewFilters['status'] });
         start.onchange = () => void saveFilters({ start: start.value });
         end.onchange = () => void saveFilters({ end: end.value });
@@ -331,6 +379,7 @@ export class TaskViewBlock {
         void refresh(this.loadSnapshot());
         return () => {
             active = false;
+            projectPopup?.dispose();
             this.mounts.delete(refresh);
         };
     };
