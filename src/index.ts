@@ -256,6 +256,7 @@ export const DEFAULT_SETTINGS = {
     habitPanelSortOrder: 'desc',
     habitPanelSelectedGroups: [] as string[],
     habitPanelCheckInDaysMode: 'total' as 'total' | 'streak',
+    habitPanelShowLastSevenDays: false,
     habitPanelViewMode: 'standard' as 'standard' | 'mini',
     // 日历上传：ICS云端同步配置
     icsSyncInterval: 'daily', // 'manual' | '15min' | 'hourly' | '4hour' | '12hour' | 'daily' | 'dailyAt'

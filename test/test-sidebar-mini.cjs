@@ -18,15 +18,20 @@ function extractMethod(filePath, className, methodName) {
     return method.getText(ast);
 }
 
-test('习惯一周打卡范围按周起始日计算，跨月和跨年也能正确落在当前自然周', () => {
+test('习惯一周打卡范围支持自然周和最近七天，跨月跨年仍按逻辑今日计算', () => {
+    const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
+    const { getLocalDateString, getLogicalDateString, setDayStartTime } = createKernelLoader()('src/utils/dateUtils.ts');
+    const now = new Date(2026, 10, 17, 2);
     const methodText = extractMethod('src/components/panel/HabitPanel.ts', 'HabitPanel', 'getWeekStartDate');
     const Fixture = new Function('getLogicalDateString', compile(
         `class Fixture {
-            constructor(weekStartDay = 1) { this.weekStartDay = weekStartDay; }
+            constructor(weekStartDay = 1, showLastSevenDays = false) {
+                this.weekStartDay = weekStartDay;
+                this.showLastSevenDays = showLastSevenDays;
+            }
             ${methodText}
         }`
-    ) + '; return Fixture;')(() => '2026-11-17');
-    const localDate = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    ) + '; return Fixture;')(() => getLogicalDateString(now));
 
     const mondayStart = new Fixture(1);
     for (const [today, first, last] of [
@@ -35,15 +40,99 @@ test('习惯一周打卡范围按周起始日计算，跨月和跨年也能正�
         ['2027-01-02', '2026-12-28', '2027-01-03'],
     ]) {
         const start = mondayStart.getWeekStartDate(today);
-        assert.equal(localDate(start), first);
+        assert.equal(getLocalDateString(start), first);
         start.setDate(start.getDate() + 6);
-        assert.equal(localDate(start), last);
+        assert.equal(getLocalDateString(start), last);
     }
     assert.equal(mondayStart.getWeekStartDate().getDate(), 16);
 
     const sundayStart = new Fixture(0);
-    assert.equal(localDate(sundayStart.getWeekStartDate('2026-11-17')), '2026-11-15');
-    assert.equal(localDate(sundayStart.getWeekStartDate('2027-01-02')), '2026-12-27');
+    assert.equal(getLocalDateString(sundayStart.getWeekStartDate('2026-11-17')), '2026-11-15');
+    assert.equal(getLocalDateString(sundayStart.getWeekStartDate('2027-01-02')), '2026-12-27');
+
+    const rolling = new Fixture(0, true);
+    for (const [today, first] of [
+        ['2026-11-23', '2026-11-17'],
+        ['2026-12-02', '2026-11-26'],
+        ['2027-01-02', '2026-12-27'],
+    ]) {
+        const start = rolling.getWeekStartDate(today);
+        assert.equal(getLocalDateString(start), first);
+        start.setDate(start.getDate() + 6);
+        assert.equal(getLocalDateString(start), today);
+    }
+    assert.equal(getLocalDateString(rolling.getWeekStartDate()), '2026-11-11');
+    setDayStartTime('03:00');
+    assert.equal(getLocalDateString(rolling.getWeekStartDate()), '2026-11-10');
+});
+
+test('习惯显示设置保存最近七天开关，重开后恢复选择，保存失败时保留原状态', async () => {
+    const panelPath = 'src/components/panel/HabitPanel.ts';
+    const methods = ['showMoreMenu', 'savePanelSettings', 'restorePanelSettings', 'restoreWeekSettings', 'getWeekStartDate']
+        .map(method => extractMethod(panelPath, 'HabitPanel', method));
+    let menuItems;
+    const messages = [];
+    const Fixture = new Function(
+        'Menu', 'HTMLElement', 'i18n', 'createPanelViewMenu', 'normalizePanelViewMode', 'showMessage', 'console',
+        compile(`class Fixture {
+            constructor(plugin) {
+                this.plugin = plugin;
+                this.panelSettingsSave = Promise.resolve(true);
+                this.refreshCount = 0;
+            }
+            async loadHabits() { this.refreshCount++; }
+            ${methods.join('\n')}
+        }`) + '; return Fixture;'
+    )(
+        class {
+            constructor() { menuItems = []; }
+            addItem(item) { menuItems.push(item); }
+            open() {}
+        },
+        class {}, key => key, () => ({}), mode => mode, message => messages.push(message), { error() {} }
+    );
+    let settings = { weekStartDay: 0, habitPanelViewMode: 'mini' };
+    let failSave = false;
+    const plugin = {
+        loadSettings: async () => settings,
+        saveSettings: async nextSettings => {
+            if (failSave) throw new Error('Storage unavailable');
+            settings = nextSettings;
+        },
+    };
+    function openToggle(panel) {
+        panel.showMoreMenu({ clientX: 0, clientY: 0 });
+        return menuItems.find(item => item.label === 'displaySettings').submenu
+            .find(item => item.label === 'habitPanelShowLastSevenDays');
+    }
+
+    const panel = new Fixture(plugin);
+    await panel.restorePanelSettings();
+    assert.equal(openToggle(panel).icon, '');
+    await openToggle(panel).click();
+    assert.deepEqual(settings, { weekStartDay: 0, habitPanelViewMode: 'mini', habitPanelShowLastSevenDays: true });
+    assert.equal(panel.refreshCount, 1);
+
+    const reopened = new Fixture(plugin);
+    await reopened.restorePanelSettings();
+    assert.equal(openToggle(reopened).icon, 'iconSelect');
+    failSave = true;
+    await openToggle(reopened).click();
+    assert.equal(openToggle(reopened).icon, 'iconSelect');
+    assert.equal(settings.habitPanelShowLastSevenDays, true);
+    assert.equal(reopened.refreshCount, 0);
+    assert.deepEqual(messages, ['saveFailed']);
+
+    failSave = false;
+    await Promise.all([
+        openToggle(reopened).click(),
+        reopened.savePanelSettings({ habitPanelCheckInDaysMode: 'streak' }),
+    ]);
+    assert.equal(openToggle(reopened).icon, '');
+    assert.equal(settings.habitPanelShowLastSevenDays, false);
+    assert.equal(settings.habitPanelCheckInDaysMode, 'streak');
+    assert.equal(reopened.refreshCount, 1);
+    assert.equal(reopened.getWeekStartDate('2026-11-17').getDate(), 15);
 });
 
 test('任务迷你悬浮详情避免重复同日时间并保留子元素无障碍标签', () => {
@@ -234,6 +323,7 @@ test('移动端任务迷你点击在选择模式下不拦截番茄钟任务选�
 test('迷你习惯番茄目标已有专注时长但无打卡记录时，不显示叉号或未打卡且菜单提供查看当日记录入口', () => {
     const startMethod = extractMethod('src/components/panel/HabitPanel.ts', 'HabitPanel', 'getWeekStartDate');
     const weekMethod = extractMethod('src/components/panel/HabitPanel.ts', 'HabitPanel', 'createWeekCheckIns');
+    const headerMethod = extractMethod('src/components/panel/HabitPanel.ts', 'HabitPanel', 'createGroupHeader');
 
     const createdButtons = [];
     const openedMenus = [];
@@ -253,11 +343,13 @@ test('迷你习惯番茄目标已有专注时长但无打卡记录时，不显�
         }
         appendChild(child) { this.children.push(child); return child; }
         append(...items) { items.forEach(item => this.children.push(item)); }
+        replaceChildren(...items) { this.children = items; }
         setAttribute(k, v) { this.attrs.set(k, String(v)); }
         addEventListener(type, fn) { this.listeners.set(type, fn); }
         getBoundingClientRect() { return { left: 10, bottom: 20 }; }
     }
     const fakeDocument = {
+        createElementNS: (_namespace, tag) => new FakeEl(tag),
         createElement: tag => {
             const el = new FakeEl(tag);
             if (tag === 'button') createdButtons.push(el);
@@ -304,6 +396,7 @@ test('迷你习惯番茄目标已有专注时长但无打卡记录时，不显�
             createCheckInSubmenu() { return [{ type: 'separator' }, { label: 'edit' }]; }
             ${startMethod}
             ${weekMethod}
+            ${headerMethod}
         }`) + '; return Fixture;'
     )(
         fakeDocument,
@@ -372,6 +465,22 @@ test('迷你习惯番茄目标已有专注时长但无打卡记录时，不显�
     assert.equal(openedDialogDate, null);
     createdButtons[1].listeners.get('contextmenu')({ preventDefault: () => {}, stopPropagation: () => {} });
     assert.equal(openedDialogDate, '2026-11-17');
+
+    fixture.showLastSevenDays = true;
+    fixture.viewMode = 'mini';
+    const header = fixture.createGroupHeader(new FakeEl('div'), 'group', '分组', 1, false);
+    const dayLabels = header.children.at(-1).children;
+    const expectedDates = ['11', '12', '13', '14', '15', '16', '17'].map(day => `2026-11-${day}`);
+    assert.deepEqual(dayLabels.map(label => label.title), expectedDates);
+    assert.equal(dayLabels.at(-1).className, 'habit-mini__date--today');
+    for (const mini of [true, false]) {
+        createdButtons.length = 0;
+        fixture.createWeekCheckIns({ id: 'h1', title: '专注', checkIns: {}, frequency: { type: 'daily' } }, '2026-11-17', mini);
+        assert.deepEqual(createdButtons.map(button => button.title.slice(0, 10)), expectedDates);
+        assert.deepEqual(createdButtons.filter(button => button.classList.contains('habit-card__week-day--today')), [createdButtons.at(-1)]);
+        createdButtons[0].listeners.get('contextmenu')({ preventDefault: () => {}, stopPropagation: () => {} });
+        assert.equal(openedDialogDate, '2026-11-11');
+    }
 });
 
 test('标准视图一周打卡：无需打卡显示横线，过去未完成显示叉号，当天和未来未完成显示圆点', () => {
