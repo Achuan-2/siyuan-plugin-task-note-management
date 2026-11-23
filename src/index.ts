@@ -18,6 +18,7 @@ import "./index.scss";
 import { QuickReminderDialog } from "./components/dialog/QuickReminderDialog";
 import { ReminderPanel } from "./components/panel/ReminderPanel";
 import { MobileTaskShortcut } from "./components/render/MobileTaskShortcut";
+import { TaskViewBlock } from "./components/render/TaskViewBlock";
 import { registerCustomIcons } from "./components/render/registerIcons";
 import { HabitPanel } from "./components/panel/HabitPanel";
 import { BatchReminderDialog, ListItemNode } from "./components/dialog/BatchReminderDialog";
@@ -1672,6 +1673,8 @@ export default class ReminderPlugin extends Plugin {
         registerCustomIcons(this);
         // 先初始化 UI，避免加载数据记录异常/耗时影响 Dock 注册
         setPluginInstance(this);
+        const taskViewBlock = new TaskViewBlock(this);
+        this.addCleanup(taskViewBlock.dispose);
         // UI 注册期间就可能收到更新事件，先准备文档按钮管理器。
         this.taskNoteDOM = new TaskNoteDOMManager(this);
         await this.initializeUI();

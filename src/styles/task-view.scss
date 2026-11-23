@@ -1,0 +1,77 @@
+.task-view-block {
+    padding: 8px;
+    border: 1px solid var(--b3-border-color);
+    border-radius: var(--b3-border-radius);
+    font-size: 0.875em;
+
+    &__toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+
+        > input,
+        > select {
+            min-width: 0;
+            max-width: 100%;
+            margin: 0;
+        }
+    }
+
+    &__search {
+        flex: 1 1 9em;
+    }
+
+    &__list {
+        list-style: none;
+        margin: 6px 0 0;
+        padding: 0;
+    }
+
+    &__row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        min-height: 2em;
+        padding-block: 3px;
+        padding-inline-start: calc(var(--task-view-depth) * min(1.25em, 3vw));
+        border-bottom: 1px solid var(--b3-border-color);
+    }
+
+    &__row--context,
+    &__state,
+    &__date,
+    &__feedback {
+        color: var(--b3-theme-on-surface);
+    }
+
+    &__state {
+        min-width: 1em;
+        text-align: center;
+    }
+
+    &__title {
+        flex: 1;
+        min-width: min(6em, 100%);
+        overflow-wrap: anywhere;
+    }
+
+    &__date {
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__feedback {
+        padding-block: 6px 2px;
+    }
+
+    .b3-button svg {
+        width: 14px;
+        height: 14px;
+        margin: 0;
+    }
+
+    [hidden] {
+        display: none;
+    }
+}

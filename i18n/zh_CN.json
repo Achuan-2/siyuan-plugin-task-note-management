@@ -1,4 +1,6 @@
 {
+    "taskViewBlock": "任务视图",
+    "taskViewShowMore": "显示更多任务",
     "undoTaskAction": "撤回",
     "taskActionUndone": "已撤回",
     "taskAbandoned": "任务已放弃",

@@ -1,4 +1,6 @@
 {
+    "taskViewBlock": "Task view",
+    "taskViewShowMore": "Show more tasks",
     "undoTaskAction": "Undo",
     "taskActionUndone": "Action undone",
     "taskAbandoned": "Task abandoned",
