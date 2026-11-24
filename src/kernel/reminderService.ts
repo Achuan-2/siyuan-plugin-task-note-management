@@ -13,7 +13,7 @@ import { generateRepeatInstances, getRepeatInstanceOriginalKey, getRepeatInstanc
 import { getLocalDateString, getLogicalDateString, getLocalTimeString, setDayStartTime, setSingleDateDefaultRole } from '../utils/dateUtils';
 import { shouldSkipReminderOnDate, type HolidayData } from '../utils/reminderSkipDate';
 import { shouldTreatStartDateOnlyAsOverdue } from '../utils/startDateOverdue';
-import { getHabitReminderTimesForDate, hasHabitPomodoroGoal, shouldCheckInOnDate, isHabitCompletedOnDate } from '../utils/habitUtils';
+import { getHabitReminderTimesForDate, hasHabitPomodoroGoal, isHabitActiveOnDate, shouldCheckInOnDate, isHabitCompletedOnDate } from '../utils/habitUtils';
 import { buildLinkedHabitPomodoroData, getLinkedTaskPomodoroStatsByDate } from '../utils/linkedHabitPomodoro';
 import zhCN from '../../i18n/zh_CN.json';
 import en from '../../i18n/en.json';
@@ -446,6 +446,7 @@ export class KernelReminderService {
         const linkedStats = buildLinkedHabitPomodoroData(tasks, { [date]: record?.workByEvent ? record : { sessions } }).statsByHabit;
         for (const habit of Object.values(habits) as any[]) {
             if (!habit?.id || habit.abandoned || !shouldCheckInOnDate(habit, date)) continue;
+            if (!isHabitActiveOnDate(habit, date)) continue;
             const checkIn = await this.storage.loadData(`${HABIT_CHECKIN_DIR}/${habit.id}.json`, true);
             const currentHabit = { ...habit, checkIns: checkIn?.checkIns || habit.checkIns || {} };
             if (isHabitCompletedOnDate(currentHabit, date, {
