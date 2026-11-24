@@ -65,7 +65,9 @@ export class HabitPanel {
     private showCompletedHabitsInTodayPending: boolean = true;
     private viewMode: PanelViewMode = 'standard';
     private weekStartDay: number = 1;
+    private showLastSevenDays = false;
     private checkInDaysMode: HabitCheckInDaysMode = 'total';
+    private panelSettingsSave = Promise.resolve(true);
     private groupManager: HabitGroupManager;
     private habitUpdatedHandler: () => void;
     private reminderUpdatedHandler: (event: CustomEvent) => void;
@@ -173,24 +175,30 @@ export class HabitPanel {
                 this.showCompletedHabitsInTodayPending = settings.habitPanelShowCompletedInTodayPending;
             }
             this.checkInDaysMode = settings.habitPanelCheckInDaysMode === 'streak' ? 'streak' : 'total';
-            this.weekStartDay = Number.isInteger(settings.weekStartDay) && settings.weekStartDay >= 0 && settings.weekStartDay <= 6
-                ? settings.weekStartDay : 1;
+            this.restoreWeekSettings(settings);
         } catch (error) {
             console.error("Failed to restore habit panel settings:", error);
         }
     }
 
-    private async savePanelSettings() {
-        try {
-            const settings = await this.plugin.loadSettings();
-            settings.habitPanelSelectedGroups = this.selectedGroups;
-            settings.habitPanelShowCompletedInTodayPending = this.showCompletedHabitsInTodayPending;
-            settings.habitPanelCheckInDaysMode = this.checkInDaysMode;
-            settings.habitPanelViewMode = this.viewMode;
-            await this.plugin.saveSettings(settings);
-        } catch (error) {
-            console.error("Failed to save habit panel settings:", error);
-        }
+    private restoreWeekSettings(settings: { weekStartDay: number; habitPanelShowLastSevenDays?: boolean }) {
+        this.weekStartDay = Number.isInteger(settings.weekStartDay) && settings.weekStartDay >= 0 && settings.weekStartDay <= 6
+            ? settings.weekStartDay : 1;
+        this.showLastSevenDays = settings.habitPanelShowLastSevenDays === true;
+    }
+
+    private savePanelSettings(changes: Record<string, boolean | string | string[]>): Promise<boolean> {
+        this.panelSettingsSave = this.panelSettingsSave.then(async () => {
+            try {
+                const settings = await this.plugin.loadSettings();
+                await this.plugin.saveSettings({ ...settings, ...changes });
+                return true;
+            } catch (error) {
+                console.error("Failed to save habit panel settings:", error);
+                return false;
+            }
+        });
+        return this.panelSettingsSave;
     }
 
     private async loadCollapseStates() {
@@ -470,7 +478,7 @@ export class HabitPanel {
                         if (mode === this.viewMode) return;
                         this.viewMode = mode;
                         this.container.dataset.viewMode = mode;
-                        await this.savePanelSettings();
+                        await this.savePanelSettings({ habitPanelViewMode: mode });
                         if (!this.disposed) await this.loadHabits();
                     }),
                     {
@@ -478,8 +486,25 @@ export class HabitPanel {
                         label: i18n("showTodayPendingCompletedHabits") || "今日待打卡显示已完成习惯",
                         click: () => {
                             this.showCompletedHabitsInTodayPending = !this.showCompletedHabitsInTodayPending;
-                            void this.savePanelSettings();
+                            void this.savePanelSettings({
+                                habitPanelShowCompletedInTodayPending: this.showCompletedHabitsInTodayPending,
+                            });
                             void this.loadHabits();
+                        }
+                    },
+                    {
+                        icon: this.showLastSevenDays ? 'iconSelect' : '',
+                        label: i18n('habitPanelShowLastSevenDays'),
+                        click: async () => {
+                            const enabled = !this.showLastSevenDays;
+                            const saved = await this.savePanelSettings({ habitPanelShowLastSevenDays: enabled });
+                            if (this.disposed) return;
+                            if (!saved) {
+                                showMessage(i18n('saveFailed'), 3000, 'error');
+                                return;
+                            }
+                            this.showLastSevenDays = enabled;
+                            await this.loadHabits();
                         }
                     },
                     {
@@ -491,7 +516,7 @@ export class HabitPanel {
                                 label: i18n("habitShowStreakDays") || "连续天数",
                                 click: () => {
                                     this.checkInDaysMode = 'streak';
-                                    void this.savePanelSettings();
+                                    void this.savePanelSettings({ habitPanelCheckInDaysMode: 'streak' });
                                     void this.loadHabits();
                                 }
                             },
@@ -500,7 +525,7 @@ export class HabitPanel {
                                 label: i18n("habitShowTotalCheckInDays") || "已打卡天数",
                                 click: () => {
                                     this.checkInDaysMode = 'total';
-                                    void this.savePanelSettings();
+                                    void this.savePanelSettings({ habitPanelCheckInDaysMode: 'total' });
                                     void this.loadHabits();
                                 }
                             }
@@ -569,6 +594,7 @@ export class HabitPanel {
             await this.syncTaskCompletionAutoCheckIns(habitData || {}, reminderData || {});
             if (this.disposed) return;
             this.rebuildLinkedTaskPomodoroStats(reminderData || {});
+            if (this.plugin.settings) this.restoreWeekSettings(this.plugin.settings);
 
             const habits: Habit[] = Object.values(habitData || {});
 
@@ -1661,7 +1687,8 @@ export class HabitPanel {
 
     private getWeekStartDate(today = getLogicalDateString()): Date {
         const start = new Date(`${today}T12:00:00`);
-        start.setDate(start.getDate() - (start.getDay() - this.weekStartDay + 7) % 7);
+        const daysBack = this.showLastSevenDays ? 6 : (start.getDay() - this.weekStartDay + 7) % 7;
+        start.setDate(start.getDate() - daysBack);
         return start;
     }
 
@@ -2977,7 +3004,7 @@ export class HabitPanel {
         confirmBtn.style.cssText = 'margin-top: 16px; width: 100%;';
         confirmBtn.addEventListener('click', () => {
             this.updateGroupFilterButtonText();
-            this.savePanelSettings();
+            this.savePanelSettings({ habitPanelSelectedGroups: this.selectedGroups });
             this.loadHabits();
             dialog.destroy();
         });
