@@ -1,6 +1,6 @@
 import { ReminderTimeScanner } from './ReminderTimeScanner';
 import { getLocalDateString, getLogicalDateString } from '../utils/dateUtils';
-import { getHabitReminderTimesForDate, shouldCheckInOnDate } from '../utils/habitUtils';
+import { getHabitReminderTimesForDate, isHabitActiveOnDate, shouldCheckInOnDate } from '../utils/habitUtils';
 import type { HolidayData } from '../utils/reminderSkipDate';
 
 export interface ReminderSchedule {
@@ -33,6 +33,7 @@ export async function buildReminderSchedule(tasks: Record<string, any>, habits: 
     const logicalDate = getLogicalDateString(now);
     for (const habit of Object.values(habits) as any[]) {
         if (!habit?.id || habit.abandoned || !shouldCheckInOnDate(habit, logicalDate)) continue;
+        if (!isHabitActiveOnDate(habit, logicalDate)) continue;
         for (const entry of getHabitReminderTimesForDate(habit, logicalDate)) {
             const date = entry.time.split(/[T ]/);
             if (date.length > 1 && date[0] !== logicalDate) continue;

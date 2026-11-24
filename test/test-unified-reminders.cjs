@@ -4,6 +4,7 @@ const { createKernelLoader } = require('./helpers/kernel-loader.cjs');
 const load = createKernelLoader();
 const { KernelReminderService, WEBHOOK_STATE_FILE } = load('src/kernel/reminderService.ts');
 const { FrontendReminderService } = load('src/services/FrontendReminderService.ts');
+const { buildReminderSchedule } = load('src/services/ReminderSchedule.ts');
 
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
 const flush = async () => { for (let i = 0; i < 200; i++) await Promise.resolve(); };
@@ -75,6 +76,23 @@ test('关闭 Webhook 时，内核仍统一生成任务和习惯事件并推送�
     assert.equal((await f.service.getFrontendEvents()).events.length, 0);
     front.frontend.stop();
 });
+
+for (const [startDate, endDate, due] of [
+    ['2026-10-09', undefined, false],
+    ['2026-10-01', '2026-10-08', true],
+    ['2026-10-01', '2026-10-07', false]
+]) {
+    test(`习惯提醒排程和发送遵守起止日期（${startDate} 至 ${endDate ?? '未结束'}）`, async t => {
+        const habits = { habit: { id: 'habit', title: '冥想', startDate, endDate,
+            frequency: { type: 'daily' }, reminderTimes: ['09:30'] } };
+        const f = fixture(t, { 'reminder.json': {}, 'habit.json': habits });
+
+        const schedule = await buildReminderSchedule({}, habits, f.files['reminder-settings.json'], {}, at());
+        const { events } = await f.service.getFrontendEvents();
+        assert.deepEqual([...schedule.times], due ? ['09:30'] : []);
+        assert.deepEqual(events.map(event => event.event), due ? ['habit-reminder'] : []);
+    });
+}
 
 for (const [count, minutes, notify] of [[2, 0, false], [0, 20, false], [1, 10, true]]) {
     test(`组合目标提醒：${count} 次、${minutes} 分钟${notify ? '仍提醒' : '不再提醒'}`, async t => {
