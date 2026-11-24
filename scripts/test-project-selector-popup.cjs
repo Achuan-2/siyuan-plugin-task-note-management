@@ -29,6 +29,8 @@ class Element {
     appendChild(child) { this.children.push(child); return child; }
     add(option) { this.appendChild(option); }
     setAttribute(name, value) { this.attributes[name] = value; }
+    getAttribute(name) { return this.attributes[name] ?? this.dataset[name.replace(/^data-/, '')] ?? null; }
+    closest(selector) { return selector === '[data-value]' && this.dataset.value !== undefined ? this : null; }
     addEventListener(name, callback) { this.handlers[name] = callback; }
     contains(target) { return this === target || this.children.some(child => child.contains?.(target)); }
     querySelectorAll(selector) {
@@ -71,7 +73,8 @@ async function fixture(options = {}) {
     const requireMock = name => name.includes('projectFolderManager')
         ? { ProjectFolderManager: { getInstance: () => folderManager } }
         : name.includes('projectManager') ? { ProjectManager: { getInstance: () => manager } }
-            : { i18n: key => key };
+            : name.includes('icsSubscription') ? { getEditableSubscriptionProjectIds: async () => new Set() }
+                : { i18n: key => key };
     new Function('require', 'exports', 'document', 'Option', code)(
         requireMock, exports, { createElement: tag => new Element(tag) },
         function Option(text, value) { this.text = text; this.value = value; },
@@ -122,6 +125,33 @@ test('保留调用方的项目白名单和归档限制', async () => {
     withArchived.statusSelect.handlers.change();
     assert.deepEqual(projectIds(withArchived), ['', 'archived']);
     assert.deepEqual(folderIds(withArchived), ['archived-folder']);
+});
+
+test('任务视图可在搜索项目时清除项目筛选，重新打开后显示完整项目树', async () => {
+    const searchInput = new Element('input');
+    const valueInput = new Element('input');
+    const selections = [];
+    const popup = await fixture({
+        searchInput, valueInput, selectedId: 'roi', emptySelectionLabel: '全部项目', excludeArchived: false,
+        onSelect: (id, label) => selections.push([id, label]),
+    });
+    popup.updateSelection('roi');
+    assert.equal(searchInput.value, 'ROI 成像');
+    assert.equal(valueInput.value, 'roi');
+
+    popup.show('未来');
+    const rows = popup.listContainer.querySelectorAll('.project-item[data-value]');
+    assert.deepEqual(rows.map(row => row.dataset.value), ['', 'future']);
+    popup.listContainer.handlers.click({ target: rows[0] });
+    assert.deepEqual(selections, [['', '全部项目']]);
+    assert.equal(valueInput.value, '');
+    assert.equal(searchInput.value, '');
+
+    await new Promise(resolve => setTimeout(resolve, 220));
+    popup.show();
+    assert.equal(projectIds(popup)[0], '');
+    assert.deepEqual(projectIds(popup).slice(1).sort(), ['archived', 'future', 'roi', 'root']);
+    popup.dispose();
 });
 
 test('多选全选与取消全选只影响筛选结果，保留隐藏项目的选择', async () => {

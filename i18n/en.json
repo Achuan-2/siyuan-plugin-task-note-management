@@ -1,4 +1,6 @@
 {
+    "taskViewBlock": "Task view",
+    "taskViewShowMore": "Show more tasks",
     "undoTaskAction": "Undo",
     "taskActionUndone": "Action undone",
     "taskAbandoned": "Task abandoned",
@@ -2148,6 +2150,7 @@
     "reminderLabel": "Reminder: ",
     "persistDays": "Streak: ${count} days",
     "habitCheckInDaysDisplay": "Check-in Days Display",
+    "habitPanelShowLastSevenDays": "Show Last 7 Days in Weekly Check-ins",
     "habitShowTotalCheckInDays": "Total Checked-in Days",
     "habitShowStreakDays": "Consecutive Days",
     "habitWeekCompleted": "Complete",

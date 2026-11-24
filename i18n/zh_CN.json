@@ -1,4 +1,6 @@
 {
+    "taskViewBlock": "任务视图",
+    "taskViewShowMore": "显示更多任务",
     "undoTaskAction": "撤回",
     "taskActionUndone": "已撤回",
     "taskAbandoned": "任务已放弃",
@@ -2148,6 +2150,7 @@
     "reminderLabel": "提醒: ",
     "persistDays": "坚持打卡: ${count} 天",
     "habitCheckInDaysDisplay": "打卡天数显示",
+    "habitPanelShowLastSevenDays": "周打卡显示最近 7 天",
     "habitShowTotalCheckInDays": "已打卡天数",
     "habitShowStreakDays": "连续天数",
     "habitWeekCompleted": "已完成",
